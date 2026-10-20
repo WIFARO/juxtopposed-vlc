@@ -740,6 +740,34 @@ TestCase {
         verify(reset.visualFocus); verify(!help.visible); verify(resetHelp.visible)
         testCase.forceActiveFocus(); mouseMove(testCase, 899, 599)
     }
+    function test_helpOpensWithPointerAndClosesWithEscapeOrOutsideClick() {
+        store.providedHelp = "Help for this setting."
+        const button = findChild(resizeRow, "preferenceHelpIcon")
+        const popup = findChild(resizeRow, "preferenceHelpPopup")
+        const hoverHelp = findChild(resizeRow, "redesignToolTip")
+        mouseClick(button)
+        tryCompare(popup, "opened", true)
+        compare(popup.contentItem.text, store.providedHelp)
+        verify(!hoverHelp.visible)
+        keyClick(Qt.Key_Escape)
+        tryCompare(popup, "visible", false)
+        mouseClick(button); tryCompare(popup, "opened", true)
+        mouseClick(testCase, 899, 599)
+        tryCompare(popup, "visible", false)
+    }
+    function test_helpSupportsKeyboardAndClosesWhenTheRowIsHidden() {
+        store.providedHelp = "Help for this setting."
+        const button = findChild(resizeRow, "preferenceHelpIcon")
+        const popup = findChild(resizeRow, "preferenceHelpPopup")
+        button.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Space)
+        tryCompare(popup, "opened", true)
+        const previous = resizeRow.presentation
+        resizeRow.presentation = Object.assign({}, previous, {compact: true})
+        tryCompare(popup, "visible", false)
+        resizeRow.presentation = previous
+        testCase.forceActiveFocus(); mouseMove(testCase, 899, 599)
+    }
     function test_advancedAudioSeparatesQualityFromResampler() {
         const section = catalog.advancedSections.audio[0]
         compare(section.title, "")

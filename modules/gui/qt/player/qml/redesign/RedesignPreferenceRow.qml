@@ -92,14 +92,54 @@ ColumnLayout {
                 color: root.compact ? theme.playerLabel : theme.foreground; font.pixelSize: theme.dp(14)
                 wrapMode: Text.WordWrap
             }
-            RedesignIcon {
+            C.ToolButton {
+                id: helpButton
                 objectName: "preferenceHelpIcon"
-                name: "info"; color: theme.foreground; opacity: 0.4
-                width: theme.dp(16); height: width
-                x: labelText.width + theme.dp(8); anchors.verticalCenter: parent.verticalCenter
+                width: theme.dp(24); height: width; padding: theme.dp(4)
+                x: labelText.width + theme.dp(4); anchors.verticalCenter: parent.verticalCenter
                 visible: root.helpText.length > 0 && !root.compact && !root.presentation.hideHelp
+                focusPolicy: Qt.StrongFocus
+                hoverEnabled: true
+                Accessible.name: labelText.text
+                Accessible.description: root.helpText
+                onClicked: helpPopup.visible ? helpPopup.close() : helpPopup.open()
+                onVisibleChanged: if (!visible) helpPopup.close()
+                contentItem: RedesignIcon {
+                    name: "info"; color: theme.foreground
+                    opacity: helpButton.hovered || helpButton.visualFocus || helpPopup.visible ? 1 : 0.4
+                }
+                background: Rectangle {
+                    radius: theme.dp(4)
+                    color: helpButton.hovered ? theme.hover : "transparent"
+                    border.width: helpButton.visualFocus ? 1 : 0
+                    border.color: theme.accent
+                }
+                C.Popup {
+                    id: helpPopup
+                    objectName: "preferenceHelpPopup"
+                    popupType: C.Popup.Item
+                    y: helpButton.height + theme.dp(4)
+                    width: Math.min(theme.dp(360), root.Window.window ? root.Window.window.width - 2 * margins : theme.dp(360))
+                    padding: theme.dp(12); margins: theme.dp(6)
+                    focus: true
+                    closePolicy: C.Popup.CloseOnEscape | C.Popup.CloseOnPressOutside
+                    contentItem: Text {
+                        text: root.helpText; textFormat: Text.PlainText
+                        color: theme.bright; font.pixelSize: theme.dp(14)
+                        wrapMode: Text.Wrap
+                    }
+                    background: Rectangle {
+                        radius: theme.dp(6); color: theme.panel
+                        border.width: 1; border.color: theme.border
+                    }
+                }
             }
-            RedesignToolTip { theme: root.theme; text: root.helpText; visible: rowHover.hovered && !resetButton.hovered && !resetButton.visualFocus && text.length > 0; delay: 500 }
+            RedesignToolTip {
+                theme: root.theme; text: root.helpText
+                visible: (rowHover.hovered || helpButton.visualFocus) && !helpPopup.visible
+                    && !resetButton.hovered && !resetButton.visualFocus && text.length > 0
+                delay: helpButton.hovered || helpButton.visualFocus ? 0 : 500
+            }
             RedesignButton {
                 id: resetButton
                 objectName: "preferenceResetButton"
@@ -300,10 +340,10 @@ ColumnLayout {
                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 // Measure both labels so the width stays stable when the state changes.
-                implicitWidth: Math.max(theme.dp(root.compact ? 68 : 64),
+                implicitWidth: Math.max(theme.dp(68),
                     Math.ceil(onMetrics.advanceWidth) + theme.dp(40),
-                    Math.ceil(offMetrics.advanceWidth) + theme.dp(root.compact ? 39 : 37))
-                width: implicitWidth; height: theme.dp(root.compact ? 32 : 30)
+                    Math.ceil(offMetrics.advanceWidth) + theme.dp(39))
+                width: implicitWidth; height: theme.dp(32)
                 objectName: "preferenceToggleEditor"
                 checkable: true; checked: !!root.displayedValue && (root.editorEnabled || !root.presentation.hideDisabledValue)
                 text: root.label || root.description.title
@@ -311,12 +351,12 @@ ColumnLayout {
                 TextMetrics { id: onMetrics; font: stateText.font; text: qsTr("ON") }
                 TextMetrics { id: offMetrics; font: stateText.font; text: qsTr("OFF") }
                 background: Rectangle {
-                    radius: theme.dp(root.compact ? 6 : 4); color: parent.checked ? theme.progress : root.compact ? theme.field : theme.background
+                    radius: theme.dp(6); color: parent.checked ? theme.progress : theme.field
                     border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent
                 }
                 contentItem: Item {
                     Rectangle {
-                        visible: root.compact && !parent.parent.checked
+                        visible: !parent.parent.checked
                         x: theme.dp(32); y: theme.dp(3)
                         width: parent.width - x - theme.dp(3); height: parent.height - theme.dp(6)
                         radius: theme.dp(3); color: root.lightTheme ? theme.background : "#191919"
@@ -495,7 +535,7 @@ ColumnLayout {
             objectName: "preferenceChoiceEditor"
             leftPadding: theme.dp(root.compact ? 14 : 16)
             Accessible.name: root.label || root.description.title
-            implicitHeight: theme.dp(root.compact ? 36 : 34)
+            implicitHeight: theme.dp(36)
             model: root.choices; textRole: "label"; valueRole: "value"
             showCurvePreviews: root.choices.some(row => row.curve !== undefined)
             currentIndex: {

@@ -247,37 +247,48 @@ RedesignSettingsDialog {
                         onWebsiteRequested: url => Qt.openUrlExternally(url)
                     }
                 }
-                ColumnLayout {
+                Column {
                     visible: root.category === "general" && !root.search.length
                     width: parent.width
-                    spacing: theme.dp(16)
-                    Text { text: qsTr("Appearance"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); Layout.topMargin: theme.dp(8) }
-                    RedesignPreferenceRow { Layout.fillWidth: true; backend: preferenceStore; optionName: "language"; label: qsTr("Interface language"); scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Text { Layout.fillWidth: true; text: qsTr("Theme"); color: theme.foreground; font.pixelSize: theme.dp(14) }
-                        Row {
-                            spacing: theme.dp(2)
-                            Repeater {
-                                model: [{label: qsTr("Dark"), value: 2}, {label: qsTr("Light"), value: 1}, {label: qsTr("System"), value: 0}]
-                                RedesignButton {
-                                    required property var modelData
-                                    width: theme.dp(105); height: theme.dp(34)
-                                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                                    caption: modelData.label; text: caption
-                                    selected: MainCtx.colorScheme.scheme === modelData.value
-                                    background: Rectangle { color: parent.selected ? theme.progress : theme.background; radius: theme.dp(4); border.color: theme.field }
-                                    onClicked: { MainCtx.colorScheme.setData(MainCtx.colorScheme.index(modelData.value, 0), true, Qt.CheckStateRole); preferenceStore.save() }
+                    Text {
+                        topPadding: theme.dp(8); bottomPadding: theme.dp(8)
+                        text: qsTr("Appearance"); color: theme.settingsHeading; font.pixelSize: theme.dp(16)
+                    }
+                    RedesignPreferenceRow { width: parent.width; backend: preferenceStore; optionName: "language"; label: qsTr("Interface language"); scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
+                    Item {
+                        width: parent.width; height: theme.dp(46)
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: qsTr("Theme"); color: theme.foreground; font.pixelSize: theme.dp(14) }
+                        Rectangle {
+                            objectName: "settingsThemeChoices"
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            width: theme.dp(320); height: theme.dp(36)
+                            radius: theme.dp(6); color: theme.field
+                            Row {
+                                anchors.fill: parent; anchors.margins: theme.dp(2)
+                                spacing: theme.dp(2)
+                                Repeater {
+                                    model: [{label: qsTr("Dark"), value: 2}, {label: qsTr("Light"), value: 1}, {label: qsTr("System"), value: 0}]
+                                    RedesignButton {
+                                        required property var modelData
+                                        width: theme.dp(104); height: theme.dp(32)
+                                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                                        caption: modelData.label; text: caption
+                                        selected: MainCtx.colorScheme.scheme === modelData.value
+                                        background: Rectangle { color: parent.selected ? theme.progress : theme.background; radius: theme.dp(4) }
+                                        onClicked: { MainCtx.colorScheme.setData(MainCtx.colorScheme.index(modelData.value, 0), true, Qt.CheckStateRole); preferenceStore.save() }
+                                    }
                                 }
                             }
                         }
                     }
-                    RowLayout {
-                        Layout.fillWidth: true; Layout.preferredHeight: theme.dp(34)
-                        Text { Layout.fillWidth: true; text: qsTr("Accent color"); color: theme.foreground; font.pixelSize: theme.dp(14) }
+                    Item {
+                        width: parent.width; height: theme.dp(46)
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: qsTr("Accent color"); color: theme.foreground; font.pixelSize: theme.dp(14) }
                         Item {
-                            Layout.preferredWidth: theme.dp(320); Layout.preferredHeight: theme.dp(34)
-                            Rectangle { anchors.fill: parent; color: theme.background; radius: theme.dp(4) }
+                            objectName: "settingsAccentChoices"
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            width: theme.dp(320); height: theme.dp(36)
+                            Rectangle { anchors.fill: parent; color: theme.field; radius: theme.dp(6) }
                             Row {
                                 anchors.fill: parent
                                 Repeater {
@@ -285,10 +296,10 @@ RedesignSettingsDialog {
                                     RedesignButton {
                                         required property string modelData
                                         readonly property bool active: { preferenceStore.revision; return root.accentColor.toString() === modelData }
-                                        width: theme.dp(320 / 9); height: theme.dp(34)
+                                        width: theme.dp(320 / 9); height: theme.dp(36)
                                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                                         text: modelData
-                                        background: Rectangle { color: parent.active ? theme.progress : "transparent"; radius: theme.dp(4) }
+                                        background: Item { Rectangle { anchors.fill: parent; anchors.margins: theme.dp(2); color: parent.parent.active ? theme.progress : "transparent"; radius: theme.dp(4) } }
                                         contentItem: Item { Rectangle { anchors.centerIn: parent; width: theme.dp(20); height: width; radius: theme.dp(1); color: parent.parent.modelData; opacity: parent.parent.active ? 1 : 0.7 } }
                                         onClicked: preferenceStore.stage("qt-accent-color", modelData)
                                     }
@@ -310,12 +321,13 @@ RedesignSettingsDialog {
                         model: specification.sections.general.find(section => section.appearance).rows
                         delegate: RedesignPreferenceRow {
                             required property var modelData
-                            Layout.fillWidth: true
+                            width: parent.width
                             backend: preferenceStore; optionName: modelData[0]; label: modelData[1]
                             presentation: modelData[2] || {}
                             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                         }
                     }
+                    Item { width: 1; height: theme.dp(4) }
                 }
                 Repeater {
                     model: root.search.length ? [] : (specification.sections[root.category] || []).filter(section => !section.appearance)
