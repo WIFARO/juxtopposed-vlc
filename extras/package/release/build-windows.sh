@@ -6,6 +6,9 @@ RELEASE_TAG=$(python3 "$root/extras/package/release/version.py")
 export RELEASE_TAG
 # Keep contrib Rust packages below the root Cargo workspace's excluded contrib/.
 work="$root/contrib/contrib-release-win64"
+cache="$root/extras/package/release/dependency-cache.py"
+mode=${1:-build}
+[[ "$mode" == build || "$mode" == --dependencies-only ]] || { echo 'Expected --dependencies-only or no arguments' >&2; exit 1; }
 mkdir -p "$work"
 cd "$work"
 # Avoid -i: upstream also makes installers, whereas this release is portable.
@@ -14,7 +17,25 @@ cd "$work"
 export VLC_NO_EXE_WRAPPER=1
 export VLC_BUILD_TRACE=0
 export MCONFIGFLAGS="${MCONFIGFLAGS:-} -Dmedialibrary=enabled -Dtests=disabled -Dnsis=disabled -Dwix=disabled"
+unset VLC_USE_CACHED_DEPENDENCIES VLC_BUILD_DEPENDENCIES_ONLY
+if [[ "$mode" == --dependencies-only ]]; then
+    : "${RELEASE_DEPS_CACHE_KEY:?A cache key is required for the separate dependency phase}"
+    if python3 "$cache" check; then
+        echo 'Reusing the validated Windows dependency SDK'
+        exit 0
+    fi
+    python3 "$cache" clean
+    export VLC_BUILD_DEPENDENCIES_ONLY=1
+elif [[ -n "${RELEASE_DEPS_CACHE_KEY:-}" ]] && python3 "$cache" check; then
+    export VLC_USE_CACHED_DEPENDENCIES=1
+fi
 "$root/extras/package/win32/build.sh" -a x86_64 -r -i '' -m -l -o "$work/install"
+if [[ "$mode" == --dependencies-only ]]; then
+    if ! python3 "$cache" seal; then
+        echo 'Dependency cache could not be sealed; continuing with normal dependency checks' >&2
+    fi
+    exit 0
+fi
 # Unlike Windows API DLLs, the Vulkan loader is a redistributable dependency.
 cp "$work/contrib/x86_64-w64-mingw32/bin/vulkan-1.dll" "$work/install/"
 mkdir -p "$work/install/licenses/vulkan-loader"

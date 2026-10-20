@@ -62,7 +62,7 @@ def recovery_changes(source, current, root=ROOT):
     # changes. Application, version and dependency changes require full builds.
     forbidden = [p for p in paths if not (
         p.startswith(('extras/package/release/', 'doc/')) or
-        p in ('.github/workflows/beta-release.yml', 'Makefile.am'))]
+        p in ('.github/workflows/beta-release.yml', 'extras/package/win32/build.sh', 'Makefile.am'))]
     if 'Makefile.am' in paths:
         diff = git('diff', '--no-ext-diff', '--unified=0', source, current, '--', 'Makefile.am', root=root)
         edits = [line[1:] for line in diff.splitlines()

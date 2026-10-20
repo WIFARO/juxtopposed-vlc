@@ -197,11 +197,14 @@ if [ "$COMPILING_WITH_CLANG" -gt 0 ] && [ ! -d "libtool" ]; then
 elif [ -n "$WITH_LTO" ] && [ ! -d "libtool" ]; then
     FORCED_TOOLS="$FORCED_TOOLS libtool"
 fi
-# bootstrap only if needed in interactive mode
-if [ "$INTERACTIVE" != "yes" ] || [ ! -f ./Makefile ]; then
-    NEEDED="$FORCED_TOOLS" ${VLC_ROOT_PATH}/extras/tools/bootstrap
+# Release CI can supply a validated, complete installed dependency SDK.
+if [ "${VLC_USE_CACHED_DEPENDENCIES:-0}" != 1 ]; then
+    # bootstrap only if needed in interactive mode
+    if [ "$INTERACTIVE" != "yes" ] || [ ! -f ./Makefile ]; then
+        NEEDED="$FORCED_TOOLS" ${VLC_ROOT_PATH}/extras/tools/bootstrap
+    fi
+    make -j$JOBS
 fi
-make -j$JOBS
 
 # avoid installing wine on WSL
 # wine is needed to build Qt with shaders or running vlc-cache-gen
@@ -484,8 +487,11 @@ fi
 
 ${VLC_ROOT_PATH}/contrib/bootstrap --host=$TRIPLET --prefix=../$CONTRIB_PREFIX $CONTRIBFLAGS
 
-# Rebuild the contribs or use the prebuilt ones
-if [ "$PREBUILT" = "yes" ]; then
+# Rebuild the contribs or use the prebuilt ones. The release cache contains this
+# fork's installed libraries AND host tools; it never uses upstream prebuilt libs.
+if [ "${VLC_USE_CACHED_DEPENDENCIES:-0}" = 1 ]; then
+    info "Using validated installed dependencies"
+elif [ "$PREBUILT" = "yes" ]; then
     if [ -n "$VLC_PREBUILT_CONTRIBS_URL" ]; then
         make prebuilt PREBUILT_URL="$VLC_PREBUILT_CONTRIBS_URL" || PREBUILT_FAILED=yes
     else
@@ -494,17 +500,24 @@ if [ "$PREBUILT" = "yes" ]; then
 else
     PREBUILT_FAILED=yes
 fi
-make list
-if [ -n "$PREBUILT_FAILED" ]; then
+if [ "${VLC_USE_CACHED_DEPENDENCIES:-0}" = 1 ]; then
+    :
+elif [ -n "$PREBUILT_FAILED" ]; then
+    make list
     make -j$JOBS fetch
     make -j$JOBS -k || make -j1
     if [ "$PACKAGE" = "yes" ]; then
         make package
     fi
 else
+    make list
     make -j$JOBS tools
 fi
 cd ../..
+
+if [ "${VLC_BUILD_DEPENDENCIES_ONLY:-0}" = 1 ]; then
+    exit 0
+fi
 
 # configuration matching configure.sh (goom is called goom2, theora is theoradec+theoraenc)
 MCONFIGFLAGS="-Dlua=enabled -Dflac=enabled -Dtheoradec=enabled -Dtheoraenc=enabled \

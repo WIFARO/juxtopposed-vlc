@@ -170,6 +170,17 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'distribution list'):
                 recovery.recovery_changes(old, 'HEAD', root)
 
+    def test_windows_release_wrapper_changes_are_treated_as_release_tooling(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old, _, command = self.make_repository(root)
+            wrapper = root / 'extras/package/win32/build.sh'
+            wrapper.parent.mkdir(parents=True)
+            wrapper.write_text('# release dependency cache hooks\n')
+            command('add', '.')
+            command('-c', 'commit.gpgsign=false', 'commit', '-m', 'release tooling')
+            self.assertIn('extras/package/win32/build.sh', recovery.recovery_changes(old, 'HEAD', root))
+
     def test_assembly_preserves_sources_and_produces_complete_manifest_and_checksums(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
