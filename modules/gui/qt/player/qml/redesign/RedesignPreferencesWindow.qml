@@ -55,6 +55,7 @@ RedesignSettingsDialog {
     }
     RedesignShortcuts {
         id: shortcuts
+        objectName: "preferencesShortcuts"
         parent: content
         videoBackdropContent: Component {
             RedesignSurfaceBackdrop {
@@ -230,14 +231,14 @@ RedesignSettingsDialog {
         }
         C.ScrollView {
             id: scroll
-            anchors.top: parent.top; anchors.topMargin: theme.dp(root.category === "interface" || root.category === "privacy" ? 70 : 72)
+            anchors.top: parent.top; anchors.topMargin: theme.dp(root.category === "interface" || root.category === "privacy" || root.category === "controls" ? 70 : 72)
             anchors.left: navigation.right; anchors.right: parent.right; anchors.bottom: footer.top
             anchors.leftMargin: theme.dp(32); anchors.rightMargin: theme.dp(24)
             clip: true
             contentWidth: availableWidth
             Column {
                 width: scroll.availableWidth
-                spacing: theme.dp(root.category === "general" || root.category === "interface" || root.category === "privacy" ? 5 : 6)
+                spacing: theme.dp(root.category === "general" || root.category === "interface" || root.category === "privacy" || root.category === "controls" ? 5 : 6)
                 Loader {
                     width: parent.width
                     active: root.addonsVisited
@@ -339,33 +340,39 @@ RedesignSettingsDialog {
                         bottomPadding: root.category === "extensions" ? theme.dp(12) : 0
                         visible: modelData.rows.some(row => preferenceStore.describe(row[0]).kind !== undefined) || root.category === "controls" && modelData.title === qsTr("Keyboard Shortcuts")
                         Text {
-                            topPadding: theme.dp(index === 0 && root.category !== "general" ? root.category === "interface" || root.category === "privacy" ? 9 : 8 : 24); bottomPadding: theme.dp(10)
+                            topPadding: theme.dp(index === 0 && root.category !== "general" ? root.category === "interface" || root.category === "privacy" || root.category === "controls" ? 9 : 8 : 24); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
                             visible: text.length > 0
                         }
                         ColumnLayout {
                             width: parent.width
                             visible: root.category === "controls" && modelData.title === qsTr("Keyboard Shortcuts")
-                            spacing: theme.dp(10)
+                            spacing: 0
                             RowLayout {
                                 Layout.fillWidth: true
+                                Layout.minimumHeight: theme.dp(42)
                                 Text { Layout.fillWidth: true; text: qsTr("Defaults"); color: theme.foreground; font.pixelSize: theme.dp(14) }
                                 RedesignButton {
-                                    Layout.preferredWidth: theme.dp(320); height: theme.dp(34)
+                                    Layout.preferredWidth: theme.dp(320); Layout.preferredHeight: theme.dp(32)
                                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                                    objectName: "preferencesEditShortcuts"
                                     caption: qsTr("Edit Keyboard Shortcuts"); text: caption
-                                    background: Rectangle { radius: theme.dp(4); color: parent.hovered ? theme.hover : theme.background }
+                                    captionFontWeight: Font.Medium
+                                    background: Rectangle { radius: theme.dp(6); color: parent.hovered ? theme.hover : root.lightTheme ? theme.background : "#191919" }
                                     onClicked: { content.forceActiveFocus(); if (!preferenceStore.dirty || preferenceStore.save()) shortcuts.open() }
                                 }
                             }
                             RowLayout {
                                 Layout.fillWidth: true
+                                Layout.minimumHeight: theme.dp(42)
                                 Text { Layout.fillWidth: true; text: qsTr("Reset all shortcuts"); color: theme.foreground; font.pixelSize: theme.dp(14) }
                                 RedesignButton {
-                                    Layout.preferredWidth: theme.dp(320); height: theme.dp(34)
+                                    Layout.preferredWidth: theme.dp(320); Layout.preferredHeight: theme.dp(32)
                                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                                    objectName: "preferencesResetShortcuts"
                                     caption: qsTr("Reset"); text: caption
-                                    background: Rectangle { radius: theme.dp(4); color: parent.hovered ? theme.hover : theme.background }
+                                    captionFontWeight: Font.Medium
+                                    background: Rectangle { radius: theme.dp(6); color: parent.hovered ? theme.hover : root.lightTheme ? theme.background : "#191919" }
                                     onClicked: {
                                         for (const entry of preferenceStore.catalog("controls", ""))
                                             if (entry.name.startsWith("key-") || entry.name.startsWith("global-key-")) preferenceStore.reset(entry.name)
