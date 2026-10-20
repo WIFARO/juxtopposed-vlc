@@ -145,9 +145,11 @@ public:
     void InformationCreate();
 
     bool Seek( demux_t &, vlc_tick_t i_mk_date, vlc_tick_t i_mk_time_offset, bool b_accurate );
+    void PrerollSubtitles( demux_t &, vlc_tick_t, vlc_tick_t, SegmentSeeker::fptr_t,
+                          const SegmentSeeker::track_ids_t & );
 
     int BlockGet( KaxBlock * &, KaxSimpleBlock * &, KaxBlockAdditions * &,
-                  bool *, bool *, uint64_t *);
+                  bool *, bool *, uint64_t *, uint64_t limit = UINT64_MAX );
 
     mkv_track_t * FindTrackByBlock(const KaxBlock *, const KaxSimpleBlock * );
 

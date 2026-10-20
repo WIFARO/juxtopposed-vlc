@@ -194,6 +194,7 @@ libmkv_plugin_la_SOURCES = \
 	demux/mkv/matroska_segment.hpp demux/mkv/matroska_segment.cpp \
 	demux/mkv/matroska_segment_parse.cpp \
 	demux/mkv/matroska_segment_seeker.hpp demux/mkv/matroska_segment_seeker.cpp \
+	demux/mkv/subtitle_seekpoint.hpp \
 	demux/mkv/demux.hpp demux/mkv/demux.cpp \
 	demux/mkv/events.hpp demux/mkv/events.cpp \
 	demux/mkv/dispatcher.hpp \

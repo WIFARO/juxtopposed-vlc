@@ -537,7 +537,7 @@ static void ReleaseVpxAlpha(void *opaque)
 }
 
 /* Needed by matroska_segment::Seek() and Seek */
-static void BlockDecode( demux_t *p_demux, KaxBlock *block, KaxSimpleBlock *simpleblock,
+void BlockDecode( demux_t *p_demux, KaxBlock *block, KaxSimpleBlock *simpleblock,
                   const KaxBlockAdditions *additions,
                   vlc_tick_t i_pts, uint64_t i_duration, bool b_key_picture,
                   bool b_discardable_picture )

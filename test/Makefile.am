@@ -74,6 +74,7 @@ check_PROGRAMS = \
 	test_src_preparser_thumbnail \
 	test_src_preparser_thumbnail_to_files \
 	test_src_input_decoder \
+	test_modules_demux_mkv_subtitle_seek \
 	test_src_input_subtitle_style \
 	test_src_input_subtitle_duration \
 	test_src_input_subtitle_encoding \
@@ -340,6 +341,8 @@ test_src_player_capabilities_LDADD = $(LIBVLCCORE) $(LIBVLC) $(LIBM)
 test_src_player_delays_SOURCES = src/player/common.h src/player/modules.c \
 	src/player/delays.c
 test_src_player_delays_LDADD = $(LIBVLCCORE) $(LIBVLC) $(LIBM)
+test_modules_demux_mkv_subtitle_seek_SOURCES = modules/demux/mkv_subtitle_seek.cpp
+
 test_src_input_subtitle_style_SOURCES = src/input/subtitle_style.c
 test_src_input_subtitle_style_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_misc_media_library_startup_SOURCES = src/misc/media_library_startup.c

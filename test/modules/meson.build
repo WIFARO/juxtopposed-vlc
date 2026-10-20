@@ -1,4 +1,10 @@
 vlc_tests += {
+    'name': 'test_modules_demux_mkv_subtitle_seek',
+    'sources': files('demux/mkv_subtitle_seek.cpp'),
+    'suite': ['modules', 'test_modules'],
+}
+
+vlc_tests += {
     'name': 'test_modules_stream_out_renderer_quality',
     'sources': files('stream_out/renderer_quality.cpp'),
     'suite': ['modules', 'test_modules'],

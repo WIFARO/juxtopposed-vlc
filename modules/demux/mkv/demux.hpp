@@ -40,6 +40,9 @@ namespace mkv {
 class virtual_segment_c;
 class chapter_item_c;
 
+void BlockDecode( demux_t *, KaxBlock *, KaxSimpleBlock *, const KaxBlockAdditions *,
+                  vlc_tick_t, uint64_t, bool, bool );
+
 struct demux_sys_t : public chapter_codec_vm
 {
 public:

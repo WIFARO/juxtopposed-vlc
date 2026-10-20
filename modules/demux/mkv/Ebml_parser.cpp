@@ -96,6 +96,16 @@ void EbmlParser::Unkeep()
     mb_keep = false;
 }
 
+bool EbmlParser::ClearCurrent()
+{
+    if( mi_level == 0 || mi_level != mi_user_level || mb_keep )
+        return false;
+    delete m_el[mi_level];
+    m_el[mi_level] = nullptr;
+    return_previous_parent = false;
+    return true;
+}
+
 int EbmlParser::GetLevel( void ) const
 {
     return mi_user_level;

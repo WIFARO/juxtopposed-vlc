@@ -29,6 +29,7 @@
 #include <vector>
 #include <map>
 #include <limits>
+#include "subtitle_seekpoint.hpp"
 
 namespace mkv {
 
@@ -87,6 +88,9 @@ class SegmentSeeker
             fptr_t  size;
         };
 
+        using SubtitleSeekpoint = SubtitleSeekIndex::Seekpoint;
+        using subtitle_seekpoints_t = SubtitleSeekIndex::seekpoints_t;
+
     public:
         typedef std::vector<track_id_t> track_ids_t;
         typedef std::vector<Range> ranges_t;
@@ -100,6 +104,9 @@ class SegmentSeeker
         typedef std::pair<Seekpoint, Seekpoint> seekpoint_pair_t;
 
         void add_seekpoint( track_id_t, Seekpoint );
+        void add_subtitle_seekpoint( SubtitleSeekpoint point ) { _subtitle_seekpoints.add( point ); }
+        subtitle_seekpoints_t get_subtitle_seekpoints( track_id_t track, vlc_tick_t target ) const
+        { return _subtitle_seekpoints.active( track, target ); }
 
         seekpoint_pair_t get_seekpoints_around( vlc_tick_t, seekpoints_t const& );
         Seekpoint get_first_seekpoint_around( vlc_tick_t, seekpoints_t const&, Seekpoint::TrustLevel = Seekpoint::TRUSTED );
@@ -124,6 +131,9 @@ class SegmentSeeker
         tracks_seekpoints_t _tracks_seekpoints;
         cluster_positions_t _cluster_positions;
         cluster_map_t       _clusters;
+
+    private:
+        SubtitleSeekIndex _subtitle_seekpoints;
 };
 
 } // namespace
