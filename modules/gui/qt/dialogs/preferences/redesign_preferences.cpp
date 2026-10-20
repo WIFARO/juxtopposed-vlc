@@ -5,6 +5,7 @@
 #include "player/player_controller.hpp"
 #include "util/renderer_manager.hpp"
 #include "util/file_log_preferences.hpp"
+#include "util/preference_values.hpp"
 #include "util/vlcqtmessagehandler.hpp"
 #include <vlc_configuration.h>
 #include <vlc_modules.h>
@@ -2494,8 +2495,9 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
         normalized = QVariant::fromValue(v); break;
     }
     case CONFIG_ITEM_FLOAT: {
-        const double v = proposed.toDouble(&valid);
-        valid = valid && std::isfinite(v) && (cfg->min.f == cfg->max.f || (v >= cfg->min.f && v <= cfg->max.f));
+        const auto converted = vlc::preferences::floatValue(proposed, cfg->min.f, cfg->max.f);
+        valid = converted.has_value();
+        const float v = converted.value_or(0.f);
         if (name == QLatin1String("equalizer-preamp")) valid = valid && v >= -20 && v <= 20;
         normalized = float(v); break;
     }

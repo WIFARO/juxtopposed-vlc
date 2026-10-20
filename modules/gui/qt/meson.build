@@ -559,6 +559,7 @@ qt_plugin_sources = files(
     'util/vlchotkeyconverter.hpp',
     'util/postprocessing_preferences.hpp',
     'util/file_log_preferences.hpp',
+    'util/preference_values.hpp',
     'util/message_log.hpp',
     'util/message_log_buffer.hpp',
     'util/video_window_geometry.hpp',
@@ -1804,6 +1805,15 @@ if qt6_dep.found()
             'include_directories': qt_include_dir,
             'link_with': [libvlccore, libvlc],
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep]
+        }
+
+        vlc_tests += {
+            'name': 'test_qt_preference_values',
+            'sources': files('tests/test_preference_values.cpp'),
+            'moc_sources': files('tests/test_preference_values.cpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qtest_qt6_dep],
         }
 
         vlc_tests += {

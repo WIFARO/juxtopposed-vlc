@@ -379,6 +379,7 @@ libqt_plugin_la_SOURCES = \
 	util/vlchotkeyconverter.cpp util/vlchotkeyconverter.hpp \
 	util/postprocessing_preferences.hpp \
 	util/file_log_preferences.hpp \
+	util/preference_values.hpp \
 	util/message_log.hpp \
 	util/message_log_buffer.hpp \
 	util/video_window_geometry.hpp \
@@ -2280,6 +2281,18 @@ test_file_log_preferences_LDADD = $(QT_QTEST_COMMON_ldadd)
 test_file_log_preferences_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_file_log_preferences
 TESTS += test_file_log_preferences
+
+# test_preference_values
+test_preference_values_SOURCES = tests/test_preference_values.cpp util/preference_values.hpp
+nodist_test_preference_values_SOURCES = tests/test_preference_values.moc
+BUILT_SOURCES += tests/test_preference_values.moc
+CLEANFILES += tests/test_preference_values.moc
+test_preference_values_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_preference_values_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_preference_values_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_preference_values_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_preference_values
+TESTS += test_preference_values
 
 # test_message_log
 
