@@ -148,8 +148,8 @@ QtObject {
                 ["video-title-timeout", qsTr("Show filename for"), {editor: "slider", from: 1, to: 10, factor: 0.001, step: 0.1, suffix: " s", ticks: [1, 10], trackTicks: [2, 3, 4, 5, 6, 7, 8, 9]}] ] } ],
         library: [
             { title: qsTr("Opening Files"), rows: [ ["one-instance", qsTr("Only allow one VLC window")],
-                ["one-instance-when-started-from-file", qsTr("Apply to files opened from the file manager"), {enabledWhen: "one-instance", hideDisabledValue: true}],
-                ["playlist-enqueue", qsTr("Add to the playlist instead of replacing it"), {enabledWhen: "one-instance", hideDisabledValue: true}],
+                ["one-instance-when-started-from-file", qsTr("Apply to files opened from the file manager"), {enabledWhen: "one-instance", hideDisabledValue: true, disabledOpacity: 0.3}],
+                ["playlist-enqueue", qsTr("Add to the playlist instead of replacing it"), {enabledWhen: "one-instance", hideDisabledValue: true, disabledOpacity: 0.3}],
                 ["recursive", qsTr("When opening a folder"), {dynamicChoices: true}], ["show-hiddenfiles", qsTr("Show hidden files")] ] },
             { title: qsTr("Metadata & Artwork"), rows: [ ["metadata-network-access", qsTr("Fetch titles and artwork"), {choices: [{label: qsTr("From the file only"), value: false}, {label: qsTr("From the file and the internet"), value: true}]}], ["media-library-startup", qsTr("Use the media library"), {dynamicChoices: true}] ] } ],
         network: [

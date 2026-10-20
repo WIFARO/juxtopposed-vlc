@@ -15,6 +15,7 @@ RedesignSettingsDialog {
     accentColor: MainCtx.redesignAccent
     lightTheme: !VLCStyle.palette.isDark
     property string category: "general"
+    readonly property bool usesReferenceSpacing: category === "interface" || category === "privacy" || category === "controls" || category === "library"
     readonly property string categoryTitle: specification.pageTitles[category] || ""
     property bool advanced: false
     property bool expert: false
@@ -231,14 +232,14 @@ RedesignSettingsDialog {
         }
         C.ScrollView {
             id: scroll
-            anchors.top: parent.top; anchors.topMargin: theme.dp(root.category === "interface" || root.category === "privacy" || root.category === "controls" ? 70 : 72)
+            anchors.top: parent.top; anchors.topMargin: theme.dp(root.usesReferenceSpacing ? 70 : 72)
             anchors.left: navigation.right; anchors.right: parent.right; anchors.bottom: footer.top
             anchors.leftMargin: theme.dp(32); anchors.rightMargin: theme.dp(24)
             clip: true
             contentWidth: availableWidth
             Column {
                 width: scroll.availableWidth
-                spacing: theme.dp(root.category === "general" || root.category === "interface" || root.category === "privacy" || root.category === "controls" ? 5 : 6)
+                spacing: theme.dp(root.category === "general" || root.usesReferenceSpacing ? 5 : 6)
                 Loader {
                     width: parent.width
                     active: root.addonsVisited
@@ -340,7 +341,7 @@ RedesignSettingsDialog {
                         bottomPadding: root.category === "extensions" ? theme.dp(12) : 0
                         visible: modelData.rows.some(row => preferenceStore.describe(row[0]).kind !== undefined) || root.category === "controls" && modelData.title === qsTr("Keyboard Shortcuts")
                         Text {
-                            topPadding: theme.dp(index === 0 && root.category !== "general" ? root.category === "interface" || root.category === "privacy" || root.category === "controls" ? 9 : 8 : 24); bottomPadding: theme.dp(10)
+                            topPadding: theme.dp(index === 0 && root.category !== "general" ? root.usesReferenceSpacing ? 9 : 8 : 24); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
                             visible: text.length > 0
                         }
@@ -401,11 +402,12 @@ RedesignSettingsDialog {
                 }
                 Item {
                     visible: !root.search.length
-                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" ? 53 : 50)
+                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" || root.category === "library" ? 53 : 50)
                     RedesignButton {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                         height: theme.dp(38)
                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                        objectName: "preferencesAdvancedOptions"
                         caption: root.advanced ? qsTr("Hide Advanced Options") : qsTr("Advanced Options")
                         text: caption
                         contentItem: Item {
@@ -424,7 +426,7 @@ RedesignSettingsDialog {
                     delegate: Column {
                         required property var modelData
                         width: parent.width
-                        topPadding: (root.category === "general" || root.category === "interface") && !modelData.title.length ? theme.dp(15) : 0
+                        topPadding: (root.category === "general" || root.category === "interface" || root.category === "library") && !modelData.title.length ? theme.dp(15) : 0
                         Text {
                             visible: text.length > 0; topPadding: theme.dp(root.category === "general" ? 24 : 20); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)

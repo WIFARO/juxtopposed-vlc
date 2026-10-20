@@ -50,7 +50,8 @@ ColumnLayout {
         return description.supported !== false && (!presentation.enabledWhen || !!backend.value(presentation.enabledWhen))
             && (!presentation.enabledWhenEquals || backend.value(presentation.enabledWhenEquals.name) === presentation.enabledWhenEquals.value)
     }
-    opacity: editorEnabled ? 1 : 0.5
+    opacity: editorEnabled ? 1 : presentation.disabledOpacity === undefined ? 0.5 : presentation.disabledOpacity
+    layer.enabled: !editorEnabled && presentation.disabledOpacity !== undefined
     function commit(value) {
         if (presentation.inverted) value = !value
         if (presentation.toggleValues) value = value ? presentation.toggleValues.on : presentation.toggleValues.off
