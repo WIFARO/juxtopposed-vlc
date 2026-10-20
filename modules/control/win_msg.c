@@ -62,9 +62,9 @@ static void add_to_playlist(intf_thread_t *intf, const char *uri,
     input_item_AddOptions(media, options_count, options, VLC_INPUT_OPTION_TRUSTED);
 
     vlc_playlist_Lock(playlist);
-    vlc_playlist_AppendOne(playlist, media);
-    if (play_now)
-        vlc_playlist_Start(playlist);
+    const size_t index = vlc_playlist_Count(playlist);
+    if (vlc_playlist_AppendOne(playlist, media) == VLC_SUCCESS && play_now)
+        vlc_playlist_PlayAt(playlist, index);
     vlc_playlist_Unlock(playlist);
     input_item_Release(media);
 }
