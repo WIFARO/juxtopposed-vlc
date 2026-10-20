@@ -614,7 +614,8 @@ ColumnLayout {
                     width: slider.availableWidth; height: theme.dp(root.presentation.trackHeight || 14); radius: theme.dp(root.presentation.trackRadius || 5); color: theme.field
                     Rectangle {
                         readonly property real origin: {
-                            const crossesZero = Math.min(slider.from, slider.to) < 0 && Math.max(slider.from, slider.to) > 0
+                            const crossesZero = !root.presentation.fillFromMinimum
+                                && Math.min(slider.from, slider.to) < 0 && Math.max(slider.from, slider.to) > 0
                             const position = crossesZero ? -slider.from / (slider.to - slider.from) : 0
                             return slider.mirrored ? 1 - position : position
                         }

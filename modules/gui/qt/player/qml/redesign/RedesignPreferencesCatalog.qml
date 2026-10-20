@@ -6,6 +6,10 @@ QtObject {
         return Object.assign({editor: "slider", rowHeight: 57, alignSliderTop: true,
             sliderTopMargin: 3, sliderPadding: 0, trackHeight: 16, hideHelp: true}, options)
     }
+    function pictureSlider(options) {
+        return Object.assign({editor: "slider", inlineSlider: true, sliderPadding: 0,
+            trackHeight: 16, trackRadius: 6, trackInset: 2, fillFromMinimum: true, hideHelp: true}, options)
+    }
     function visibleSections(category, backend) {
         return (sections[category] || []).filter(section => !section.appearance
             && (section.rows.some(row => backend.describe(row[0]).kind !== undefined)
@@ -98,16 +102,16 @@ QtObject {
         video: [
             { title: qsTr("Output"), rows: [ ["video", qsTr("Enable video")], ["fullscreen", qsTr("Start videos in fullscreen")],
                 ["disable-screensaver", qsTr("Stop the screensaver during playback"), {editor: "toggle", toggleValues: {on: 1, off: 0}}], ["video-wallpaper", qsTr("Play video as desktop wallpaper")] ] },
-            { title: qsTr("Picture"), rows: [ ["hue", qsTr("Hue"), {editor: "slider", from: -180, to: 180, step: 1, inlineSlider: true, hideHelp: true}],
-                ["brightness", qsTr("Brightness"), {editor: "slider", from: 0, to: 2, decimals: 2, inlineSlider: true, hideHelp: true}],
-                ["contrast", qsTr("Contrast"), {editor: "slider", from: 0, to: 2, decimals: 2, inlineSlider: true, hideHelp: true}],
-                ["saturation", qsTr("Saturation"), {editor: "slider", from: 0, to: 3, decimals: 2, inlineSlider: true, hideHelp: true, trackTicks: [1, 2]}],
-                ["gamma", qsTr("Gamma"), {editor: "slider", from: 0.01, to: 10, decimals: 2, inlineSlider: true, hideHelp: true, trackTicks: [1, 2, 3, 4, 5, 6, 7, 8, 9]}],
+            { title: qsTr("Picture"), rows: [ ["hue", qsTr("Hue"), pictureSlider({from: -180, to: 180, step: 1})],
+                ["brightness", qsTr("Brightness"), pictureSlider({from: 0, to: 2, decimals: 2})],
+                ["contrast", qsTr("Contrast"), pictureSlider({from: 0, to: 2, decimals: 2})],
+                ["saturation", qsTr("Saturation"), pictureSlider({from: 0, to: 3, decimals: 2, trackTicks: [1, 2]})],
+                ["gamma", qsTr("Gamma"), pictureSlider({from: 0.01, to: 10, decimals: 2, trackTicks: [1, 2, 3, 4, 5, 6, 7, 8, 9]})],
                 ["redesign-reset-picture", qsTr("Reset picture"), {hideHelp: true, rowHeight: 42}] ] },
             { title: qsTr("Deinterlacing"), rows: [ ["deinterlace", qsTr("Deinterlacing")], ["deinterlace-mode", qsTr("Method"), {choiceLabels: {auto: qsTr("Automatic")}}] ] },
             { title: qsTr("Framing"), rows: [ ["aspect-ratio", qsTr("Aspect ratio"), {dynamicChoices: true}], ["crop", qsTr("Crop"), {dynamicChoices: true}],
                 ["autoscale", qsTr("Scale video to the window")], ["redesign-video-zoom", qsTr("Zoom"), {dynamicChoices: true}], ["align", qsTr("Position in the window")] ] },
-            { title: qsTr("Snapshots"), rows: [ ["snapshot-path", qsTr("Save to")], ["snapshot-prefix", qsTr("File name prefix")], ["snapshot-format", qsTr("Format"), {choiceLabels: {png: "PNG", jpg: "JPG", tiff: "TIFF", webp: "WebP"}}],
+            { title: qsTr("Snapshots"), rows: [ ["snapshot-path", qsTr("Save to"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8}], ["snapshot-prefix", qsTr("File name prefix"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8}], ["snapshot-format", qsTr("Format"), {choiceLabels: {png: "PNG", jpg: "JPG", tiff: "TIFF", webp: "WebP"}}],
                 ["redesign-snapshot-size", qsTr("Size"), {dynamicChoices: true}],
                 ["snapshot-sequential", qsTr("Number files sequentially")], ["snapshot-preview", qsTr("Show a preview after capture")] ] } ],
         audio: [
@@ -194,8 +198,8 @@ QtObject {
         audio: [ {title: "", rows: [ ["redesign-audio-passthrough", qsTr("Pass compressed audio to the receiver"), {dynamicChoices: true}], ["force-dolby-surround", qsTr("Detect Dolby Surround"), {choiceLabels: {0: qsTr("Automatic")}}], ["redesign-resampling-quality", qsTr("Resampling quality"), {dynamicChoices: true}], ["role", qsTr("Media role")],
             ["visualization-size", qsTr("Visualization size"), {dynamicChoices: true}],
             ["aout", qsTr("Audio output driver")], ["stereo-mode", qsTr("Stereo channel mapping"), {choiceLabels: {0: qsTr("Automatic")}}], ["audio-resampler", qsTr("Resampler")], ["filter:audio-filter:spatializer", qsTr("Spatializer"), {spatializer: true}] ] } ],
-        video: [ {title: "", rows: [ ["custom-aspect-ratios", qsTr("Custom aspect ratios")], ["custom-crop-ratios", qsTr("Custom crop ratios")],
-            ["monitor-par", qsTr("Monitor pixel aspect ratio"), {placeholder: qsTr("Automatic")}], ["input-timeshift-granularity", qsTr("Time-shift buffer size"), {dynamicChoices: true}] ] } ],
+        video: [ {title: "", rows: [ ["custom-aspect-ratios", qsTr("Custom aspect ratios"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8}], ["custom-crop-ratios", qsTr("Custom crop ratios"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8}],
+            ["monitor-par", qsTr("Monitor pixel aspect ratio"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8, placeholder: qsTr("Automatic")}], ["input-timeshift-granularity", qsTr("Time-shift buffer size"), {dynamicChoices: true}] ] } ],
         subtitles: [ {title: "", rows: [ ["sub-autodetect-path", qsTr("Load subtitles from these folders")],
             ["sub-text-use-embedded-style", qsTr("Ignore embedded subtitle styles"), {inverted: true, help: qsTr("Use your subtitle appearance settings instead of the styles from the subtitle file.")}],
             ["freetype-shadow-angle", qsTr("Shadow angle")], ["freetype-text-direction", qsTr("Text direction"), {choices: [
