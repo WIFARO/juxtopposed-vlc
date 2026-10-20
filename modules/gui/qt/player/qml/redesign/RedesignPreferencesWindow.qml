@@ -230,14 +230,14 @@ RedesignSettingsDialog {
         }
         C.ScrollView {
             id: scroll
-            anchors.top: parent.top; anchors.topMargin: theme.dp(72)
+            anchors.top: parent.top; anchors.topMargin: theme.dp(root.category === "interface" ? 70 : 72)
             anchors.left: navigation.right; anchors.right: parent.right; anchors.bottom: footer.top
             anchors.leftMargin: theme.dp(32); anchors.rightMargin: theme.dp(24)
             clip: true
             contentWidth: availableWidth
             Column {
                 width: scroll.availableWidth
-                spacing: theme.dp(root.category === "general" ? 5 : 6)
+                spacing: theme.dp(root.category === "general" || root.category === "interface" ? 5 : 6)
                 Loader {
                     width: parent.width
                     active: root.addonsVisited
@@ -330,7 +330,7 @@ RedesignSettingsDialog {
                     }
                 }
                 Repeater {
-                    model: root.search.length ? [] : (specification.sections[root.category] || []).filter(section => !section.appearance)
+                    model: root.search.length ? [] : specification.visibleSections(root.category, preferenceStore)
                     delegate: Column {
                         required property var modelData
                         required property int index
@@ -339,7 +339,7 @@ RedesignSettingsDialog {
                         bottomPadding: root.category === "extensions" ? theme.dp(12) : 0
                         visible: modelData.rows.some(row => preferenceStore.describe(row[0]).kind !== undefined) || root.category === "controls" && modelData.title === qsTr("Keyboard Shortcuts")
                         Text {
-                            topPadding: theme.dp(index === 0 && root.category !== "general" ? 8 : 24); bottomPadding: theme.dp(10)
+                            topPadding: theme.dp(index === 0 && root.category !== "general" ? root.category === "interface" ? 9 : 8 : 24); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
                             visible: text.length > 0
                         }
@@ -394,7 +394,7 @@ RedesignSettingsDialog {
                 }
                 Item {
                     visible: !root.search.length
-                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" ? 53 : 50)
+                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" ? 53 : 50)
                     RedesignButton {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                         height: theme.dp(38)
@@ -417,7 +417,7 @@ RedesignSettingsDialog {
                     delegate: Column {
                         required property var modelData
                         width: parent.width
-                        topPadding: root.category === "general" && !modelData.title.length ? theme.dp(15) : 0
+                        topPadding: (root.category === "general" || root.category === "interface") && !modelData.title.length ? theme.dp(15) : 0
                         Text {
                             visible: text.length > 0; topPadding: theme.dp(root.category === "general" ? 24 : 20); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)

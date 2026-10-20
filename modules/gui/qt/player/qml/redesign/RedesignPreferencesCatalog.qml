@@ -2,6 +2,15 @@
 import QtQml
 
 QtObject {
+    function interfaceSlider(options) {
+        return Object.assign({editor: "slider", rowHeight: 57, alignSliderTop: true,
+            sliderTopMargin: 3, sliderPadding: 0, trackHeight: 16, hideHelp: true}, options)
+    }
+    function visibleSections(category, backend) {
+        return (sections[category] || []).filter(section => !section.appearance
+            && (section.rows.some(row => backend.describe(row[0]).kind !== undefined)
+                || category === "controls" && section.title === qsTr("Keyboard Shortcuts")))
+    }
     readonly property var pageTitles: ({
         general: qsTr("Global Settings"), interface: qsTr("Interface Settings"), privacy: qsTr("Privacy Settings"),
         controls: qsTr("Mouse, Keyboard & Remote Controls"), playback: qsTr("Playback Preferences"),
@@ -36,13 +45,13 @@ QtObject {
             { title: qsTr("Playback Controls"), rows: [
                 ["qt-minimal-view", qsTr("Start in compact mode")],
                 ["qt-controls-autohide", qsTr("Auto-hide the controls")],
-                ["qt-controls-hide-timeout", qsTr("Hide after"), {editor: "slider", from: 0, to: 10, factor: 0.001, step: 0.1, decimals: 1, suffix: " s", ticks: [0, 5, 10], trackTicks: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5]}],
+                ["qt-controls-hide-timeout", qsTr("Hide after"), interfaceSlider({from: 0, to: 10, factor: 0.001, step: 0.1, decimals: 1, suffix: " s", ticks: [0, 5, 10], trackTicks: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5]})],
                 ["qt-fs-controller", qsTr("Show controls in fullscreen")] ] },
             { title: qsTr("Notifications and System Tray"), rows: [
                 ["qt-system-tray", qsTr("Show a system tray icon")],
                 ["qt-start-minimized", qsTr("Start minimized to the tray")],
                 ["qt-notification", qsTr("Show a popup when the track changes"), {enabledWhen: "qt-system-tray"}],
-                ["qt-notification-timeout", qsTr("Popup duration"), {enabledWhen: "qt-system-tray", editor: "slider", from: 0, to: 10, factor: 0.001, step: 0.1, decimals: 1, suffix: " s", ticks: [0, 5, 10], trackTicks: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5]}] ] },
+                ["qt-notification-timeout", qsTr("Popup duration"), interfaceSlider({enabledWhen: "qt-system-tray", from: 0, to: 10, factor: 0.001, step: 0.1, decimals: 1, suffix: " s", ticks: [0, 5, 10], trackTicks: [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5]})] ] },
             { title: qsTr("Playlist"), rows: [ ["playlist-tree", qsTr("Show the playlist as a tree"), {help: qsTr("Show folders and playlists as groups in the queue. Expand a group to show its items. The playback order does not change.")}] ] } ],
         privacy: [
             { title: qsTr("History"), rows: [
@@ -175,12 +184,12 @@ QtObject {
         general: [ {title: "", rows: [ ["qt-minor-warnings", qsTr("Show minor warnings")], ["startup-options", qsTr("Additional command line options"), {rowHeight: 46}], ["logmode", qsTr("Log format"), {choiceLabels: {text: qsTr("Plain text"), html: "HTML"}}], ["stats", qsTr("Collect playback statistics")], ["redesign-config-folder", qsTr("Open configurations folder"), {rowHeight: 42}], ["redesign-reset-all", qsTr("Reset all settings"), {rowHeight: 42}] ] },
             {title: qsTr("Developer Options"), rows: [ ["syslog", qsTr("Write to the system log")], ["syslog-debug", qsTr("Include debug messages in the system log")],
                 ["syslog-ident", qsTr("System log identity"), {rowHeight: 42}], ["syslog-facility", qsTr("System log facility"), {choiceLabels: {user: qsTr("User")}}] ] } ],
-        interface: [ {title: "", rows: [ ["qt-opacity", qsTr("Window opacity"), {editor: "slider", from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]}],
-            ["qt-pause-minimized", qsTr("Pause video when window is minimized")], ["qt-auto-raise", qsTr("Bring VLC to the front when playback starts")],
-            ["qt-bgcone", qsTr("Show cover art in the window when playing audio")], ["qt-embedded-open", qsTr("Show the file browser inside the open dialog")],
-            ["qt-icon-change", qsTr("Allow the app icon to change")],
-            ["qt-fs-opacity", qsTr("Fullscreen controls opacity"), {editor: "slider", from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]}],
-            ["redesign-fullscreen-sensitivity", qsTr("Fullscreen controls sensitivity"), {editor: "slider", from: 0, to: 6, step: 1, ticks: [0, 3, 6], tickLabels: [qsTr("Low"), qsTr("Medium"), qsTr("High")], trackTicks: [0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7, 3, 3.3, 3.6, 3.9, 4.2, 4.5, 4.8, 5.1, 5.4, 5.7]}] ] } ],
+        interface: [ {title: "", rows: [ ["qt-opacity", qsTr("Window opacity"), interfaceSlider({from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]})],
+            ["qt-pause-minimized", qsTr("Pause video when window is minimized"), {hideHelp: true}], ["qt-auto-raise", qsTr("Bring VLC to the front when playback starts")],
+            ["qt-bgcone", qsTr("Show cover art in the window when playing audio"), {hideHelp: true}], ["qt-embedded-open", qsTr("Show the file browser inside the open dialog"), {hideHelp: true}],
+            ["qt-icon-change", qsTr("Allow the app icon to change"), {hideHelp: true}],
+            ["qt-fs-opacity", qsTr("Fullscreen controls opacity"), interfaceSlider({rowHeight: 52, from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]})],
+            ["redesign-fullscreen-sensitivity", qsTr("Fullscreen controls sensitivity"), interfaceSlider({rowHeight: 52, from: 0, to: 6, step: 1, ticks: [0, 3, 6], tickLabels: [qsTr("Low"), qsTr("Medium"), qsTr("High")], trackTicks: [0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7, 3, 3.3, 3.6, 3.9, 4.2, 4.5, 4.8, 5.1, 5.4, 5.7]})] ] } ],
         playback: [ {title: "", rows: [ ["input-timeshift-path", qsTr("Time-shift buffer folder")], ["input-timeshift-granularity", qsTr("Time-shift buffer size"), {dynamicChoices: true}] ] } ],
         audio: [ {title: "", rows: [ ["redesign-audio-passthrough", qsTr("Pass compressed audio to the receiver"), {dynamicChoices: true}], ["force-dolby-surround", qsTr("Detect Dolby Surround"), {choiceLabels: {0: qsTr("Automatic")}}], ["redesign-resampling-quality", qsTr("Resampling quality"), {dynamicChoices: true}], ["role", qsTr("Media role")],
             ["visualization-size", qsTr("Visualization size"), {dynamicChoices: true}],

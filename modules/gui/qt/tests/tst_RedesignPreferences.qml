@@ -81,6 +81,15 @@ TestCase {
         visible: false
     }
     RedesignPreferencesCatalog { id: catalog }
+    function test_hiddenSkinSectionDoesNotLeaveAHeaderGap() {
+        const backend = {describe: name => name === "skins2-last" ? {} : store.describe(name)}
+        const sections = catalog.visibleSections("interface", backend)
+        compare(sections.map(section => section.title), ["Window", "Playback Controls", "Notifications and System Tray", "Playlist"])
+        compare(sections[0].rows[0][0], "embedded-video")
+        const none = {describe: name => ({})}
+        compare(catalog.visibleSections("interface", none).length, 0)
+        compare(catalog.visibleSections("controls", none).map(section => section.title), ["Keyboard Shortcuts"])
+    }
     Column {
         id: instanceControls
         width: 784; y: 350; z: 40; visible: false
@@ -1070,6 +1079,14 @@ TestCase {
         store.stage("qt-system-tray", true)
         const row = createTemporaryObject(inlineSliderRow, testCase, {optionName: data.option, presentation: spec})
         verify(row !== null)
+        wait(20)
+        const editor = findChild(row, "preferenceSliderEditor")
+        compare(row.height, data.option === "qt-fs-opacity" || data.option === "redesign-fullscreen-sensitivity" ? 52 : 57)
+        compare(editor.background.x, 0)
+        compare(editor.background.width, editor.width)
+        compare(editor.background.height, 16)
+        fuzzyCompare(editor.mapToItem(row, 0, 0).y + editor.background.y, 9, 0.01)
+        verify(!findChild(row, "preferenceHelpIcon").visible)
         for (const value of data.values) {
             store.stage(data.option, value); wait(20)
             for (let index = 0; index < data.labels.length; index++) {

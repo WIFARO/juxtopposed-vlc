@@ -161,6 +161,8 @@ ColumnLayout {
             Layout.preferredWidth: root.preferredEditorWidth
             Layout.maximumWidth: root.preferredEditorWidth
             Layout.preferredHeight: item ? item.implicitHeight || theme.dp(34) : theme.dp(34)
+            Layout.alignment: root.presentation.alignSliderTop ? Qt.AlignTop : Qt.AlignVCenter
+            Layout.topMargin: theme.dp(root.presentation.sliderTopMargin || 0)
             sourceComponent: root.editorComponent
         }
 
@@ -351,10 +353,16 @@ ColumnLayout {
                 TextMetrics { id: onMetrics; font: stateText.font; text: qsTr("ON") }
                 TextMetrics { id: offMetrics; font: stateText.font; text: qsTr("OFF") }
                 background: Rectangle {
-                    radius: theme.dp(6); color: parent.checked ? theme.progress : theme.field
+                    radius: theme.dp(6); color: root.compact && parent.checked ? theme.progress : theme.field
                     border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent
                 }
                 contentItem: Item {
+                    Rectangle {
+                        visible: parent.parent.checked && !root.compact
+                        x: theme.dp(3); y: theme.dp(3)
+                        width: parent.width - theme.dp(35); height: parent.height - theme.dp(6)
+                        radius: theme.dp(3); color: theme.progress
+                    }
                     Rectangle {
                         visible: !parent.parent.checked
                         x: theme.dp(32); y: theme.dp(3)
@@ -364,14 +372,14 @@ ColumnLayout {
                     Rectangle {
                         x: parent.parent.checked ? parent.width - width - theme.dp(3) : theme.dp(3)
                         y: theme.dp(3); width: theme.dp(26); height: parent.height - theme.dp(6)
-                        radius: theme.dp(3); color: parent.parent.checked ? theme.accent : root.compact ? "#404040" : "#444444"
+                        radius: theme.dp(3); color: parent.parent.checked ? root.compact ? theme.accent : theme.menuAccent : "#404040"
                     }
                     Text {
                         id: stateText
                         x: parent.parent.checked ? theme.dp(8) : theme.dp(root.compact ? 36 : 34)
                         anchors.verticalCenter: parent.verticalCenter
                         text: parent.parent.checked ? qsTr("ON") : qsTr("OFF")
-                        font.pixelSize: theme.dp(12); color: parent.parent.checked ? theme.accent : root.compact ? theme.playerLabel : theme.foreground
+                        font.pixelSize: theme.dp(12); color: parent.parent.checked ? theme.accent : theme.playerLabel
                     }
                 }
             }
@@ -560,6 +568,8 @@ ColumnLayout {
                 objectName: "preferenceSliderEditor"
                 Layout.fillWidth: true
                 implicitHeight: theme.dp(28)
+                leftPadding: root.presentation.sliderPadding === undefined ? padding : theme.dp(root.presentation.sliderPadding)
+                rightPadding: leftPadding
                 from: root.presentation.from === undefined ? root.description.minimum : root.presentation.from
                 to: root.presentation.to === undefined ? root.description.maximum : root.presentation.to
                 stepSize: root.presentation.step || (root.description.kind === "integer" ? 1 : 0.01)
@@ -573,7 +583,7 @@ ColumnLayout {
                 }
                 background: Rectangle {
                     x: slider.leftPadding; y: (slider.height - height) / 2
-                    width: slider.availableWidth; height: theme.dp(14); radius: theme.dp(5); color: theme.field
+                    width: slider.availableWidth; height: theme.dp(root.presentation.trackHeight || 14); radius: theme.dp(5); color: theme.field
                     Rectangle {
                         readonly property real origin: {
                             const crossesZero = Math.min(slider.from, slider.to) < 0 && Math.max(slider.from, slider.to) > 0
@@ -598,7 +608,7 @@ ColumnLayout {
                 handle: Rectangle {
                     x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
                     y: (slider.height - height) / 2
-                    width: theme.dp(8); height: theme.dp(24); radius: theme.dp(4); color: theme.accent
+                    width: theme.dp(8); height: theme.dp(24); radius: theme.dp(4); color: root.compact ? theme.accent : theme.menuAccent
                     border.width: slider.visualFocus ? 1 : 0; border.color: theme.bright
                 }
                 onMoved: root.commit(root.description.kind === "integer" ? Math.round(value / root.factor) : value / root.factor)
