@@ -90,6 +90,27 @@ TestCase {
         compare(catalog.visibleSections("interface", none).length, 0)
         compare(catalog.visibleSections("controls", none).map(section => section.title), ["Keyboard Shortcuts"])
     }
+    function test_privacyResumeSwitchPreservesSavedPolicy_data() {
+        return [{tag: "never", policy: 0}, {tag: "ask", policy: 1}, {tag: "always", policy: 2}]
+    }
+    function test_privacyResumeSwitchPreservesSavedPolicy(data) {
+        const entry = catalog.sections.privacy[0].rows.find(row => row[0] === "restore-playback-pos")
+        store.stage(entry[0], data.policy)
+        const row = createTemporaryObject(policyToggleRow, testCase,
+            {optionName: entry[0], label: entry[1], presentation: entry[2]})
+        verify(row !== null)
+        const toggle = findChild(row, "preferenceToggleEditor")
+        verify(toggle !== null)
+        verify(findChild(row, "preferenceChoiceEditor") === null)
+        compare(store.value(entry[0]), data.policy)
+        compare(toggle.checked, data.policy !== 0)
+        if (toggle.checked) mouseClick(toggle)
+        compare(store.value(entry[0]), 0)
+        mouseClick(toggle)
+        compare(store.value(entry[0]), 2)
+        mouseClick(toggle)
+        compare(store.value(entry[0]), 0)
+    }
     Column {
         id: instanceControls
         width: 784; y: 350; z: 40; visible: false

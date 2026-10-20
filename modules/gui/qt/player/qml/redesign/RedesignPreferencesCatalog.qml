@@ -55,15 +55,15 @@ QtObject {
             { title: qsTr("Playlist"), rows: [ ["playlist-tree", qsTr("Show the playlist as a tree"), {help: qsTr("Show folders and playlists as groups in the queue. Expand a group to show its items. The playback order does not change.")}] ] } ],
         privacy: [
             { title: qsTr("History"), rows: [
-                ["save-recentplay", qsTr("Save recently played items")],
-                ["restore-playback-pos", qsTr("Remember the playback position"), {choiceLabels: {0: qsTr("Never"), 1: qsTr("Ask"), 2: qsTr("Always")}}],
-                ["recentplay-filter", qsTr("Never remember items matching")],
-                ["redesign-clear-history", qsTr("Clear history now")] ] },
+                ["save-recentplay", qsTr("Save recently played items"), {help: qsTr("Keep a list of the items that you play. If this option is OFF, VLC does not add items to the list.")}],
+                ["restore-playback-pos", qsTr("Remember the playback position"), {editor: "toggle", toggleValues: {on: 2, off: 0}}],
+                ["recentplay-filter", qsTr("Never remember items matching"), {rowHeight: 46}],
+                ["redesign-clear-history", qsTr("Clear history now"), {rowHeight: 42}] ] },
             { title: qsTr("Network"), rows: [
-                ["metadata-network-access", qsTr("Fetch titles and cover art from the internet")],
+                ["metadata-network-access", qsTr("Fetch titles and cover art from the internet"), {help: qsTr("Get media titles and cover art from the internet.")}],
                 ["filter:audio-filter:audioscrobbler", qsTr("Submit played tracks to last.fm")],
-                ["lastfm-username", qsTr("Last.fm username")], ["lastfm-password", qsTr("Last.fm password")],
-                ["scrobbler-url", qsTr("Last.fm submission URL")] ] } ],
+                ["lastfm-username", qsTr("Last.fm username"), {rowHeight: 46}], ["lastfm-password", qsTr("Last.fm password"), {rowHeight: 46}],
+                ["scrobbler-url", qsTr("Last.fm submission URL"), {rowHeight: 46}] ] } ],
         controls: [
             { title: qsTr("Keyboard Shortcuts"), rows: [] },
             { title: qsTr("Skip Amounts"), rows: [

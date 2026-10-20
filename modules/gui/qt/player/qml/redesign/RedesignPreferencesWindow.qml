@@ -230,14 +230,14 @@ RedesignSettingsDialog {
         }
         C.ScrollView {
             id: scroll
-            anchors.top: parent.top; anchors.topMargin: theme.dp(root.category === "interface" ? 70 : 72)
+            anchors.top: parent.top; anchors.topMargin: theme.dp(root.category === "interface" || root.category === "privacy" ? 70 : 72)
             anchors.left: navigation.right; anchors.right: parent.right; anchors.bottom: footer.top
             anchors.leftMargin: theme.dp(32); anchors.rightMargin: theme.dp(24)
             clip: true
             contentWidth: availableWidth
             Column {
                 width: scroll.availableWidth
-                spacing: theme.dp(root.category === "general" || root.category === "interface" ? 5 : 6)
+                spacing: theme.dp(root.category === "general" || root.category === "interface" || root.category === "privacy" ? 5 : 6)
                 Loader {
                     width: parent.width
                     active: root.addonsVisited
@@ -339,7 +339,7 @@ RedesignSettingsDialog {
                         bottomPadding: root.category === "extensions" ? theme.dp(12) : 0
                         visible: modelData.rows.some(row => preferenceStore.describe(row[0]).kind !== undefined) || root.category === "controls" && modelData.title === qsTr("Keyboard Shortcuts")
                         Text {
-                            topPadding: theme.dp(index === 0 && root.category !== "general" ? root.category === "interface" ? 9 : 8 : 24); bottomPadding: theme.dp(10)
+                            topPadding: theme.dp(index === 0 && root.category !== "general" ? root.category === "interface" || root.category === "privacy" ? 9 : 8 : 24); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
                             visible: text.length > 0
                         }
