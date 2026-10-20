@@ -21,6 +21,10 @@ on:
         description: 'Create a draft release and version tag at this commit after verification'
         type: boolean
         default: false
+      bypass_cache:
+        description: 'Build dependencies afresh without restoring or saving caches'
+        type: boolean
+        default: false
   push:
     tags: ['[0-9]*.[0-9]*.[0-9]*']
 
@@ -34,6 +38,9 @@ concurrency:
 
 env:
   JOBS: '4'
+  QT_VERSION: '6.8.3'
+  AQT_VERSION: '3.3.0'
+  WINDOWS_BUILD_IMAGE: registry.videolan.org/vlc-debian-win64-posix@sha256:8e83e800036f8f4a6da1031a6b80c2b5bad8337259c072ffa22398baaeaad880
 
 jobs:
   prepare:
@@ -119,6 +126,20 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Locate Homebrew downloads cache
+        id: brew-cache
+        run: |
+          echo "path=$(brew --cache)" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - name: Restore Homebrew downloads
+        if: ${{ !inputs.bypass_cache }}
+        id: brew-restore
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: ${{ steps.brew-cache.outputs.path }}
+          key: release-brew-downloads-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ steps.brew-cache.outputs.week }}
+          restore-keys: release-brew-downloads-v1-${{ matrix.runner }}-${{ matrix.arch }}-
       - name: Install dependencies
         run: |
           # Current Homebrew formulas often have no Intel macOS bottles.
@@ -130,12 +151,45 @@ jobs:
           brew install "${source_options[@]}" meson ninja cmake pkg-config python bison flex gettext \
             ffmpeg lua gnutls libarchive libpng freetype harfbuzz fribidi \
             libass libgcrypt dav1d opus libvorbis flac mpg123 x264 libmatroska libebml taglib libdvbpsi
+      - name: Save Homebrew downloads
+        if: ${{ !inputs.bypass_cache && steps.brew-restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ${{ steps.brew-cache.outputs.path }}
+          key: release-brew-downloads-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ steps.brew-cache.outputs.week }}
+      - name: Restore pinned Qt SDK
+        if: ${{ !inputs.bypass_cache }}
+        id: qt-restore
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: build-release-qt
+          key: release-qt-sdk-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ env.QT_VERSION }}-${{ env.AQT_VERSION }}-qtshadertools
       - name: Install pinned Qt SDK
+        env:
+          QT_CACHE_RESTORE_RESULT: ${{ steps.qt-restore.outcome }}
         run: |
-          python3 -m venv build-release-tools
-          build-release-tools/bin/pip install aqtinstall==3.3.0
-          build-release-tools/bin/aqt install-qt mac desktop 6.8.3 clang_64 -O build-release-qt -m qtshadertools
-          echo "QT_ROOT_DIR=$GITHUB_WORKSPACE/build-release-qt/6.8.3/macos" >> "$GITHUB_ENV"
+          sdk="$GITHUB_WORKSPACE/build-release-qt/$QT_VERSION/macos"
+          if [[ "$QT_CACHE_RESTORE_RESULT" != success ]]; then
+            rm -rf build-release-qt
+          fi
+          if [[ ! -x "$sdk/bin/qmake" ]] ||
+             [[ "$("$sdk/bin/qmake" -query QT_VERSION 2>/dev/null || true)" != "$QT_VERSION" ]] ||
+             [[ ! -f "$sdk/lib/cmake/Qt6ShaderTools/Qt6ShaderToolsConfig.cmake" ]]; then
+            rm -rf build-release-qt
+            python3 -m venv build-release-tools
+            build-release-tools/bin/pip install "aqtinstall==$AQT_VERSION"
+            build-release-tools/bin/aqt install-qt mac desktop "$QT_VERSION" clang_64 -O build-release-qt -m qtshadertools
+          fi
+          echo "QT_ROOT_DIR=$sdk" >> "$GITHUB_ENV"
+      - name: Save pinned Qt SDK
+        if: ${{ !inputs.bypass_cache && steps.qt-restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: build-release-qt
+          key: release-qt-sdk-v1-${{ matrix.runner }}-${{ matrix.arch }}-${{ env.QT_VERSION }}-${{ env.AQT_VERSION }}-qtshadertools
       - name: Build and bundle
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
@@ -165,8 +219,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+        continue-on-error: true
       - name: Build environment
-        run: docker build -t vlc-release-linux -f extras/package/release/Dockerfile.linux .
+        id: environment
+        uses: docker/build-push-action@v6
+        continue-on-error: true
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: 'false'
+        with:
+          context: .
+          file: extras/package/release/Dockerfile.linux
+          tags: vlc-release-linux
+          load: true
+          pull: true
+          no-cache: ${{ inputs.bypass_cache || false }}
+          cache-from: ${{ !inputs.bypass_cache && 'type=gha,scope=vlc-release-linux-x86_64-v1' || '' }}
+          cache-to: ${{ !inputs.bypass_cache && 'type=gha,scope=vlc-release-linux-x86_64-v1,mode=max,ignore-error=true' || '' }}
+      - name: Retry environment without external caches
+        if: steps.environment.outcome != 'success'
+        env:
+          BUILDX_BUILDER: default
+        run: docker build --pull --no-cache -t vlc-release-linux -f extras/package/release/Dockerfile.linux .
       - name: Build and bundle
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
@@ -225,14 +299,62 @@ jobs:
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
           df -h .
+      - name: Fingerprint Windows dependencies
+        id: deps-key
+        run: python3 extras/package/release/dependency-cache.py key
+      - name: Restore Windows dependency SDK
+        if: ${{ !inputs.bypass_cache }}
+        id: deps-restore
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: ${{ steps.deps-key.outputs.paths }}
+          key: ${{ steps.deps-key.outputs.key }}
+      - name: Restore Windows dependency downloads
+        if: ${{ !inputs.bypass_cache }}
+        id: downloads-restore
+        uses: actions/cache/restore@v4
+        continue-on-error: true
+        with:
+          path: contrib/tarballs
+          key: ${{ steps.deps-key.outputs.download_key }}
+          restore-keys: release-win64-downloads-v1-
+      - name: Prepare Windows dependencies
+        id: dependencies
+        env:
+          RELEASE_DEPS_CACHE_KEY: ${{ steps.deps-key.outputs.key }}
+        run: |
+          # No app API key is passed to this dependency-only build or its cache.
+          docker run --rm --user root -v "$PWD:/src" -w /src -e JOBS \
+            -e RELEASE_DEPS_CACHE_KEY \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src \
+            "$WINDOWS_BUILD_IMAGE" bash extras/package/release/build-windows.sh --dependencies-only
+          if [[ -f build-release-cache/windows-dependencies.json ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Save Windows dependency SDK
+        if: ${{ !inputs.bypass_cache && steps.deps-restore.outputs.cache-hit != 'true' && steps.dependencies.outputs.ready == 'true' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ${{ steps.deps-key.outputs.paths }}
+          key: ${{ steps.deps-key.outputs.key }}
+      - name: Save Windows dependency downloads
+        if: ${{ !inputs.bypass_cache && steps.downloads-restore.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: contrib/tarballs
+          key: ${{ steps.deps-key.outputs.download_key }}
       - name: Build and package portable archive
         env:
           OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+          RELEASE_DEPS_CACHE_KEY: ${{ steps.deps-key.outputs.key }}
         run: >-
           docker run --rm --user root -v "$PWD:/src" -w /src -e JOBS -e RELEASE_TAG
-          -e OPENSUBTITLES_API_KEY
+          -e OPENSUBTITLES_API_KEY -e RELEASE_DEPS_CACHE_KEY
           -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
-          registry.videolan.org/vlc-debian-win64-posix@sha256:8e83e800036f8f4a6da1031a6b80c2b5bad8337259c072ffa22398baaeaad880
+          "$WINDOWS_BUILD_IMAGE"
           bash extras/package/release/build-windows.sh
       - uses: actions/upload-artifact@v4
         with:

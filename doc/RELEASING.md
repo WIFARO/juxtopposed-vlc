@@ -80,6 +80,53 @@ branch. Review the job logs and the `<version>-complete` artifact. The final job
 requires both Mac builds, Linux relocation/playback checks, and native Windows
 startup checks to pass, either in this run or in the original run when recovering.
 
+## Dependency caches
+
+Release builds cache dependencies by default. Every run still compiles, packages
+and verifies VLC. On **Run workflow**, check **bypass_cache** to skip cache restore
+and save operations and build the Linux environment without cached layers. The
+first build for a new cache key remains a cold build; already-running jobs use
+their original workflow and cannot populate these caches retrospectively.
+
+Windows saves this fork's installed contrib libraries, installed native build
+tools (including Qt's QML tools), and Vulkan license files. It does not save VLC's
+build tree, staged app, generated API-key header or dependency source/build trees.
+The cache key includes the digest-pinned container image, target, fixed container
+path, tracked contrib recipes/checksums/patches, build-tool sources and Windows
+release configuration. Changing only VLC's version or application code keeps the
+dependency key. Compiled SDK caches require an exact key and a matching inventory
+of file contents, permissions and symbolic links. An incomplete or modified SDK
+is discarded and its dependencies rebuilt normally. Source archive downloads use
+a separate cache; normal contrib checksum verification still applies.
+
+The Windows dependency phase runs without the OpenSubtitles secret and saves its
+cache before VLC compilation. This preserves successfully built dependencies even
+if later application packaging fails. The normal build then uses that validated
+installed SDK; local builds without a cache key retain the original build path.
+
+Linux uses BuildKit's GitHub Actions cache for the dependency image's intermediate
+layers. Docker checks the Dockerfile, commands and base image when deciding which
+layers remain usable. It pulls the base image before building; a changed base
+invalidates dependent layers. The app and OpenSubtitles key are only supplied to a
+subsequent container run, outside the cached image build. If the cached environment
+build fails, the workflow retries without an external cache.
+
+Each Mac target caches the pinned Qt SDK separately by runner, architecture, Qt
+version, aqtinstall version and module selection. Restored SDKs must provide the
+expected qmake version and ShaderTools configuration, otherwise they are replaced.
+Homebrew's download cache uses a weekly key with fallback to older downloads;
+Homebrew still validates downloads and installs the required packages. Installed
+Homebrew Cellars are not restored, so Intel packages that require source builds
+still take time to compile.
+
+Cache restore/save failures are non-fatal, and unavailable caches fall back to
+normal builds. GitHub may evict caches as storage fills or entries age. An exact
+cache entry is immutable: to replace a damaged entry, delete it in the repository's
+Actions cache settings (or bump its cache schema) before rerunning. **bypass_cache**
+does not delete or replace existing entries. All release verification jobs remain
+required regardless of cache hits. Use a normal full build with bypass enabled
+when checking that a release can still be built from scratch.
+
 ## Recover one failed target
 
 After fixing a release packaging problem, you can build only that target and
@@ -98,7 +145,8 @@ reuse the other three packages from the original full run:
    `4.0.0-beta.4-complete`. Inspect the downloads before publishing the draft.
 
 Recovery requires the original run to use the same version and an ancestor of
-the current commit. Only release tooling, release workflow, documentation and
+the current commit. Only release tooling (including the Windows build wrapper),
+release workflow, documentation and
 release-script distribution-list changes may differ. Application, version or
 dependency changes require a full build. Review the changed release tooling too:
 if a fix is needed by several packages, rebuild all targets instead of reusing
