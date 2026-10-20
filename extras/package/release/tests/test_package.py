@@ -3,6 +3,8 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import plistlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -17,6 +19,124 @@ spec.loader.exec_module(package)
 
 
 class PackageTests(unittest.TestCase):
+    def make_bundle(self, root, executable, framework=False):
+        if framework:
+            main = root / 'Versions/A' / executable
+            plist = root / 'Versions/A/Resources/Info.plist'
+        else:
+            main = root / 'Contents/MacOS' / executable
+            plist = root / 'Contents/Info.plist'
+        main.parent.mkdir(parents=True, exist_ok=True)
+        main.write_bytes(b'\xcf\xfa\xed\xfe')
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        with plist.open('wb') as stream:
+            plistlib.dump(dict(CFBundleExecutable=executable), stream)
+        if framework:
+            (root / 'Versions/Current').symlink_to('A')
+            (root / executable).symlink_to('Versions/Current/' + executable)
+            (root / 'Resources').symlink_to('Versions/Current/Resources')
+        return main
+
+    def test_macos_signs_nested_code_before_bundles_without_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp) / 'VLC Juxtopposed.app'
+            launcher = self.make_bundle(app, 'vlc')
+            framework = app / 'Contents/Frameworks/QtCore.framework'
+            framework_main = self.make_bundle(framework, 'QtCore', framework=True)
+            helper = framework / 'Helpers/Helper.app'
+            helper_main = self.make_bundle(helper, 'Helper')
+            library = app / 'Contents/Frameworks/libvlc.dylib'
+            library.write_bytes(b'\xcf\xfa\xed\xfe')
+            helper_library = helper / 'Contents/MacOS/helper.dylib'
+            helper_library.write_bytes(b'\xcf\xfa\xed\xfe')
+            with mock.patch.object(package.subprocess, 'run') as tool:
+                # Intentionally start with the app launcher, as rglob can do.
+                package.sign_macos_adhoc(app, [launcher, framework_main, helper_main,
+                                             library, helper_library])
+            calls = tool.call_args_list
+            signed = [Path(call.args[0][-1]) for call in calls[:-1]]
+            self.assertEqual(set(signed), {app, framework, helper, library, helper_library})
+            self.assertLess(signed.index(helper_library), signed.index(helper))
+            self.assertLess(signed.index(helper), signed.index(framework))
+            self.assertEqual(signed[-1], app)
+            for call in calls[:-1]:
+                self.assertEqual(call.args[0][:6], ['codesign', '--force', '--sign', '-',
+                                                  '--timestamp=none', '--verbose=2'])
+                self.assertEqual(call.kwargs, dict(check=True))  # Keep diagnostics visible.
+            self.assertEqual(calls[-1].args[0], ['codesign', '--verify', '--deep', '--strict',
+                                               '--verbose=2', str(app)])
+
+    def test_macos_invalid_adhoc_signature_stops_packaging(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp) / 'VLC.app'
+            launcher = self.make_bundle(app, 'vlc')
+            error = subprocess.CalledProcessError(1, ['codesign'])
+            with mock.patch.object(package.subprocess, 'run', side_effect=error) as tool:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    package.sign_macos_adhoc(app, [launcher])
+            self.assertEqual(tool.call_count, 1)
+
+    def test_macos_final_metadata_is_sealed_and_verified_before_archive(self):
+        for arch in ('x86_64', 'arm64'):
+            with self.subTest(arch=arch), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                stage, output, qt, sources = [root / p for p in ('stage', 'output', 'qt', 'sources')]
+                output.mkdir()
+                for name in ('bin/vlc', 'libexec/vlc/vlc-preparser', 'libexec/vlc/vlc-cache-gen',
+                             'libexec/vlc/vlc-qt-check', 'lib/libvlc.dylib',
+                             'lib/vlc/plugins/gui/libqt_plugin.dylib'):
+                    path = stage / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b'\xcf\xfa\xed\xfe')
+                for name in ('share/vlc', 'share/locale'):
+                    (stage / name).mkdir(parents=True)
+                for name in ('share/vlc512x512.png', 'modules/gui/macosx/Resources/App-Icons/VLC.icns',
+                             'modules/gui/qt/fonts/LICENSE.txt', 'COPYING', 'COPYING.LIB',
+                             'AUTHORS', 'THANKS', 'README.md'):
+                    path = sources / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b'fixture')
+                app = output / f'macos-{arch}/VLC Juxtopposed.app'
+                verified = False
+                sealed_info = None
+
+                def query(*args):
+                    if args[0] == 'uname':
+                        return arch
+                    if args[0] == 'lipo':
+                        return arch
+                    if args[0] == 'otool':
+                        return 'cmd LC_BUILD_VERSION\n minos 13.5'
+                    if str(args[0]).endswith('/qmake'):
+                        return '6.8.3'
+                    raise AssertionError(args)
+
+                def execute(args, **kwargs):
+                    nonlocal verified, sealed_info
+                    self.assertTrue(kwargs['check'])
+                    if args[0] == 'codesign':
+                        info = (app / 'Contents/Info.plist').read_bytes()
+                        self.assertEqual(plistlib.loads(info)['LSMinimumSystemVersion'], '13.5')
+                        if '--verify' in args:
+                            self.assertEqual(info, sealed_info)
+                            verified = True
+                        else:
+                            self.assertFalse(verified)
+                            sealed_info = info
+                    if args[0] == 'ditto':
+                        self.assertTrue(verified)
+                        self.assertEqual((app / 'Contents/Info.plist').read_bytes(), sealed_info)
+                        Path(args[-1]).touch()
+
+                with mock.patch.dict(package.os.environ, {'QT_ROOT_DIR': str(qt)}, clear=True), \
+                        mock.patch.object(package, 'ROOT', sources), \
+                        mock.patch.object(package, 'run', side_effect=query), \
+                        mock.patch.object(package.subprocess, 'run', side_effect=execute):
+                    archive = package.macos(stage, output, '4.0.0-beta.4', 'a' * 40)
+                self.assertTrue(archive.exists())
+                metadata = json.loads((output / f'macos-{arch}-build.json').read_text())
+                self.assertEqual(metadata['signing'], 'ad-hoc; no Developer ID or notarization')
+
     def test_windows_archive_and_metadata(self):
         tag = package.validate_tag(None)['version']
         with tempfile.TemporaryDirectory() as temp:

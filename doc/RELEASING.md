@@ -13,8 +13,17 @@ The Mac packages are separate native apps, rather than a universal binary.
 Both include Qt, VLC plugins and their non-system dynamic libraries. Packaging
 checks every Mach-O dependency and architecture, rejects links outside the app,
 and signs the bundle ad-hoc. This supports execution on Apple Silicon but does
-not provide a trusted publisher signature or notarization. The maximum deployment
-version found across the included binaries becomes `LSMinimumSystemVersion` and
+not provide a trusted publisher signature or notarization. All release targets
+can be built without signing certificates, Apple accounts or signing secrets.
+macOS ad-hoc signing uses the local `codesign --sign -` facility, with no timestamp
+service; a missing Developer ID identity is not an error. Packaging signs nested
+code before its containing bundle and verifies the completed app. Invalid ad-hoc
+signatures still fail packaging because they can prevent execution on Apple
+Silicon. Downloaded Mac apps remain subject to Gatekeeper's checks for unverified
+publishers.
+
+The maximum deployment version found across the included binaries becomes
+`LSMinimumSystemVersion` and
 is recorded in the build metadata. Homebrew dependencies determine that minimum;
 a build made on a newer Mac can require a newer macOS than the CI build.
 The Intel CI job permits Homebrew source builds because many current formulas

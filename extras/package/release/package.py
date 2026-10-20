@@ -40,6 +40,42 @@ def dependencies(binary):
     return re.findall(r'cmd LC_(?:LOAD|LOAD_WEAK|REEXPORT|LOAD_UPWARD)_DYLIB\n\s*cmdsize \d+\n\s*name (.*?) \(offset', commands)
 
 
+def sign_macos_adhoc(app, all_binaries):
+    """Seal nested code before its parent, without certificates or a timestamp service."""
+    bundles = {app}
+    for path in app.rglob('*'):
+        if not path.is_symlink() and path.is_dir() and path.suffix in (
+                '.framework', '.app', '.xpc', '.appex', '.bundle', '.plugin'):
+            bundles.add(path)
+    main_executables = set()
+    code_bundles = set()
+    for bundle in bundles:
+        for relative in ('Contents/Info.plist', 'Resources/Info.plist', 'Info.plist'):
+            plist = bundle / relative
+            if not plist.is_file():
+                continue
+            with plist.open('rb') as stream:
+                executable = plistlib.load(stream).get('CFBundleExecutable')
+            if executable:
+                code_bundles.add(bundle)
+                for directory in (bundle / 'Contents/MacOS', bundle):
+                    main = directory / executable
+                    if main.is_file():
+                        main_executables.add(main.resolve())
+                break
+    # Signing Contents/MacOS/vlc directly can seal the app before its nested
+    # libraries are signed. Framework executables must also be signed via their
+    # bundle, including versioned frameworks whose top-level executable is a link.
+    targets = code_bundles | {p for p in all_binaries if p.resolve() not in main_executables}
+    targets.add(app)
+    for target in sorted(targets, key=lambda p: (-len(p.parts), str(p))):
+        subprocess.run(['codesign', '--force', '--sign', '-', '--timestamp=none',
+                        '--verbose=2', str(target)], check=True)
+    # Diagnostics go to the build log. A malformed ad-hoc signature can prevent
+    # execution on Apple Silicon, so it must still fail packaging.
+    subprocess.run(['codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)], check=True)
+
+
 def macos(stage, output, tag, commit, reuse_qt=False):
     arch = run('uname', '-m')
     app = output / f'macos-{arch}' / 'VLC Juxtopposed.app'
@@ -197,20 +233,13 @@ def macos(stage, output, tag, commit, reuse_qt=False):
             if not resolved.exists() or not resolved.resolve().is_relative_to(app.resolve()):
                 raise RuntimeError(f'Unresolved dependency in {binary}: {dep}')
         audit.append(str(binary.relative_to(app)))
-        subprocess.run(['codesign', '--force', '--sign', '-', str(binary)], check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # Seal framework and app bundles inside-out after signing their Mach-O files.
-    for framework in sorted(contents.rglob('*.framework'), key=lambda p: len(p.parts), reverse=True):
-        subprocess.run(['codesign', '--force', '--sign', '-', str(framework)], check=True)
-    subprocess.run(['codesign', '--force', '--sign', '-', str(app)], check=True)
-    subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
     (output / f'macos-{arch}-dependency-audit.json').write_text(json.dumps(audit, indent=2) + '\n')
     minimum = max(minimum_versions, key=lambda v: tuple(map(int, v.split('.'))))
     info['LSMinimumSystemVersion'] = minimum
-    # Changing Info.plist requires re-sealing the outer bundle.
+    # Finish all bundle mutations before signing and verifying the final app.
     with (contents / 'Info.plist').open('wb') as stream:
         plistlib.dump(info, stream)
-    subprocess.run(['codesign', '--force', '--sign', '-', str(app)], check=True)
+    sign_macos_adhoc(app, all_binaries)
     (output / f'macos-{arch}-build.json').write_text(json.dumps(dict(
         tag=tag, version=tag, channel=validate_tag(tag)['channel'], platform='macos', source_commit=commit,
         architecture=arch, minimum_macos=minimum, qt=run(qt / 'bin/qmake', '-query', 'QT_VERSION'),
