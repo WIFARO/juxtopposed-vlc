@@ -1200,12 +1200,14 @@ static picture_t *ConvertRGBAAndBlend(vout_thread_sys_t *vout, picture_t *pic,
     if (!filterc)
         return NULL;
 
-    es_format_t src = sys->spu_blend->fmt_out;
+    es_format_t src;
+    es_format_Init(&src, VIDEO_ES, pic->format.i_chroma);
+    src.video = pic->format;
     es_format_t dst = src;
-    dst.video.i_chroma = VLC_CODEC_RGBA;
+    dst.i_codec = dst.video.i_chroma = VLC_CODEC_RGBA;
 
     filter_chain_Reset(filterc, &src,
-                       NULL /* TODO output video context of blender */,
+                       picture_GetVideoContext(pic),
                        &dst);
 
     if (filter_chain_AppendConverter(filterc, &dst) != VLC_SUCCESS)
@@ -1367,14 +1369,15 @@ static int PrerenderPicture(vout_thread_sys_t *sys, picture_t *filtered,
             if (blent) {
                 video_format_CopyCropAr(&blent->format, &filtered->format);
                 picture_Copy(blent, filtered);
-                if (picture_BlendSubpicture(blent, sys->spu_blend, subpic)) {
+                if ((!do_snapshot || blent->i_planes > 0) &&
+                    picture_BlendSubpicture(blent, sys->spu_blend, subpic)) {
                     picture_Release(todisplay);
                     snap_pic = todisplay = blent;
                 } else
                 {
-                    /* Blending failed, likely because the picture is opaque or
-                     * read-only. Try to convert the opaque picture to a
-                     * software RGB32 to generate a snapshot. */
+                    /* Opaque pictures have no CPU planes. Convert the snapshot
+                     * instead of trying a software blend into a GPU surface.
+                     * This also handles other unsupported or read-only formats. */
                     if (do_snapshot)
                     {
                         picture_t *copy = ConvertRGBAAndBlend(sys, blent, subpic);
