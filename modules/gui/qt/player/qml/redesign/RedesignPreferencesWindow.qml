@@ -138,7 +138,8 @@ RedesignSettingsDialog {
             Rectangle {
                 x: theme.dp(8); y: theme.dp(58); width: parent.width - theme.dp(8)
                 height: parent.height - y - theme.dp(8); radius: theme.dp(6)
-                color: theme.background
+                color: root.lightTheme ? theme.background : "#191919"
+                opacity: root.lightTheme ? 1 : 0.95
             }
             C.TextField {
                 id: searchField
@@ -149,7 +150,7 @@ RedesignSettingsDialog {
                 placeholderText: qsTr("Search")
                 color: theme.foreground; placeholderTextColor: theme.foreground
                 font.pixelSize: theme.dp(14); selectByMouse: true
-                background: Rectangle { color: theme.background; radius: theme.dp(4); border.color: searchField.activeFocus ? theme.accent : theme.border }
+                background: Rectangle { color: root.lightTheme ? theme.background : "#151515"; radius: theme.dp(6); border.width: searchField.activeFocus ? 1 : 0; border.color: theme.accent }
                 RedesignIcon { x: theme.dp(10); anchors.verticalCenter: parent.verticalCenter; width: theme.dp(20); height: width; name: "search"; color: theme.foreground }
                 onTextEdited: searchDelay.restart()
                 onTextChanged: if (!text.length) { searchDelay.stop(); root.search = "" }
@@ -199,7 +200,7 @@ RedesignSettingsDialog {
                                     caption: modelData.title; text: caption; iconName: modelData.icon + (selected ? "-active" : "")
                                     leftAligned: true
                                     selectedForeground: theme.bright
-                                    background: Rectangle { radius: theme.dp(3); color: parent.selected ? root.lightTheme ? theme.selected : "#222222" : parent.hovered ? theme.hover : "transparent"; border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent }
+                                    background: Rectangle { radius: theme.dp(2); color: parent.selected ? root.lightTheme ? theme.selected : "#222222" : parent.hovered ? theme.hover : "transparent"; border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent }
                                     selected: root.category === modelData.key && !root.search.length
                                     onClicked: {
                                         root.category = modelData.key
@@ -236,7 +237,7 @@ RedesignSettingsDialog {
             contentWidth: availableWidth
             Column {
                 width: scroll.availableWidth
-                spacing: theme.dp(6)
+                spacing: theme.dp(root.category === "general" ? 5 : 6)
                 Loader {
                     width: parent.width
                     active: root.addonsVisited
@@ -251,7 +252,7 @@ RedesignSettingsDialog {
                     visible: root.category === "general" && !root.search.length
                     width: parent.width
                     Text {
-                        topPadding: theme.dp(8); bottomPadding: theme.dp(8)
+                        topPadding: theme.dp(8); bottomPadding: theme.dp(9)
                         text: qsTr("Appearance"); color: theme.settingsHeading; font.pixelSize: theme.dp(16)
                     }
                     RedesignPreferenceRow { width: parent.width; backend: preferenceStore; optionName: "language"; label: qsTr("Interface language"); scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
@@ -274,7 +275,7 @@ RedesignSettingsDialog {
                                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                                         caption: modelData.label; text: caption
                                         selected: MainCtx.colorScheme.scheme === modelData.value
-                                        background: Rectangle { color: parent.selected ? theme.progress : theme.background; radius: theme.dp(4) }
+                                        background: Rectangle { color: parent.selected ? theme.progress : root.lightTheme ? theme.background : "#191919"; radius: theme.dp(4) }
                                         onClicked: { MainCtx.colorScheme.setData(MainCtx.colorScheme.index(modelData.value, 0), true, Qt.CheckStateRole); preferenceStore.save() }
                                     }
                                 }
@@ -327,7 +328,6 @@ RedesignSettingsDialog {
                             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                         }
                     }
-                    Item { width: 1; height: theme.dp(4) }
                 }
                 Repeater {
                     model: root.search.length ? [] : (specification.sections[root.category] || []).filter(section => !section.appearance)
@@ -394,7 +394,7 @@ RedesignSettingsDialog {
                 }
                 Item {
                     visible: !root.search.length
-                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : 50)
+                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" ? 53 : 50)
                     RedesignButton {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                         height: theme.dp(38)
@@ -408,7 +408,7 @@ RedesignSettingsDialog {
                                 RedesignIcon { name: root.advanced ? "chevron-down" : "chevron-right"; color: theme.foreground; width: theme.dp(20); height: width }
                             }
                         }
-                        background: Rectangle { color: parent.hovered ? theme.hover : theme.background; radius: theme.dp(2) }
+                        background: Rectangle { color: parent.hovered ? theme.hover : root.lightTheme ? theme.background : "#191919"; opacity: root.lightTheme ? 1 : 0.95; radius: theme.dp(2) }
                         onClicked: root.advanced = !root.advanced
                     }
                 }
@@ -417,8 +417,9 @@ RedesignSettingsDialog {
                     delegate: Column {
                         required property var modelData
                         width: parent.width
+                        topPadding: root.category === "general" && !modelData.title.length ? theme.dp(15) : 0
                         Text {
-                            visible: text.length > 0; topPadding: theme.dp(20); bottomPadding: theme.dp(10)
+                            visible: text.length > 0; topPadding: theme.dp(root.category === "general" ? 24 : 20); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
                         }
                         Repeater {

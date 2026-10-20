@@ -310,7 +310,7 @@ ColumnLayout {
     Component {
         id: actionEditor
         Item {
-            implicitHeight: theme.dp(root.compact ? 36 : 34)
+            implicitHeight: theme.dp(root.compact ? 36 : 32)
             RedesignButton {
                 objectName: "preferenceActionButton"
                 anchors.right: parent.right
@@ -318,7 +318,7 @@ ColumnLayout {
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 caption: root.description.buttonLabel || ""; text: caption
                 foreground: root.description.destructive ? theme.danger : theme.foreground
-                background: Rectangle { radius: theme.dp(4); color: parent.hovered ? theme.hover : root.description.destructive ? theme.dangerBackground : theme.background; border.color: parent.visualFocus ? parent.foreground : "transparent" }
+                background: Rectangle { radius: theme.dp(6); color: parent.hovered ? theme.hover : root.description.destructive ? theme.dangerBackground : root.lightTheme ? theme.background : "#191919"; border.color: parent.visualFocus ? parent.foreground : "transparent" }
                 onClicked: root.actionRequested(root.optionName)
             }
         }
@@ -685,7 +685,7 @@ ColumnLayout {
     Component {
         id: textEditor
         RowLayout {
-            implicitHeight: theme.dp(root.compact ? 36 : 34)
+            implicitHeight: theme.dp(36)
             spacing: theme.dp(10)
             C.TextField {
                 id: field
@@ -702,7 +702,7 @@ ColumnLayout {
                     value: field.formattedValue
                 }
                 leftPadding: theme.dp(14); rightPadding: theme.dp(10)
-                Layout.minimumHeight: theme.dp(root.compact ? 36 : 34)
+                Layout.minimumHeight: theme.dp(36)
                 color: invalid ? "#e56b6b" : theme.foreground; font.pixelSize: theme.dp(14)
                 selectByMouse: true
                 placeholderText: root.description.placeholder || root.presentation.placeholder || ""
@@ -711,7 +711,7 @@ ColumnLayout {
                 echoMode: root.description.kind === "password" ? TextInput.Password : TextInput.Normal
                 inputMethodHints: root.description.kind === "integer" || root.description.kind === "float" ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                 Accessible.name: root.label || root.description.title
-                background: Rectangle { radius: theme.dp(root.compact ? 6 : 4); border.width: root.compact ? theme.dp(2) : 1; color: theme.field; border.color: field.invalid ? "#e56b6b" : field.activeFocus ? theme.accent : root.compact && !root.lightTheme ? "#191919" : theme.border }
+                background: Rectangle { radius: theme.dp(6); border.width: theme.dp(2); color: theme.field; border.color: field.invalid ? "#e56b6b" : field.activeFocus ? theme.accent : !root.lightTheme ? "#191919" : theme.border }
                 onEditingFinished: {
                     if (!root.editorEnabled) return
                     const number = Number(text)
@@ -740,6 +740,7 @@ ColumnLayout {
                 Layout.preferredHeight: theme.dp(32)
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 filled: true; captionFontWeight: Font.DemiBold
+                background: Rectangle { radius: theme.dp(6); color: parent.hovered ? theme.hover : root.lightTheme ? theme.background : "#191919"; border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent }
                 caption: qsTr("Browse"); text: caption
                 onClicked: { const path = root.backend.choosePath(root.optionName); if (path.length) root.commit(path) }
             }
