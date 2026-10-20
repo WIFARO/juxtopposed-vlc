@@ -30,19 +30,27 @@ PodcastConfigDialog::PodcastConfigDialog( qt_intf_t *_p_intf)
 
 {
     ui.setupUi( this );
+    ui.podcastAdd->setIcon({});
+    ui.podcastDelete->setIcon({});
 
     ui.podcastDelete->setToolTip( qtr( "Deletes the selected item" ) );
-    QPushButton *okButton = new QPushButton( qtr( "&Close" ), this );
+    QPushButton *saveButton = new QPushButton( qtr( "&Save" ), this );
     QPushButton *cancelButton = new QPushButton( qtr( "&Cancel" ), this );
-    ui.okCancel->addButton( okButton, QDialogButtonBox::AcceptRole );
+    ui.okCancel->addButton( saveButton, QDialogButtonBox::AcceptRole );
     ui.okCancel->addButton( cancelButton, QDialogButtonBox::RejectRole );
 
     connect( ui.podcastAdd, &QPushButton::clicked, this, &PodcastConfigDialog::add );
     connect( ui.podcastDelete, &QPushButton::clicked, this, &PodcastConfigDialog::remove );
-    connect( okButton, &QPushButton::clicked, this, &PodcastConfigDialog::close );
+}
+
+void PodcastConfigDialog::showEvent(QShowEvent* event)
+{
+    QVLCDialog::showEvent(event);
+    ui.podcastURL->clear();
+    ui.podcastList->clear();
 
     char *psz_urls = config_GetPsz( "podcast-urls" );
-    if( psz_urls )
+    if( psz_urls && *psz_urls )
     {
         char *psz_url = psz_urls;
         while( 1 )
@@ -53,8 +61,8 @@ PodcastConfigDialog::PodcastConfigDialog( qt_intf_t *_p_intf)
             if( psz_tok ) psz_url = psz_tok+1;
             else break;
         }
-        free( psz_urls );
     }
+    free( psz_urls );
 }
 
 PodcastConfigDialog::~PodcastConfigDialog()
@@ -71,12 +79,9 @@ void PodcastConfigDialog::accept()
     }
     config_PutPsz( "podcast-urls", qtu( urls ) );
 
-    //FIXME IsServicesDiscoveryLoaded is uninplmented
-    //if( playlist_IsServicesDiscoveryLoaded( THEPL, "podcast" ) )
-    //{
-    //    var_SetString( THEPL, "podcast-urls", qtu( urls ) );
-    //    msg_Dbg( p_intf, "You will need to reload the podcast module to take into account deleted podcast urls" );
-    //}
+    const QString request = QStringLiteral("UPDATE:") + urls;
+    var_SetString(vlc_object_instance(p_intf), "podcast-request", qtu(request));
+    QDialog::accept();
 }
 
 void PodcastConfigDialog::add()

@@ -128,7 +128,7 @@ static int Open( vlc_object_t *p_this )
     p_sd->description = _("Podcasts");
 
     /* Launch the callback associated with this variable */
-    vlc_object_t *pl = vlc_object_parent(p_sd);
+    vlc_object_t *pl = VLC_OBJECT(vlc_object_instance(p_sd));
 
     var_Create( pl, "podcast-request", VLC_VAR_STRING );
     var_AddCallback( pl, "podcast-request", Request, p_sys );
@@ -149,7 +149,7 @@ static void Close( vlc_object_t *p_this )
 {
     services_discovery_t *p_sd = ( services_discovery_t* )p_this;
     services_discovery_sys_t *p_sys = p_sd->p_sys;
-    vlc_object_t *pl = vlc_object_parent(p_sd);
+    vlc_object_t *pl = VLC_OBJECT(vlc_object_instance(p_sd));
 
     var_DelCallback( pl, "podcast-request", Request, p_sys );
 
@@ -201,6 +201,7 @@ static void *Run( void *data )
 
         msg_Dbg( p_sd, "Update required" );
         ParseRequest(p_sd, request);
+        free(request);
     }
 
     return NULL;
@@ -236,7 +237,7 @@ static void ParseUrls( services_discovery_t *p_sd, char *psz_urls )
     {
         int i;
 
-        if( !psz_urls )
+        if( !psz_urls || !*psz_urls )
             break;
 
         char *psz_tok = strchr( psz_urls, '|' );
@@ -301,7 +302,11 @@ static void ParseRequest( services_discovery_t *p_sd, char *psz_request )
     if( !psz_tok ) return;
     *psz_tok = '\0';
 
-    if( !strcmp( psz_request, "ADD" ) )
+    if( !strcmp( psz_request, "UPDATE" ) )
+    {
+        ParseUrls( p_sd, psz_tok + 1 );
+    }
+    else if( !strcmp( psz_request, "ADD" ) )
     {
         psz_request = psz_tok + 1;
         for( i = 0; i<p_sys->i_urls; i++ )

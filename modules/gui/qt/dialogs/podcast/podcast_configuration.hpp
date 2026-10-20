@@ -42,6 +42,9 @@ public slots:
     void add();
     void remove();
 
+protected:
+    void showEvent(QShowEvent* event) override;
+
 private:
     Ui::PodcastConfiguration ui;
 };
