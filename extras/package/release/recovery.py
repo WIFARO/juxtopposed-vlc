@@ -13,6 +13,8 @@ import urllib.request
 
 from version import ROOT, validate_tag
 
+MACOS_ARM_RUNNERS = ('macos-15', 'macos-14', 'macos-26')
+
 TARGETS = {
     'macos-arm64': dict(platform='macos', architecture='arm64', extension='zip',
                         metadata='macos-arm64-build.json', job='macos (macos-15, arm64)'),
@@ -103,15 +105,23 @@ def matching_artifacts(snapshot, version, name):
     return [a for a in snapshot['artifacts'] if a['name'] == f'{version}-{name}' and not a['expired']]
 
 
+def verification_jobs(name):
+    jobs = {TARGETS[name]['job']}
+    if name == 'macos-arm64':
+        jobs.update(f'macos ({runner}, arm64)' for runner in MACOS_ARM_RUNNERS)
+    return jobs
+
+
 def verified(snapshot, name):
-    return any(j['name'] == TARGETS[name]['job'] and j['conclusion'] == 'success' for j in snapshot['jobs'])
+    jobs = verification_jobs(name)
+    return any(j['name'] in jobs and j['conclusion'] == 'success' for j in snapshot['jobs'])
 
 
 def reuse_entry(snapshot, run_id, name, version):
     if not verified(snapshot, name):
-        job = TARGETS[name]['job']
-        states = ', '.join(j.get('conclusion') or j.get('status', 'unknown')
-                           for j in snapshot['jobs'] if j['name'] == job) or 'missing'
+        matches = [j for j in snapshot['jobs'] if j['name'] in verification_jobs(name)]
+        job = ', '.join(j['name'] for j in matches) or TARGETS[name]['job']
+        states = ', '.join(j.get('conclusion') or j.get('status', 'unknown') for j in matches) or 'missing'
         raise ValueError(f'Cannot reuse {name}: {job} in run {run_id} is {states}; '
                          'select failed to rebuild all failed targets')
     matches = matching_artifacts(snapshot, version, name)
@@ -121,7 +131,10 @@ def reuse_entry(snapshot, run_id, name, version):
                 source_commit=snapshot['source_commit'])
 
 
-def build_plan(repository, previous_run, target, version, current, root=ROOT, completed_run=''):
+def build_plan(repository, previous_run, target, version, current, root=ROOT, completed_run='',
+               macos_arm_runner='macos-15'):
+    if macos_arm_runner not in MACOS_ARM_RUNNERS:
+        raise ValueError('Unsupported macOS ARM runner: ' + macos_arm_runner)
     if bool(previous_run) != (target != 'all'):
         raise ValueError('Select rebuild targets and provide a previous run ID together, or use all with no run ID')
     if completed_run and not previous_run:
@@ -152,7 +165,7 @@ def build_plan(repository, previous_run, target, version, current, root=ROOT, co
                 if name in selected:
                     reused.append(reuse_entry(completed, completed_run, name, version))
             selected = set()
-    macs = [dict(runner='macos-15' if name == 'macos-arm64' else 'macos-15-intel',
+    macs = [dict(runner=macos_arm_runner if name == 'macos-arm64' else 'macos-15-intel',
                  arch=TARGETS[name]['architecture']) for name in TARGETS
             if name.startswith('macos-') and name in selected]
     return dict(recovery=bool(previous_run), previous_run=previous_run, source_commit=source,
@@ -281,6 +294,8 @@ def main():
     parser.add_argument('--previous-run', default=os.environ.get('PREVIOUS_RUN_ID', ''))
     parser.add_argument('--completed-run', default=os.environ.get('COMPLETED_BUILD_RUN_ID', ''))
     parser.add_argument('--target', default=os.environ.get('REBUILD_TARGET') or 'all')
+    parser.add_argument('--macos-arm-runner', choices=MACOS_ARM_RUNNERS,
+                        default=os.environ.get('MACOS_ARM_RUNNER') or 'macos-15')
     parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY', ''))
     parser.add_argument('--source', default=os.environ.get('REUSED_SOURCE_COMMIT', ''))
     parser.add_argument('--directory', type=Path, default=Path('release-artifacts'))
@@ -291,7 +306,7 @@ def main():
         current = git('rev-parse', 'HEAD')
         if args.command == 'plan':
             plan = build_plan(args.repository, args.previous_run, args.target, version, current,
-                              completed_run=args.completed_run)
+                              completed_run=args.completed_run, macos_arm_runner=args.macos_arm_runner)
             print(json.dumps(plan, indent=2))
             if os.environ.get('CREATE_DRAFT') == 'true':
                 check_release_tag(args.repository, version, current)

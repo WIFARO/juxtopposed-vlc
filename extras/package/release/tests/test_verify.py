@@ -5,6 +5,7 @@ from pathlib import Path
 import runpy
 import subprocess
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -39,7 +40,7 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual(gui_calls[0].kwargs['env'], gui_calls[1].kwargs['env'])
         self.assertIn('playback smoke checks passed', output.getvalue())
 
-    def run_gui(self, outputs, require_opengl=False):
+    def run_gui(self, outputs, require_opengl=False, diagnostics=None, capture=None):
         calls = []
         def command(args, **kwargs):
             calls.append(args)
@@ -50,16 +51,49 @@ class VerifyTests(unittest.TestCase):
             elif 'qt' not in args:
                 text = 'using audio decoder module "avcodec"\n'
             else:
+                result = outputs.pop(0)
+                if isinstance(result, Exception):
+                    raise result
                 text = ('using interface module "qt"\nusing video decoder module "avcodec"\n'
-                        'using vout window module "qt"\nusing vout display module "gl"\n') + outputs.pop(0)
+                        'using vout window module "qt"\nusing vout display module "gl"\n') + result
             return subprocess.CompletedProcess(args, 0, stdout=text)
         argv = ['verify.py', '/vlc', '--sample', '/sample.mkv', '--gui', '--video']
         if require_opengl:
             argv.append('--require-opengl')
+        if diagnostics:
+            argv.extend(['--diagnostics-dir', str(diagnostics)])
         with mock.patch.object(sys, 'argv', argv), mock.patch.object(subprocess, 'run', side_effect=command), \
-             contextlib.redirect_stdout(io.StringIO()):
+             contextlib.redirect_stdout(capture if capture is not None else io.StringIO()):
             runpy.run_path(str(SCRIPTS / 'verify.py'), run_name='__main__')
         return calls
+
+    def test_second_start_abort_keeps_the_actual_crash_output(self):
+        error = subprocess.CalledProcessError(-6, ['/vlc'], output='fatal graphics diagnostic\n')
+        with tempfile.TemporaryDirectory() as temp:
+            diagnostics = Path(temp) / 'logs'
+            output = io.StringIO()
+            with self.assertRaisesRegex(SystemExit, 'gui-2: terminated by SIGABRT'):
+                self.run_gui(['', error], diagnostics=diagnostics, capture=output)
+            self.assertIn('fatal graphics diagnostic', output.getvalue())
+            self.assertIn('GUI startup 2/2', output.getvalue())
+            self.assertIn('using interface module', (diagnostics / 'gui-1.log').read_text())
+            self.assertEqual((diagnostics / 'gui-2.log').read_text(), error.stdout)
+            self.assertTrue((diagnostics / 'modules.log').is_file())
+
+    def test_timeout_keeps_partial_bytes_and_fails_verification(self):
+        output = io.StringIO()
+        error = subprocess.TimeoutExpired(['/vlc'], 60, output=b'last output before hang\n')
+        with self.assertRaisesRegex(SystemExit, 'gui-1: timed out after 60 seconds'):
+            self.run_gui([error], capture=output)
+        self.assertIn('last output before hang', output.getvalue())
+
+    def test_nonzero_exit_is_not_retried_or_reported_as_success(self):
+        output = io.StringIO()
+        error = subprocess.CalledProcessError(1, ['/vlc'], output='startup error\n')
+        with self.assertRaisesRegex(SystemExit, 'gui-1: exited with status 1'):
+            self.run_gui([error, ''], capture=output)
+        self.assertNotIn('GUI startup 2/2', output.getvalue())
+        self.assertNotIn('checks passed', output.getvalue())
 
     def test_second_start_rejects_reported_graphics_failures_even_with_exit_zero(self):
         for message in ('Failed to load client buffer integration: "wayland-egl"',

@@ -102,6 +102,14 @@ branch. Review the job logs and the `<version>-complete` artifact. The final job
 requires both Mac builds, Linux relocation/playback checks, and native Windows
 startup checks to pass, either in this run or in the original run when recovering.
 
+If Apple Silicon never receives a runner and GitHub reports capacity constraints,
+the application has not built or failed a test. Rerun the job when capacity is
+available, or start a workflow with **macos_arm_runner** set to `macos-14` or
+`macos-26` instead of the default `macos-15`. All three choices remain native
+ARM64 builds with the same packaging and verification gates. A different runner
+image can change the minimum supported macOS version; review the build metadata.
+There is no automatic image switch or guarantee that another pool has capacity.
+
 ## Dependency caches
 
 Release builds cache dependencies by default. Every run still compiles, packages
@@ -355,6 +363,13 @@ macOS Qt settings still use Qt's native preferences domain. `--gui --video`
 also requires a Qt video window, video decoding and a working video output;
 both Mac CI jobs and the Linux X11/Wayland checks use this mode. GUI checks start
 twice using the same cache, to cover first launch and cached graphics startup.
+The saved graphics backend must be applied before constructing any Qt Quick
+windows. In particular, an Intel Mac runner can lack OpenGL 3.0 and use software
+rendering on its first launch; its second launch must retain that fallback.
+An aborted or timed-out verification prints the captured VLC output before the
+failure reason, including the GUI attempt number and signal. For a local check,
+`--diagnostics-dir <directory>` also keeps each process's output in a separate
+file. CI uses its normal build log and does not upload crash-report files.
 Linux requires a working Qt Quick OpenGL context on both X11 and native Wayland,
 using Mesa's software GPU driver in CI. This exercises EGL and the normal RHI
 rendering path; `QT_QUICK_BACKEND=software` is a separate fallback check. The

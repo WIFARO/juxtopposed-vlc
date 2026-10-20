@@ -68,6 +68,30 @@ class RecoveryTests(unittest.TestCase):
                 if plan['build_macos']:
                     self.assertEqual(plan['macos_matrix']['include'][0]['arch'], target[6:])
 
+    def test_arm_capacity_fallback_retains_native_architecture(self):
+        for runner in recovery.MACOS_ARM_RUNNERS:
+            with self.subTest(runner=runner), mock.patch.object(recovery, 'api') as api:
+                plan = recovery.build_plan(REPO, '', 'all', VERSION, NEW, macos_arm_runner=runner)
+            api.assert_not_called()
+            self.assertIn(dict(runner=runner, arch='arm64'), plan['macos_matrix']['include'])
+            self.assertIn(dict(runner='macos-15-intel', arch='x86_64'), plan['macos_matrix']['include'])
+        with self.assertRaisesRegex(ValueError, 'Unsupported macOS ARM runner'):
+            recovery.build_plan(REPO, '', 'all', VERSION, NEW, macos_arm_runner='macos-15-intel')
+
+    def test_recovery_recognizes_verified_arm_fallback_and_rebuilds_unallocated_job(self):
+        for runner in recovery.MACOS_ARM_RUNNERS:
+            jobs = self.jobs()
+            jobs[0]['name'] = f'macos ({runner}, arm64)'
+            plan = self.plan(jobs=jobs, target='failed', artifacts=self.artifacts()[1:])
+            self.assertEqual(plan['rebuild_targets'], 'macos-arm64')
+            plan = self.plan(jobs=jobs, target='macos-x86_64')
+            self.assertIn('macos-arm64', {e['target'] for e in plan['reuse_matrix']['include']})
+            jobs[0]['conclusion'] = 'cancelled'
+            plan = self.plan(jobs=jobs, target='failed')
+            self.assertEqual(plan['rebuild_targets'], 'macos-arm64')
+        self.assertFalse(recovery.verified(dict(jobs=[dict(name='macos (macos-15-intel, x86_64)',
+                                                         conclusion='success')]), 'macos-arm64'))
+
     def test_inputs_must_select_a_target_and_run_together(self):
         for previous, target in (('', 'win64'), ('1234', 'all'), ('x;echo bad', 'win64')):
             with self.subTest(previous=previous, target=target), self.assertRaises(ValueError):
@@ -351,7 +375,8 @@ class RecoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp) / 'github-output'
             with mock.patch.dict(os.environ, {'GITHUB_OUTPUT': str(output), 'REBUILD_TARGET': 'all',
-                                             'PREVIOUS_RUN_ID': '', 'CREATE_DRAFT': 'false'}), \
+                                             'PREVIOUS_RUN_ID': '', 'CREATE_DRAFT': 'false',
+                                             'MACOS_ARM_RUNNER': 'macos-14'}), \
                     mock.patch.object(sys, 'argv', ['recovery.py', 'plan']), \
                     mock.patch.object(recovery, 'git', return_value=NEW), \
                     mock.patch.object(recovery, 'api') as api, \
@@ -363,6 +388,8 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(values['recovery'], 'false')
             self.assertEqual(values['previous_run'], '')
             self.assertEqual(len(json.loads(values['macos_matrix'])['include']), 2)
+            self.assertIn(dict(runner='macos-14', arch='arm64'),
+                          json.loads(values['macos_matrix'])['include'])
 
     def test_manual_draft_is_pinned_to_current_commit_and_never_published(self):
         with tempfile.TemporaryDirectory() as temp:

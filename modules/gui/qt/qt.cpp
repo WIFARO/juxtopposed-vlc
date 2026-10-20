@@ -1233,16 +1233,24 @@ static void *Thread( void *obj )
         // settings value can be string (ini file), do not use `typeId()`:
         if (graphicsApiValue.isValid() && Q_LIKELY(graphicsApiValue.canConvert<int>()))
         {
+            // Apply the cached backend before constructing any QQuickWindow.
+            // A queued callback is too late: window creation can initialize the
+            // platform's default renderer before app.exec(), even when the
+            // previous launch needed the software fallback (notably on Mac VMs).
+            QQuickWindow::setGraphicsApi(static_cast<QSGRendererInterface::GraphicsApi>(graphicsApiValue.value<int>()));
+            if (p_intf->mainSettings->value(graphicsApiRhiSoftwareKey).value<bool>())
+                enableRhiSoftwareRenderer();
 
-            //some part of the probing needs to be executed on the GUI thread and some part will be ran in a background thread,
-            //so we defer the execution of this once the app is started. We can't start the task directly as qApp isn't set yet
-            //and there are scenarios where the main loop will never be run.
-            QMetaObject::invokeMethod(&app, [p_intf, graphicsApiValue, enableRhiSoftwareRenderer](){
-                // A cached (by then) valid graphics api is found, use it:
-                QQuickWindow::setGraphicsApi(static_cast<QSGRendererInterface::GraphicsApi>(graphicsApiValue.value<int>()));
-                if (p_intf->mainSettings->value(graphicsApiRhiSoftwareKey).value<bool>())
-                    enableRhiSoftwareRenderer();
+            if (graphicsApiValue.toInt() == QSGRendererInterface::OpenGL)
+            {
+                if (const auto format = createCompatibleOpenGLFormat())
+                    QSurfaceFormat::setDefaultFormat(*format);
+            }
 
+            // Defer only the background re-probe until the event loop starts.
+            // Its fallback surface needs the GUI thread, and some startup paths
+            // never enter the event loop.
+            QMetaObject::invokeMethod(&app, [p_intf](){
                 // Asynchronous re-probe to see if the cached graphics api is still applicable.
                 // If not, QQuickWindow is going to emit scene graph error, and the application is
                 // likely going to terminate. However, when the user starts the application again
@@ -1290,19 +1298,6 @@ static void *Thread( void *obj )
 
                 const auto globalThreadPool = QThreadPool::globalInstance();
                 assert(globalThreadPool);
-
-                if (graphicsApiValue.toInt() == QSGRendererInterface::OpenGL)
-                {
-                    // Due to asynchronous probing, we need to set the default
-                    // format before the main interface window's (`::create()`)
-                    // is called. Since previous probe result succeeded with
-                    // OpenGL and required version, we can assume that the there
-                    // will be again a compatible OpenGL format, rather than
-                    // storing and re-using the version (considering that it
-                    // takes negligible time to re-create the compatible format):
-                    if (const auto format = createCompatibleOpenGLFormat()) /* [[likely]] */
-                        QSurfaceFormat::setDefaultFormat(*format);
-                }
 
                 rhiProbeTask->start(*globalThreadPool, -1);
             }, Qt::QueuedConnection);

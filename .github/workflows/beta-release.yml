@@ -30,6 +30,14 @@ on:
         description: 'Build dependencies afresh without restoring or saving caches'
         type: boolean
         default: false
+      macos_arm_runner:
+        description: 'Apple Silicon runner image; select another image if GitHub cannot allocate a runner'
+        type: choice
+        default: macos-15
+        options:
+          - macos-15
+          - macos-14
+          - macos-26
   push:
     tags: ['[0-9]*.[0-9]*.[0-9]*']
 
@@ -90,6 +98,7 @@ jobs:
           COMPLETED_BUILD_RUN_ID: ${{ inputs.completed_build_run_id }}
           REBUILD_TARGET: ${{ inputs.rebuild_target || 'all' }}
           CREATE_DRAFT: ${{ inputs.create_draft }}
+          MACOS_ARM_RUNNER: ${{ inputs.macos_arm_runner || 'macos-15' }}
         run: python3 extras/package/release/recovery.py plan
 
   reuse:

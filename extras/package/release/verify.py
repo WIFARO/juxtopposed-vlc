@@ -4,6 +4,7 @@ import argparse
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import tempfile
 from version import verify_binary_version
@@ -16,6 +17,7 @@ parser.add_argument('--gui', action='store_true', help='Also open the Qt interfa
 parser.add_argument('--video', action='store_true', help='With --gui, also require video decoding and a Qt video window')
 parser.add_argument('--gui-runs', type=int, default=2, help='Repeat GUI startup with the same cache (default: 2)')
 parser.add_argument('--require-opengl', action='store_true', help='Require the Qt Quick OpenGL renderer, not the software scene graph')
+parser.add_argument('--diagnostics-dir', type=Path, help='Keep process output, including failed starts, in this directory')
 args = parser.parse_args()
 if args.video and not args.gui:
     parser.error('--video requires --gui')
@@ -23,6 +25,40 @@ if args.gui_runs < 1:
     parser.error('--gui-runs must be positive')
 if args.require_opengl and not (args.gui and args.video):
     parser.error('--require-opengl requires --gui --video')
+if args.diagnostics_dir:
+    args.diagnostics_dir.mkdir(parents=True, exist_ok=True)
+
+
+def save_output(phase, output):
+    # TimeoutExpired can contain bytes even when subprocess.run uses text=True.
+    if isinstance(output, bytes):
+        output = output.decode('utf-8', errors='replace')
+    output = output or ''
+    if args.diagnostics_dir:
+        (args.diagnostics_dir / f'{phase}.log').write_text(output, encoding='utf-8')
+    return output
+
+
+def process_failed(phase, error):
+    print(save_output(phase, error.stdout), flush=True)
+    if isinstance(error, subprocess.TimeoutExpired):
+        reason = f'timed out after {error.timeout} seconds'
+    elif error.returncode < 0:
+        reason = f'terminated by {signal.Signals(-error.returncode).name}'
+    else:
+        reason = f'exited with status {error.returncode}'
+    raise SystemExit(f'{phase}: {reason}')
+
+
+def checked_run(command, *, phase, **kwargs):
+    try:
+        result = subprocess.run(command, **kwargs)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        process_failed(phase, error)
+    save_output(phase, result.stdout)
+    return result
+
+
 with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
     state = Path(temp)
     env = dict(os.environ, XDG_CONFIG_HOME=str(state / 'config'),
@@ -34,10 +70,12 @@ with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
                    ';qt.scenegraph.general=true;qt.rhi.general=true')
     executable = str(args.executable.resolve())
     try:
-        print(verify_binary_version(executable, args.expected_version, env))
+        print(save_output('version', verify_binary_version(executable, args.expected_version, env)))
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        process_failed('version', error)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         raise SystemExit(str(error))
-    modules = subprocess.run([executable, '--ignore-config', '--list'], env=env, timeout=60,
+    modules = checked_run([executable, '--ignore-config', '--list'], phase='modules', env=env, timeout=60,
                              check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     for required in ('qt', 'avcodec', 'medialibrary'):
         if not any(line.split() and line.split()[0] == required for line in modules.stdout.splitlines()):
@@ -49,19 +87,19 @@ with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
                         'sine=frequency=440:sample_rate=48000', '-t', '2',
                         '-c:v', 'ffv1', '-c:a', 'pcm_s16le', str(sample)], check=True)
     # --no-video avoids the AppKit minimal-vout path during a headless Mac check.
-    playback = subprocess.run([executable, '--ignore-config', '--no-media-library',
+    playback = checked_run([executable, '--ignore-config', '--no-media-library',
         '--no-metadata-network-access', '-I', 'dummy', '--no-video', '--aout=dummy',
-        '--play-and-exit', '-vv', str(sample)], env=env, timeout=45, check=True,
+        '--play-and-exit', '-vv', str(sample)], phase='audio', env=env, timeout=45, check=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     print(playback.stdout)
     if 'using audio decoder module' not in playback.stdout:
         raise SystemExit('No audio decoder engaged during playback')
     for attempt in range(args.gui_runs if args.gui else 0):
-        print(f'GUI startup {attempt + 1}/{args.gui_runs}')
-        gui = subprocess.run([executable, '--ignore-config', '--no-media-library',
+        print(f'GUI startup {attempt + 1}/{args.gui_runs}', flush=True)
+        gui = checked_run([executable, '--ignore-config', '--no-media-library',
             '--no-metadata-network-access', '-I', 'qt', *([] if args.video else ['--no-video']), '--aout=dummy',
             '--no-qt-privacy-ask', '--no-qt-updates-notif', '--play-and-exit',
-            *(['--qt-verbose'] if args.require_opengl else []), '-vv', str(sample)], env=env,
+            *(['--qt-verbose'] if args.require_opengl else []), '-vv', str(sample)], phase=f'gui-{attempt + 1}', env=env,
             timeout=60, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         print(gui.stdout)
         if 'using interface module "qt"' not in gui.stdout:
