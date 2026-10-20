@@ -117,9 +117,11 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     /***
      * The LoadLibrary* calls from the modules and the 3rd party code
-     * will search in SYSTEM32 only
+     * may use system DLLs and private runtimes shipped beside this executable.
+     * The current directory and PATH remain excluded.
      * */
-    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32);
+    SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32 |
+                             LOAD_LIBRARY_SEARCH_APPLICATION_DIR);
     /***
      * Load DLLs from system32 before any other folder (when possible)
      */
