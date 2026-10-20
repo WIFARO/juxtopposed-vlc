@@ -692,7 +692,7 @@ void PlaylistController::toggleRandom()
     Q_D(PlaylistController);
     vlc_playlist_playback_order new_order;
     vlc_playlist_locker lock{ d->m_playlist };
-    if ( d->m_random )
+    if ( vlc_playlist_GetPlaybackOrder( d->m_playlist ) == VLC_PLAYLIST_PLAYBACK_ORDER_RANDOM )
         new_order = VLC_PLAYLIST_PLAYBACK_ORDER_NORMAL;
     else
         new_order = VLC_PLAYLIST_PLAYBACK_ORDER_RANDOM;
@@ -704,8 +704,9 @@ void PlaylistController::toggleRepeatMode()
 {
     Q_D(PlaylistController);
     vlc_playlist_playback_repeat new_repeat;
+    vlc_playlist_locker lock{ d->m_playlist };
     /* Toggle Normal -> Loop -> Repeat -> Normal ... */
-    switch ( d->m_repeat ) {
+    switch ( vlc_playlist_GetPlaybackRepeat( d->m_playlist ) ) {
     case PlaybackRepeat::PLAYBACK_REPEAT_NONE:
         new_repeat = VLC_PLAYLIST_PLAYBACK_REPEAT_ALL;
         break;
@@ -717,11 +718,9 @@ void PlaylistController::toggleRepeatMode()
         new_repeat = VLC_PLAYLIST_PLAYBACK_REPEAT_NONE;
         break;
     }
-    {
-        vlc_playlist_locker lock{ d->m_playlist };
-        vlc_playlist_SetPlaybackRepeat( d->m_playlist, new_repeat );
-    }
-    config_PutInt( "repeat", new_repeat );
+    vlc_playlist_SetPlaybackRepeat( d->m_playlist, new_repeat );
+    config_PutInt( "repeat", new_repeat == VLC_PLAYLIST_PLAYBACK_REPEAT_CURRENT );
+    config_PutInt( "loop", new_repeat == VLC_PLAYLIST_PLAYBACK_REPEAT_ALL );
 }
 
 void PlaylistController::clear()

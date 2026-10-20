@@ -67,7 +67,7 @@ ColumnLayout {
     }
     readonly property Component editorComponent: editor === "action" ? actionEditor : editor === "toggle" ? toggleEditor : editor === "startup-volume" ? startupVolumeEditor : editor === "slider" ? sliderEditor
         : editor === "segmented" ? segmentedEditor : editor === "number-choice" ? numberChoiceEditor
-        : editor === "track" ? trackEditor : editor === "language" ? languageEditor
+        : editor === "track" ? trackEditor : editor === "optical-drive" ? opticalDriveEditor : editor === "language" ? languageEditor
         : description.kind === "bool" && !choices.length ? toggleEditor
         : editor === "color" ? colorEditor
         : choices.length ? choiceEditor : textEditor
@@ -561,10 +561,36 @@ ColumnLayout {
         }
     }
     Component {
+        id: opticalDriveEditor
+        RedesignComboBox {
+            id: drive
+            objectName: "preferenceChoiceEditor"
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            implicitHeight: theme.dp(36)
+            editable: true
+            model: root.choices; textRole: "label"; valueRole: "value"
+            currentIndex: model.findIndex(row => row.value === root.currentValue)
+            Accessible.name: root.label
+            contentItem: TextInput {
+                objectName: "preferenceOpticalDriveField"
+                text: drive.editText; font: drive.font; color: theme.foreground
+                selectionColor: theme.accent; selectedTextColor: theme.background
+                verticalAlignment: TextInput.AlignVCenter; selectByMouse: true; clip: true
+                onActiveFocusChanged: if (activeFocus) selectAll()
+                onEditingFinished: {
+                    const selected = root.choices.find(row => row.label === text)
+                    root.commit(selected ? selected.value : text)
+                }
+            }
+            onAboutToOpen: root.backend.refresh()
+            onActivated: root.commit(currentValue)
+        }
+    }
+    Component {
         id: sliderEditor
         ColumnLayout {
-            implicitHeight: theme.dp(root.presentation.inlineSlider ? 34 : 48)
-            spacing: theme.dp(2)
+            implicitHeight: theme.dp(root.presentation.sliderHeight || (root.presentation.inlineSlider ? 34 : 48))
+            spacing: theme.dp(root.presentation.sliderSpacing === undefined ? 2 : root.presentation.sliderSpacing)
             C.Slider {
                 id: slider
                 objectName: "preferenceSliderEditor"
@@ -627,7 +653,7 @@ ColumnLayout {
                 Text { text: slider.to + (root.presentation.suffix || ""); color: theme.foreground; font.pixelSize: theme.dp(11) }
             }
             Item {
-                Layout.fillWidth: true; Layout.preferredHeight: theme.dp(14)
+                Layout.fillWidth: true; Layout.preferredHeight: theme.dp(root.presentation.tickHeight || 14)
                 visible: !root.presentation.inlineSlider && !!root.presentation.ticks
                 Repeater {
                     model: parent.width < theme.dp(280) && root.presentation.compactTicks ? root.presentation.compactTicks : root.presentation.ticks || []
@@ -637,11 +663,15 @@ ColumnLayout {
                         objectName: "preferenceSliderTick_" + index
                         readonly property real position: (Number(modelData) - slider.from) / (slider.to - slider.from)
                         readonly property real visualPosition: slider.mirrored ? 1 - position : position
-                        x: visualPosition * parent.width - (visualPosition === 0 ? 0 : visualPosition === 1 ? width : width / 2)
+                        readonly property real markerCenter: slider.leftPadding + slider.handle.width / 2
+                            + visualPosition * (slider.availableWidth - slider.handle.width) + theme.dp(0.5)
+                        x: root.presentation.alignTicksToHandle
+                            ? Math.max(theme.dp(2), Math.min(parent.width - width - theme.dp(2), markerCenter - width / 2))
+                            : visualPosition * parent.width - (visualPosition === 0 ? 0 : visualPosition === 1 ? width : width / 2)
                         text: root.presentation.tickLabels?.[index] ?? ((root.presentation.positiveTickSign && modelData > 0 ? "+" : "")
                             + Number(modelData).toLocaleString(Qt.locale(), 'f', Number.isInteger(Number(modelData)) ? 0 : String(modelData).split('.')[1].length)
                             + (root.presentation.tickSuffix === undefined ? root.presentation.suffix || "" : root.presentation.tickSuffix))
-                        color: theme.foreground; font.pixelSize: theme.dp(11)
+                        color: root.presentation.mutedTicks ? theme.playerLabel : theme.foreground; font.pixelSize: theme.dp(root.presentation.tickFontSize || 11)
                     }
                 }
             }
@@ -668,29 +698,40 @@ ColumnLayout {
         T.SpinBox {
             id: trackField
             objectName: "preferenceTrackEditor"
-            implicitHeight: theme.dp(root.compact ? 36 : 34)
+            implicitHeight: theme.dp(root.presentation.editorHeight || (root.compact ? 36 : 34))
             from: 0; to: root.description.maximum
             value: Number(root.currentValue)
             editable: true
             font.pixelSize: theme.dp(14)
             leftPadding: theme.dp(14); rightPadding: theme.dp(10)
             textFromValue: (value, locale) => value === 0 ? qsTr("Automatic") : String(value)
-            valueFromText: (text, locale) => {
+            function parseTrack(text) {
                 const input = text.trim()
                 if (input.toLocaleLowerCase() === qsTr("Automatic").toLocaleLowerCase()) return 0
                 const number = Number(input)
-                return input.length && Number.isInteger(number) && number >= 1 && number <= to ? number : value
+                return input.length && Number.isInteger(number) && number >= 1 && number <= to ? number : undefined
             }
+            valueFromText: (text, locale) => parseTrack(text) ?? value
             contentItem: TextInput {
+                property bool edited: false
+                property string draftValue: ""
                 text: trackField.displayText; font: trackField.font; color: theme.foreground
+                onTextEdited: { edited = true; draftValue = text }
+                onEditingFinished: {
+                    if (!edited) return
+                    edited = false
+                    const parsed = trackField.parseTrack(draftValue)
+                    // Explicitly choosing the same number must clear any legacy ID.
+                    if (parsed !== undefined) root.commit(parsed)
+                }
                 selectionColor: theme.accent; selectedTextColor: theme.background
                 verticalAlignment: TextInput.AlignVCenter; selectByMouse: true; clip: true
                 onActiveFocusChanged: if (activeFocus) selectAll()
             }
             background: Rectangle {
-                radius: theme.dp(root.compact ? 6 : 4); color: theme.field
-                border.width: root.compact ? theme.dp(2) : 1
-                border.color: trackField.activeFocus ? theme.accent : root.compact && !root.lightTheme ? "#191919" : theme.background
+                radius: theme.dp(6); color: theme.field
+                border.width: theme.dp(2)
+                border.color: trackField.activeFocus ? theme.accent : root.lightTheme ? theme.border : "#191919"
             }
             Accessible.name: root.label
             onValueModified: root.commit(value)
@@ -725,7 +766,12 @@ ColumnLayout {
                 echoMode: root.description.kind === "password" ? TextInput.Password : TextInput.Normal
                 inputMethodHints: root.description.kind === "integer" || root.description.kind === "float" ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                 Accessible.name: root.label || root.description.title
-                background: Rectangle { radius: theme.dp(6); border.width: theme.dp(2); color: theme.field; border.color: field.invalid ? "#e56b6b" : field.activeFocus ? theme.accent : !root.lightTheme ? "#191919" : theme.border }
+                background: Rectangle {
+                    x: -theme.dp(root.presentation.fieldOutset || 0)
+                    width: field.width + 2 * theme.dp(root.presentation.fieldOutset || 0); height: field.height
+                    radius: theme.dp(root.presentation.fieldRadius || 6); border.width: theme.dp(2); color: theme.field
+                    border.color: field.invalid ? "#e56b6b" : field.activeFocus ? theme.accent : !root.lightTheme ? "#191919" : theme.border
+                }
                 onEditingFinished: {
                     if (!root.editorEnabled) return
                     const number = Number(text)

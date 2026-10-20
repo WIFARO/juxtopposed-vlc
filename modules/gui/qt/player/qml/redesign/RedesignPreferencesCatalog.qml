@@ -82,18 +82,18 @@ QtObject {
             { title: qsTr("Startup"), rows: [
                 ["restore-playback-pos", qsTr("Continue where you left off"), {choiceLabels: {0: qsTr("Never"), 1: qsTr("Ask"), 2: qsTr("Always")}}],
                 ["playlist-autostart", qsTr("Start playing as soon as a file opens")],
-                ["rate", qsTr("Default playback speed"), {editor: "slider", from: 0.25, to: 2, step: 0.05, decimals: 2, suffix: "×", tickSuffix: "", ticks: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2], compactTicks: [0.25, 1, 2], trackTicks: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]}],
+                ["rate", qsTr("Default playback speed"), {editor: "slider", rowHeight: 67, sliderHeight: 51, sliderSpacing: 8, tickHeight: 15, tickFontSize: 12, mutedTicks: true, alignTicksToHandle: true, alignSliderTop: true, sliderTopMargin: 7, sliderPadding: 0, trackHeight: 16, trackRadius: 6, trackInset: 2, hideHelp: true, from: 0.25, to: 2, step: 0.05, decimals: 2, suffix: "×", tickSuffix: "", ticks: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2], compactTicks: [0.25, 1, 2], trackTicks: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]}],
                 ["playlist-cork", qsTr("Pause when another app uses audio")] ] },
             { title: qsTr("Tracks"), rows: [
-                ["preferred-resolution", qsTr("Preferred video quality")], ["menu-language", qsTr("Preferred menu language")],
-                ["redesign-audio-track", qsTr("Default audio track")], ["redesign-sub-track", qsTr("Default subtitle track")] ] },
+                ["preferred-resolution", qsTr("Preferred video quality")], ["redesign-menu-language", qsTr("Preferred menu language"), {editorHeight: 36, dynamicChoices: true}],
+                ["redesign-audio-track", qsTr("Default audio track"), {editorHeight: 36, rowHeight: 48}], ["redesign-sub-track", qsTr("Default subtitle track"), {editorHeight: 36, rowHeight: 46}] ] },
             { title: qsTr("Order"), rows: [
                 ["redesign-repeat", qsTr("Repeat")], ["random", qsTr("Shuffle")],
                 ["play-and-stop", qsTr("Stop after each item")], ["redesign-after-playback", qsTr("When playback finishes")] ] },
             { title: qsTr("Seeking"), rows: [
                 ["input-fast-seek", qsTr("Seek precisely"), {inverted: true}],
                 ["qt-seek-preview", qsTr("Show video previews on the seekbar")] ] },
-            { title: qsTr("Files & Discs"), rows: [ ["dvd", qsTr("Default optical drive")],
+            { title: qsTr("Files & Discs"), rows: [ ["dvd", qsTr("Default optical drive"), {editor: "optical-drive", rowHeight: 46, dynamicChoices: true}],
                 ["avi-index", qsTr("Repair damaged AVI files")], ["mkv-preload-local-dir", qsTr("Load matching .mkv files from the same folder")] ] } ],
         video: [
             { title: qsTr("Output"), rows: [ ["video", qsTr("Enable video")], ["fullscreen", qsTr("Start videos in fullscreen")],
@@ -112,7 +112,7 @@ QtObject {
                 ["snapshot-sequential", qsTr("Number files sequentially")], ["snapshot-preview", qsTr("Show a preview after capture")] ] } ],
         audio: [
             { title: qsTr("Output"), rows: [ ["audio", qsTr("Enable audio")], ["redesign-audio-device", qsTr("Output device"), {dynamicChoices: true}], ["mix-mode", qsTr("Speaker setup"), {choiceLabels: {0: qsTr("Automatic"), 2: qsTr("Headphones"), 3: qsTr("Surround 4.0"), 4: qsTr("Surround 5.1"), 5: qsTr("Surround 7.1")}}] ] },
-            { title: qsTr("Volume"), rows: [ ["qt-max-volume", qsTr("Maximum volume"), {editor: "slider", rowHeight: 67, alignSliderTop: true, sliderTopMargin: 7, sliderPadding: 0, trackHeight: 16, trackRadius: 6, trackInset: 2, from: 100, to: 300, step: 1, suffix: "%", ticks: [100, 200, 300], trackTicks: [125, 150, 175, 200, 225, 250, 275], hideHelp: true}],
+            { title: qsTr("Volume"), rows: [ ["qt-max-volume", qsTr("Maximum volume"), {editor: "slider", rowHeight: 67, sliderHeight: 50, sliderSpacing: 7, tickHeight: 15, tickFontSize: 12, mutedTicks: true, alignTicksToHandle: true, alignSliderTop: true, sliderTopMargin: 7, sliderPadding: 0, trackHeight: 16, trackRadius: 6, trackInset: 2, from: 100, to: 300, step: 1, suffix: "%", ticks: [100, 200, 300], trackTicks: [125, 150, 175, 200, 225, 250, 275], hideHelp: true}],
                 ["volume-save", qsTr("Startup volume"), {editor: "startup-volume", rowHeight: 98, help: qsTr("Select the volume level to use when you start VLC.")}], ["volume-step", qsTr("Volume step"), {factor: 100 / 256, decimals: 1, suffix: "%"}] ] },
             { title: qsTr("Loudness"), rows: [ ["filter:audio-filter:normvol", qsTr("Normalize loudness")],
                 ["norm-max-level", qsTr("Target level"), {enabledWhen: "filter:audio-filter:normvol"}],
@@ -190,7 +190,7 @@ QtObject {
             ["qt-icon-change", qsTr("Allow the app icon to change"), {hideHelp: true}],
             ["qt-fs-opacity", qsTr("Fullscreen controls opacity"), interfaceSlider({rowHeight: 52, from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]})],
             ["redesign-fullscreen-sensitivity", qsTr("Fullscreen controls sensitivity"), interfaceSlider({rowHeight: 52, from: 0, to: 6, step: 1, ticks: [0, 3, 6], tickLabels: [qsTr("Low"), qsTr("Medium"), qsTr("High")], trackTicks: [0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7, 3, 3.3, 3.6, 3.9, 4.2, 4.5, 4.8, 5.1, 5.4, 5.7]})] ] } ],
-        playback: [ {title: "", rows: [ ["input-timeshift-path", qsTr("Time-shift buffer folder")], ["input-timeshift-granularity", qsTr("Time-shift buffer size"), {dynamicChoices: true}] ] } ],
+        playback: [ {title: "", rows: [ ["input-timeshift-path", qsTr("Time-shift buffer folder"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8, placeholder: qsTr("Default")}], ["input-timeshift-granularity", qsTr("Time-shift buffer size"), {dynamicChoices: true}] ] } ],
         audio: [ {title: "", rows: [ ["redesign-audio-passthrough", qsTr("Pass compressed audio to the receiver"), {dynamicChoices: true}], ["force-dolby-surround", qsTr("Detect Dolby Surround"), {choiceLabels: {0: qsTr("Automatic")}}], ["redesign-resampling-quality", qsTr("Resampling quality"), {dynamicChoices: true}], ["role", qsTr("Media role")],
             ["visualization-size", qsTr("Visualization size"), {dynamicChoices: true}],
             ["aout", qsTr("Audio output driver")], ["stereo-mode", qsTr("Stereo channel mapping"), {choiceLabels: {0: qsTr("Automatic")}}], ["audio-resampler", qsTr("Resampler")], ["filter:audio-filter:spatializer", qsTr("Spatializer"), {spatializer: true}] ] } ],
@@ -250,6 +250,7 @@ QtObject {
         "equalizer-preset": "redesign-equalizer-preset",
         "audio-device-default": "redesign-audio-device",
         "audio-startup-volume": "volume-save",
+        "menu-language": "redesign-menu-language",
         "repeat": "redesign-repeat",
         "loop": "redesign-repeat",
         "play-and-exit": "redesign-after-playback",

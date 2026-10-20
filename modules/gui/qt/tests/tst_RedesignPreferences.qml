@@ -14,6 +14,7 @@ TestCase {
         id: store
         property int revision: 0
         property int refreshCount: 0
+        property int trackCommits: 0
         property var values: ({resize: true, fastSeek: false, timeout: 1800})
         property QtObject ctx: shortcuts
         property bool invalidLanguage: false
@@ -43,10 +44,18 @@ TestCase {
             if (name === "folderAction") return {kind: "action", editor: "action", buttonLabel: actionBusy ? "Scanning…" : "Open", supported: !actionBusy}
             if (name === "audio-spatial-mode") return {kind: "integer", title: "Spatial audio mode", choices: [{label: "Headphone virtualization", value: 2}, {label: "Surround speakers", value: 0}]}
             if (name === "volumeStep") return {kind: "float", title: "Volume step", choices: []}
+            if (name === "dvd") {
+                const choices = [{label: "System default", value: ""},
+                    {label: "/dev/sr0", value: "/dev/sr0"}, {label: "/dev/sr1", value: "/dev/sr1"}]
+                if (values.dvd && !choices.some(row => row.value === values.dvd))
+                    choices.push({label: values.dvd, value: values.dvd})
+                return {kind: "string", editor: "optical-drive", choices: choices}
+            }
             if (name === "device") return {kind: "string", title: "Output device", choices: [{label: "System default", value: ""}, {label: "Headphones", value: "native-headphones"}]}
             return {kind: name === "timeout" ? "integer" : name === "clickPolicy" ? "string" : "bool", title: name, help: providedHelp, choices: []}
         }
         function stage(name, value) {
+            if (name.endsWith("-track")) trackCommits++
             if (name.endsWith("-language") && value==="invalid") { invalidLanguage=true;return false }
             if (name === "redesign-startup-volume") {
                 const number = Number(value)
@@ -697,6 +706,20 @@ TestCase {
         store.stage("redesign-audio-track", 3)
         compare(field.displayText, "3")
     }
+    function test_reenteringTrackNumberCommitsWithoutChangingItsValue() {
+        store.stage("redesign-audio-track", 2); defaults.visible = true
+        const field = findChild(defaults, "preferenceTrackEditor")
+        let before = store.trackCommits
+        mouseClick(field); testCase.forceActiveFocus()
+        compare(store.trackCommits, before)
+        editTrack("2")
+        compare(store.value("redesign-audio-track"), 2)
+        verify(store.trackCommits > before)
+        before = store.trackCommits
+        editTrack("2.5")
+        compare(store.value("redesign-audio-track"), 2)
+        compare(store.trackCommits, before)
+    }
     function test_subtitleDefaultsUseTheirOwnPreferences() {
         store.stage("redesign-audio-track", 1)
         store.stage("redesign-sub-track", 2)
@@ -952,6 +975,26 @@ TestCase {
         verify(startupVolume.remember)
         verify(!field.invalid)
         compare(field.text, "125")
+    }
+    function test_opticalDriveKeepsDeviceIdsAndCustomPaths() {
+        store.stage("dvd", "/dev/sr1")
+        const row = createTemporaryObject(policyToggleRow, testCase,
+            {optionName: "dvd", label: "Default optical drive", presentation: ({editor: "optical-drive"})})
+        verify(row !== null)
+        const choice = findChild(row, "preferenceChoiceEditor")
+        const field = findChild(row, "preferenceOpticalDriveField")
+        verify(choice !== null); verify(field !== null)
+        compare(choice.currentValue, "/dev/sr1")
+        choice.forceActiveFocus(); keyClick(Qt.Key_Home); keyClick(Qt.Key_Return)
+        compare(store.value("dvd"), "")
+        verify(store.value("dvd") !== "System default")
+        choice.forceActiveFocus(); keyClick(Qt.Key_Down); keyClick(Qt.Key_Return)
+        compare(store.value("dvd"), "/dev/sr0")
+        mouseClick(field); keyClick(Qt.Key_A, Qt.ControlModifier)
+        for (const character of "/dev/custom dvd") keyClick(character)
+        keyClick(Qt.Key_Return)
+        compare(store.value("dvd"), "/dev/custom dvd")
+        compare(field.text, "/dev/custom dvd")
     }
     function test_deviceChoicesRefreshAndUseNativeIdentifiers() {
         deviceRow.visible = true

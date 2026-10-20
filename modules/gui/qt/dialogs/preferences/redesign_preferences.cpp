@@ -34,6 +34,7 @@
 #include <QMap>
 #include <QDir>
 #include <QFileInfo>
+#include <QStorageInfo>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <vlc_actions.h>
@@ -99,6 +100,46 @@ bool decodeInterface(const QVariant& encoded, QVariantMap& result)
 }
 // Minimum pointer movement in pixels, from low to high sensitivity.
 constexpr int fullscreenSensitivityLevels[] = {32, 16, 8, 3, 2, 1, 0};
+
+void applyPlaybackPreferences(qt_intf_t* intf, const QVariantMap* changes = nullptr)
+{
+    const auto changed = [changes](const char* name) {
+        return !changes || changes->contains(QLatin1String(name));
+    };
+    if (changed("playlist-autostart")) {
+        auto* instance = vlc_object_instance(intf);
+        if (var_Type(instance, "playlist-autostart") == 0)
+            var_Create(instance, "playlist-autostart", VLC_VAR_BOOL);
+        var_SetBool(instance, "playlist-autostart", bool(config_GetInt("playlist-autostart")));
+    }
+    // The player and playlist cache these values at creation. Changing their
+    // saved defaults alone leaves the active queue using the old behavior.
+    auto* playlist = intf->p_playlist;
+    vlc_playlist_Lock(playlist);
+    auto* player = vlc_playlist_GetPlayer(playlist);
+    if (changed("random"))
+        vlc_playlist_SetPlaybackOrder(playlist, config_GetInt("random")
+            ? VLC_PLAYLIST_PLAYBACK_ORDER_RANDOM : VLC_PLAYLIST_PLAYBACK_ORDER_NORMAL);
+    if (changed("repeat") || changed("loop"))
+        vlc_playlist_SetPlaybackRepeat(playlist, config_GetInt("repeat")
+            ? VLC_PLAYLIST_PLAYBACK_REPEAT_CURRENT : config_GetInt("loop")
+            ? VLC_PLAYLIST_PLAYBACK_REPEAT_ALL : VLC_PLAYLIST_PLAYBACK_REPEAT_NONE);
+    if (changed("play-and-exit") || changed("play-and-stop"))
+        vlc_playlist_SetMediaStoppedAction(playlist, config_GetInt("play-and-exit")
+            ? VLC_PLAYLIST_MEDIA_STOPPED_EXIT : config_GetInt("play-and-stop")
+            ? VLC_PLAYLIST_MEDIA_STOPPED_STOP : VLC_PLAYLIST_MEDIA_STOPPED_CONTINUE);
+    if (changed("play-and-pause"))
+        vlc_player_SetPlayAndPause(player, bool(config_GetInt("play-and-pause")));
+    if (changed("playlist-cork"))
+        vlc_player_SetPauseOnCork(player, bool(config_GetInt("playlist-cork")));
+    if (changed("start-paused"))
+        vlc_player_SetStartPaused(player, bool(config_GetInt("start-paused")));
+    if (changed("input-repeat"))
+        vlc_player_SetRepeatCount(player, config_GetInt("input-repeat"));
+    if (changed("rate"))
+        vlc_player_ChangeRate(player, config_GetFloat("rate"));
+    vlc_playlist_Unlock(playlist);
+}
 
 QString visualizationValue(qt_intf_t* intf, const char* name)
 {
@@ -530,6 +571,7 @@ QString languageOption(const QString& name)
 {
     if (name == QLatin1String("redesign-audio-language")) return QStringLiteral("audio-language");
     if (name == QLatin1String("redesign-sub-language")) return QStringLiteral("sub-language");
+    if (name == QLatin1String("redesign-menu-language")) return QStringLiteral("menu-language");
     return {};
 }
 
@@ -568,7 +610,7 @@ QString languageCodes(const QString& input)
     return result.join(QLatin1Char(','));
 }
 
-QVariantList languageChoices(const QString& current)
+QVariantList languageChoices(const QString& current, bool allowSystem = true)
 {
     const QVariantList languages = [] {
         QVariantList result;size_t count;
@@ -584,12 +626,13 @@ QVariantList languageChoices(const QString& current)
         });
         return result;
     }();
-    QVariantList result{QVariantMap{{"label",qtr("System language")},{"value",QStringLiteral("system")}},
-        QVariantMap{{"label",qtr("Automatic")},{"value",QString()}}};
+    QVariantList result;
+    if (allowSystem) result.append(QVariantMap{{"label",qtr("System language")},{"value",QStringLiteral("system")}});
+    result.append(QVariantMap{{"label",qtr("Automatic")},{"value",QString()}});
     result.append(languages);
-    if (!current.isEmpty() && current != QLatin1String("system")
+    if (!current.isEmpty() && (!allowSystem || current != QLatin1String("system"))
         && std::none_of(languages.cbegin(),languages.cend(),[&](const auto& row){return row.toMap().value("value").toString()==current;}))
-        result.append(QVariantMap{{"label",languageNames(current)},{"value",current}});
+        result.append(QVariantMap{{"label",!allowSystem && current == QLatin1String("system") ? current : languageNames(current)},{"value",current}});
     result.append(QVariantMap{{"label",qtr("Custom…")},{"value",QStringLiteral("__custom__")}});
     return result;
 }
@@ -1873,12 +1916,16 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
             {QStringLiteral("minimum"), 0}, {QStringLiteral("maximum"), INT_MAX},
             {QStringLiteral("defaultValue"), 0}, {QStringLiteral("value"), value(name)},
             {QStringLiteral("help"), qtr("Choose a track for the next video. Track numbers start at 1. Automatic uses the language setting.")}};
-    if (!languageOption(name).isEmpty())
+    if (const auto option = languageOption(name); !option.isEmpty()) {
+        const bool menu = option == QLatin1String("menu-language");
         return {{QStringLiteral("kind"), QStringLiteral("string")}, {QStringLiteral("editor"), QStringLiteral("language")},
-            {QStringLiteral("choices"), languageChoices(value(name).toString())},
-            {QStringLiteral("defaultValue"), QStringLiteral("system")},
+            {QStringLiteral("choices"), languageChoices(value(name).toString(), !menu)},
+            {QStringLiteral("defaultValue"), menu ? QString() : QStringLiteral("system")},
             {QStringLiteral("value"), value(name)},
-            {QStringLiteral("help"), qtr("Choose a language. System language uses your system's language. Choose Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file.")}};
+            {QStringLiteral("help"), menu
+                ? qtr("Select a language for disc menus. For a list, separate language names or codes with commas. Open the disc again to use this change.")
+                : qtr("Choose a language. System language uses your system's language. Choose Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file.")}};
+    }
     if (name == QLatin1String("redesign-reset-all"))
         return {{QStringLiteral("kind"), QStringLiteral("action")}, {QStringLiteral("editor"), QStringLiteral("action")},
             {QStringLiteral("buttonLabel"), qtr("Reset")}, {QStringLiteral("destructive"), true},
@@ -2183,6 +2230,32 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         result.insert(QStringLiteral("help"), qtr("Use the same VLC window for files opened from the file manager."));
     if (name == QLatin1String("playlist-enqueue"))
         result.insert(QStringLiteral("help"), qtr("Keep the current item playing and add new files to the queue. Otherwise, start the new files."));
+    if (name == QLatin1String("dvd")) {
+        QStringList devices;
+#ifdef _WIN32
+        for (const auto& drive : QDir::drives()) {
+            const auto path = drive.absoluteFilePath();
+            if (GetDriveTypeW(reinterpret_cast<LPCWSTR>(path.utf16())) == DRIVE_CDROM)
+                devices.append(QDir::toNativeSeparators(path));
+        }
+#else
+        for (const auto& device : QDir(QStringLiteral("/dev")).entryList(
+                 {QStringLiteral("dvd*"), QStringLiteral("cdrom*"), QStringLiteral("scd*"), QStringLiteral("sr*")}, QDir::System))
+            devices.append(QStringLiteral("/dev/") + device);
+        for (const auto& volume : QStorageInfo::mountedVolumes()) {
+            const auto type = volume.fileSystemType().toLower();
+            if (type == "udf" || type == "iso9660" || type == "cd9660")
+                devices.append(QString::fromLocal8Bit(volume.device()));
+        }
+#endif
+        devices.append(value(name).toString());
+        devices.removeAll(QString()); devices.removeDuplicates();
+        choices = {QVariantMap{{QStringLiteral("label"), qtr("System default")}, {QStringLiteral("value"), QString()}}};
+        for (const auto& path : devices)
+            choices.append(QVariantMap{{QStringLiteral("label"), path}, {QStringLiteral("value"), path}});
+        result.insert(QStringLiteral("editor"), QStringLiteral("optical-drive"));
+        result.insert(QStringLiteral("help"), qtr("Select a drive or enter its path. Open the disc again to use this change."));
+    }
     result.insert(QStringLiteral("kind"), kind);
     result.insert(QStringLiteral("choices"), choices);
     return result;
@@ -2359,6 +2432,7 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
         if (input == value(name).toString()) {
             m_invalid.remove(name);
             if (!stage(option, value(option))) return false;
+            if (option == QLatin1String("menu-language")) return true;
             const QString track = option == QLatin1String("audio-language") ? QStringLiteral("audio-track") : QStringLiteral("sub-track");
             stage(track, -1);
             return stage(track + QStringLiteral("-id"), QString());
@@ -2369,9 +2443,10 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
             for (const auto& token : input.split(QLatin1Char(','))) {
                 const auto code = token.trimmed().toLower().toUtf8();
                 const auto* language = code.isEmpty() ? nullptr : languageFromText(token.trimmed());
-                if (token.trimmed().compare(qtr("System language"),Qt::CaseInsensitive)==0 || code=="system") codes.append(QStringLiteral("system"));
+                if (option != QLatin1String("menu-language")
+                    && (token.trimmed().compare(qtr("System language"),Qt::CaseInsensitive)==0 || code=="system")) codes.append(QStringLiteral("system"));
                 else if (language) codes.append(qfu(*language->psz_iso639_1 ? language->psz_iso639_1 : language->psz_iso639_2T));
-                else if (code == "any" || code == "none") codes.append(qfu(code.constData()));
+                else if (code == "any" || (option != QLatin1String("menu-language") && code == "none")) codes.append(qfu(code.constData()));
                 else { valid = false; break; }
             }
         }
@@ -2382,6 +2457,7 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
         }
         m_invalid.remove(name);
         if (!stage(option, codes.join(QLatin1Char(',')))) return false;
+        if (option == QLatin1String("menu-language")) return true;
         const QString track = option == QLatin1String("audio-language") ? QStringLiteral("audio-track") : QStringLiteral("sub-track");
         stage(track, -1);
         return stage(track + QStringLiteral("-id"), QString());
@@ -2548,6 +2624,30 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
 
     bool applyToPlayer = m_ctx && name == QLatin1String("qt-backdrop-blur")
         && normalized.toBool() != m_ctx->backdropBlurRequested();
+    if (m_ctx && (name == QLatin1String("rate") || name == QLatin1String("random")
+                  || name == QLatin1String("repeat") || name == QLatin1String("loop"))) {
+        auto* playlist = m_ctx->getIntf()->p_playlist;
+        vlc_playlist_Lock(playlist);
+        if (name == QLatin1String("rate"))
+            applyToPlayer = !qFuzzyCompare(normalized.toFloat(), vlc_player_GetRate(vlc_playlist_GetPlayer(playlist)));
+        else if (name == QLatin1String("random"))
+            applyToPlayer = normalized.toBool() != (vlc_playlist_GetPlaybackOrder(playlist) == VLC_PLAYLIST_PLAYBACK_ORDER_RANDOM);
+        else {
+            const bool repeat = name == QLatin1String("repeat") ? normalized.toBool() : value(QStringLiteral("repeat")).toBool();
+            const bool loop = name == QLatin1String("loop") ? normalized.toBool() : value(QStringLiteral("loop")).toBool();
+            const auto wanted = repeat ? VLC_PLAYLIST_PLAYBACK_REPEAT_CURRENT : loop
+                ? VLC_PLAYLIST_PLAYBACK_REPEAT_ALL : VLC_PLAYLIST_PLAYBACK_REPEAT_NONE;
+            applyToPlayer = wanted != vlc_playlist_GetPlaybackRepeat(playlist);
+        }
+        vlc_playlist_Unlock(playlist);
+    }
+    // These native caches have no getters. An explicit edit must also
+    // replace a startup override when the saved default already matches.
+    if (m_ctx && (name == QLatin1String("playlist-autostart") || name == QLatin1String("playlist-cork")
+                  || name == QLatin1String("start-paused") || name == QLatin1String("input-repeat")
+                  || name == QLatin1String("play-and-stop") || name == QLatin1String("play-and-exit")
+                  || name == QLatin1String("play-and-pause")))
+        applyToPlayer = true;
     if (m_ctx && name == QLatin1String("language"))
         if (auto* translator = InterfaceTranslator::instance())
             applyToPlayer = normalized.toString() != translator->requestedLanguage();
@@ -2717,6 +2817,7 @@ bool RedesignPreferences::save()
                 : qtr("VLC cannot save the interface settings. Try again."));
         }
     }
+    applyPlaybackPreferences(m_ctx->getIntf(), &previous);
     // These controls are inherited by the current input and action dispatcher.
     auto* instance = vlc_object_instance(m_ctx->getIntf());
     if (std::any_of(previous.keyBegin(), previous.keyEnd(), [](const QString& name) {
@@ -3049,6 +3150,7 @@ bool RedesignPreferences::resetAll()
         var_SetInteger(intf, option, config_GetInt(option));
     }
     m_ctx->refreshSystray();
+    applyPlaybackPreferences(intf);
     applyVisualizationPreferences(intf, true, true);
     applyWindowOpacity(m_ctx);
     applyFullscreenControlPreferences(intf, true, true);

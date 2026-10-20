@@ -15,7 +15,7 @@ RedesignSettingsDialog {
     accentColor: MainCtx.redesignAccent
     lightTheme: !VLCStyle.palette.isDark
     property string category: "general"
-    readonly property bool usesReferenceSpacing: category === "interface" || category === "privacy" || category === "controls" || category === "library" || category === "audio"
+    readonly property bool usesReferenceSpacing: category === "interface" || category === "privacy" || category === "controls" || category === "library" || category === "audio" || category === "playback"
     readonly property string categoryTitle: specification.pageTitles[category] || ""
     property bool advanced: false
     property bool expert: false
@@ -402,7 +402,7 @@ RedesignSettingsDialog {
                 }
                 Item {
                     visible: !root.search.length
-                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" ? 53 : 50)
+                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" ? 53 : 50)
                     RedesignButton {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                         height: theme.dp(38)
@@ -426,7 +426,7 @@ RedesignSettingsDialog {
                     delegate: Column {
                         required property var modelData
                         width: parent.width
-                        topPadding: (root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio") && !modelData.title.length ? theme.dp(15) : 0
+                        topPadding: (root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback") && !modelData.title.length ? theme.dp(15) : 0
                         Text {
                             visible: text.length > 0; topPadding: theme.dp(root.category === "general" ? 24 : 20); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
