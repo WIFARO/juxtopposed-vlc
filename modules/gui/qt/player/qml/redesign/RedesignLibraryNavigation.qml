@@ -40,7 +40,7 @@ Rectangle {
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         entries: pin ? [
             {action: "open", label: ["file", "media"].includes(pin.kind) ? qsTr("Play") : qsTr("Open"), icon: "play"},
-            {action: "queue", label: qsTr("Add to queue"), icon: "queue", enabled: !["section", "home"].includes(pin.kind)},
+            {action: "queue", label: qsTr("Add to queue"), icon: "queue", enabled: !["section", "home", "network-source"].includes(pin.kind)},
             {action: "remove", label: qsTr("Remove from sidebar"), icon: "remove"}
         ] : []
         onActionRequested: action => {

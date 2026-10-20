@@ -46,6 +46,7 @@ Item {
     property bool canGoForward: false
     property bool canEnqueue: true
     property string defaultItemIcon: category === 4 ? "queue" : category === 2 ? "music" : category === 3 ? "network" : "video"
+    property var artworkIconForItem: model => model.fileIsDir || root.showingFolders ? "folder" : model.iconName || root.defaultItemIcon
     property bool showingFolders: false
     property bool showAddRow: category > 0 && category < 5
     property string addLabel: playlistOpen ? qsTr("Add files") : category === 4 ? qsTr("Create playlist") : category === 3 ? qsTr("Add Network Stream") : qsTr("Add")
@@ -290,7 +291,7 @@ Item {
         id: button
         objectName: "librarySortButton"
         enabled: sorting.options.length > 0
-        iconName: enabled && (root.sortPopup || sorting.selection.id !== root.defaultSortChoice) ? "sort-active" : "sort"
+        iconName: enabled && (root.sortPopup || !["title-asc", "original"].includes(sorting.selection.id)) ? "sort-active" : "sort"
         iconDetailColor: root.theme.accent
         foreground: root.wideToolbar ? root.theme.foreground : root.theme.playerLabel
         text: qsTr("Sort options")
@@ -389,7 +390,13 @@ Item {
             Layout.preferredHeight: root.wideToolbar ? theme.dp(34) : implicitHeight
             sourceComponent: root.wideToolbar ? expandedToolbar : compactToolbar
         }
-        Rectangle { Layout.fillWidth: true; height: theme.dp(1); color: theme.border }
+        Rectangle {
+            objectName: "libraryToolbarDivider"
+            Layout.fillWidth: true; height: theme.dp(1)
+            color: !root.expanded && !root.lightTheme ? "#222222" : theme.border
+            antialiasing: !root.expanded
+            transform: Translate { y: root.expanded ? 0 : root.theme.dp(0.5) }
+        }
         RowLayout {
             Layout.fillWidth: true
             visible: root.playlistEditing || root.playlistEditMessage.length > 0
@@ -428,7 +435,7 @@ Item {
         RedesignHomeView {
             objectName: "libraryHomeView"
             visible: root.homeSectionsVisible
-            Layout.topMargin: theme.dp(root.expanded ? 25 : 9)
+            Layout.topMargin: theme.dp(root.expanded ? 25 : 10)
             Layout.fillWidth: true; Layout.fillHeight: true
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             expanded: root.expanded
@@ -544,7 +551,7 @@ Item {
                             height: root.grid ? root.expanded ? width * (root.squareCards ? 1 : 9 / 16) : theme.dp(90) : theme.dp(32)
                             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                             cornerRadius: root.grid && root.expanded ? 12 : 2
-                            iconName: model.fileIsDir || root.showingFolders ? "folder" : model.iconName || root.defaultItemIcon
+                            iconName: root.artworkIconForItem(model)
                             iconSize: root.grid && root.expanded ? 48 : 24
                             showPlaceholderBackground: root.grid
                             source: delegate.itemArtwork

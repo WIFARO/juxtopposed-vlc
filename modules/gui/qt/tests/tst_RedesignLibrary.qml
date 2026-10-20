@@ -232,6 +232,16 @@ TestCase {
             compare(createTemporaryObject(pinsComponent, testCase).entries.length, 0)
         }
     }
+    function test_networkPinsKeepTheirCategoryAfterReload() {
+        let pins = createTemporaryObject(pinsComponent, testCase)
+        pins.add({kind: "network-source", key: "radio", name: "Radio"})
+        pins.add({kind: "media", key: "123", name: "Station", category: 3})
+        pins = createTemporaryObject(pinsComponent, testCase)
+        compare(pins.entries.length, 2)
+        compare(pins.entries[0].category, 3)
+        compare(pins.entries[0].icon, "network")
+        compare(pins.entries[1].category, 3)
+    }
     function test_pinnedShortcutsOpenQueueAndRemoveFromTheirMenu() {
         library.pins = [{id: "folder:shows", kind: "folder", key: "shows", name: "Shows", icon: "folder"}]
         const button = findChild(library, "libraryPin0")
@@ -795,7 +805,8 @@ TestCase {
         mouseClick(section)
         compare(sectionSpy.signalArguments[0][0], "listening")
         const firstHeader = findChild(home, "homeSection_watching")
-        compare(section.mapToItem(home, 0, 0).y - firstHeader.mapToItem(home, 0, 0).y, 192)
+        // Section headers in home-sidebar.svg are 193 pixels apart.
+        compare(section.mapToItem(home, 0, 0).y - firstHeader.mapToItem(home, 0, 0).y, 193)
         home.contentY = 500
         verify(home.contentHeight > home.height)
     }

@@ -23,7 +23,7 @@ Flickable {
     Column {
         id: groups
         width: root.width
-        spacing: root.theme.dp(root.expanded ? 80 : 24)
+        spacing: root.theme.dp(root.expanded ? 80 : 25)
         Repeater {
             model: root.sections
             Column {
@@ -124,7 +124,7 @@ Flickable {
                                             y: root.expanded ? cover.height + root.theme.dp(20) : (parent.height - height) / 2
                                             width: Math.max(0, parent.width - x - (root.expanded ? 0 : root.theme.dp(28)))
                                             text: entry.displayTitle; elide: Text.ElideRight
-                                            color: button.hovered || button.visualFocus ? root.theme.bright : root.theme.foreground
+                                            color: button.hovered || button.visualFocus ? root.theme.bright : root.expanded ? root.theme.foreground : root.theme.playerLabel
                                             font.pixelSize: root.theme.dp(root.expanded ? 16 : 14)
                                         }
                                         Text {

@@ -17,7 +17,7 @@ RedesignLibraryView {
     playlistEditing: !!selectedPlaylist && playlistEditKey === playlistKey && sortState.selection.id === "original" && !searchText.length && !grid
     playlistBusy: playlistMedia.transactionPending
     onGridChanged: if (grid) playlistEditKey = ""
-    addLabel: selectedPlaylist ? qsTr("Add files") : category === 4 ? qsTr("Create playlist") : category === 3 ? qsTr("Add Network Stream") : qsTr("Add")
+    addLabel: selectedPlaylist ? qsTr("Add files") : category === 4 ? qsTr("Create playlist") : category === 3 ? network.podcast ? qsTr("Add podcast") : qsTr("Add Network Stream") : qsTr("Add")
     onPlaylistEditRequested: {
         if (playlistEditing) playlistEditKey = ""
         else { sortState.select("original"); searchText = ""; grid = false; playlistEditKey = playlistKey }
@@ -28,10 +28,13 @@ RedesignLibraryView {
     property var selectedCollection
     property string homeSection: ""
     property string currentFolder: ""
+    readonly property bool folderHasOnlyDirectories: !!currentFolder && !!folderLoader.item
+        && folderLoader.item.count > 0 && folderLoader.item.directoryCount === folderLoader.item.count
     onCurrentFolderChanged: folderArtwork.clear()
     property var registeredFolders: []
     readonly property var folderTrail: folderPath.trail(currentFolder, registeredFolders)
     property string musicSection: ""
+    property var networkLocation: ({source: "", title: "", nodes: []})
     readonly property bool showingSongFolders: category === 2 && musicSection === "Songs" && !currentFolder && !selectedCollection && !homeSection
     onShowingSongFoldersChanged: refreshFolders()
     onCategoryChanged: refreshFolders()
@@ -40,6 +43,8 @@ RedesignLibraryView {
     property var forwardStack: []
     pins: pinStore.entries
     readonly property var currentPinTarget: {
+        if (category === 3 && networkLocation.source && !networkLocation.nodes.length)
+            return pinTarget("network-source", networkLocation.source, networkLocation.title, 3, "network", "", "")
         if (currentFolder) return pinTarget("folder", currentFolder, nameFromUrl(currentFolder), category, "folder", "", "")
         if (selectedPlaylist) return pinTarget("playlist", selectedPlaylist.toString(), selectedName, 4, "playlist", "", "")
         if (selectedCollection) return pinTarget("collection", selectedCollection.toString(), selectedName, 2, musicSection === "Artists" ? "artist" : "music", "", musicSection)
@@ -53,6 +58,10 @@ RedesignLibraryView {
     menuForItem: (index, section) => {
         const target = targetForItem(index, section || homeSection)
         if (!target) return null
+        if (target.kind === "network-entry") return {target: target, entries: [
+            {action: target.branch ? "open" : "play", label: target.branch ? qsTr("Open") : qsTr("Play"), icon: target.branch ? "folder" : "play-outline"},
+            {action: "queue", label: qsTr("Add to queue"), icon: "queue"}
+        ]}
         if (selectedPlaylist && !section) { target.playlistRow = index; target.playlistKey = playlistKey }
         if (target.kind === "playlist") {
             return new Promise(resolve => MediaLib.playlistState(MediaLib.deserializeMlItemIdFromString(target.key), state => {
@@ -75,11 +84,11 @@ RedesignLibraryView {
             {action: "resync", label: qsTr("Resync"), icon: "refresh-two-tone", accent: true},
             {action: "folder-info", label: qsTr("Info"), icon: "info-two-tone", accent: true}
         ]}
-        const navigate = ["folder", "section", "home"].includes(target.kind)
+        const navigate = ["folder", "section", "home", "network-source"].includes(target.kind)
         return {target: target, entries: [
             {action: navigate ? "open" : "play", label: navigate ? qsTr("Open") : qsTr("Play"), icon: "play-outline"},
             {action: "pin", label: pinStore.contains(target) ? qsTr("Remove from sidebar") : qsTr("Add to sidebar"), icon: pinStore.contains(target) ? "favorite-active" : "favorite", accent: true}
-        ].concat(["section", "home"].includes(target.kind) ? [] : [{action: "queue", label: qsTr("Add to queue"), icon: "queue"}])
+        ].concat(["section", "home", "network-source"].includes(target.kind) ? [] : [{action: "queue", label: qsTr("Add to queue"), icon: "queue"}])
             .concat(["file", "media", "collection", "playlist"].includes(target.kind) ? [{action: "add-playlist", label: qsTr("Add to Playlist"), icon: "playlist"}] : [])
             .concat(playlistEditing && !section ? [
                 {action: "earlier", label: qsTr("Move earlier"), icon: "sort", enabled: index > 0 && !playlistBusy},
@@ -88,7 +97,12 @@ RedesignLibraryView {
             ] : [])}
     }
     onItemActionRequested: (target, action) => {
-        if (action === "folder-info" && target.kind === "folder") {
+        if (target.kind === "network-entry") {
+            const index = network.indexForUrl(target.key)
+            if (index < 0) return
+            if (action === "queue") network.enqueue(index)
+            else root.activated(index)
+        } else if (action === "folder-info" && target.kind === "folder") {
             folderInfo.begin(folderTools.requestInfo(Qt.resolvedUrl(target.key)))
         } else if (action === "resync" && target.kind === "folder") {
             MediaLib.resyncFolder(Qt.resolvedUrl(target.key), result => {
@@ -146,16 +160,18 @@ RedesignLibraryView {
     onPinEnqueueRequested: target => enqueueTarget(target)
     settingsContext: MainCtx
     sortScope: homeSection ? "home/" + homeSection : currentFolder ? "folder/" + (category === 2 ? "audio" : "video")
+        : category === 3 ? "network/" + networkLocation.source
         : selectedPlaylist ? "playlist-media" : selectedCollection ? "audio-tracks"
         : category === 2 ? "music/" + musicSection : "category/" + category
     sortFields: {
         if (homeSectionsVisible || category === 2 && !musicSection && !currentFolder) return []
-        if (currentFolder) return category === 1 ? ["played", "title", "insertion", "uri"] : ["title", "main_artist", "insertion", "uri"]
+        if (currentFolder) return folderHasOnlyDirectories ? ["title", "uri"]
+            : category === 1 ? ["played", "title", "insertion", "uri"] : ["title", "main_artist", "insertion", "uri"]
         if (showingSongFolders) return ["title", "uri"]
         if (homeSection === "folders" || category === 1) return ["title", "uri"]
         if (homeSection === "playlists" || homeSection === "artists") return ["title"]
         if (homeSection === "watching") return ["played", "insertion", "title", "uri"]
-        if (category === 3) return ["insertion", "uri"]
+        if (category === 3) return network.atRoot ? ["title"] : network.saved ? ["insertion", "title", "uri"] : ["title", "uri"]
         if (category === 4 && !selectedPlaylist) return ["insertion", "title"]
         if (category === 2 && !selectedCollection && musicSection !== "Songs")
             return musicSection === "Albums" ? ["title", "main_artist"] : ["title"]
@@ -165,8 +181,8 @@ RedesignLibraryView {
         ? [{id: "frequency", field: "frequency", descending: true, label: homeSection === "artists" ? qsTr("Most played first") : qsTr("Most visited first")}]
         : selectedPlaylist ? [{id: "original", field: "", descending: false, label: qsTr("Playlist order")}] : []
     defaultSortChoice: extraSortOptions.length ? extraSortOptions[0].id
-        : currentFolder && category === 1 ? "unwatched"
-        : ["watching", "listening"].includes(homeSection) || category === 3 || category === 5 ? "newest" : "title-asc"
+        : currentFolder && category === 1 && !folderHasOnlyDirectories ? "unwatched"
+        : ["watching", "listening"].includes(homeSection) || category === 3 && network.saved || category === 5 ? "newest" : "title-asc"
     readonly property string mediaSortField: sortField === "frequency" ? ""
         : sortField === "insertion" && (["watching", "listening"].includes(homeSection) || category === 3 || category === 5) ? ""
         : sortField === "title" && (homeSection === "artists" || category === 2 && !selectedCollection && ["Artists", "Genres"].includes(musicSection)) ? "name" : sortField
@@ -182,11 +198,16 @@ RedesignLibraryView {
         {key: "artists", title: homeTitles.artists, model: playedArtists, icon: "artist", emptyText: qsTr("Play music to see artists here.")}
     ]
     itemCount: homeSectionsVisible ? recentVideo.maximumCount + recentAudio.maximumCount + frequentFolders.count + frequentPlaylists.count + playedArtists.maximumCount : currentFolder ? (folderLoader.item ? folderLoader.item.count : 0) : activeModel && activeModel.count !== undefined ? activeModel.count : libraryMediaCount
-    loading: !!currentFolder && !!folderLoader.item && (folderLoader.item.watchStatesPending || folderLoader.item.audioMetadataPending)
-    readonly property var activeModel: homeSection ? homeModels[homeSection] : currentFolder ? folderLoader.item : selectedPlaylist ? playlistMedia : selectedCollection ? collectionTracks : category === 4 ? playlists : category === 2 ? (musicSection === "" ? musicCategories : musicSection === "Albums" ? albums : musicSection === "Artists" ? artists : musicSection === "Genres" ? genres : folderEntries) : category === 3 ? streams : category === 0 || category === 5 ? recent : folderEntries
+    loading: category === 3 ? network.loading : !!currentFolder && !!folderLoader.item && (folderLoader.item.watchStatesPending || folderLoader.item.audioMetadataPending)
+    readonly property var activeModel: homeSection ? homeModels[homeSection] : currentFolder ? folderLoader.item : selectedPlaylist ? playlistMedia : selectedCollection ? collectionTracks : category === 4 ? playlists : category === 2 ? (musicSection === "" ? musicCategories : musicSection === "Albums" ? albums : musicSection === "Artists" ? artists : musicSection === "Genres" ? genres : folderEntries) : category === 3 ? network.model : category === 0 || category === 5 ? recent : folderEntries
     mediaModel: activeModel
     breadcrumbs: {
-        const result = [{label: [qsTr("Home"), qsTr("Videos"), qsTr("Music"), qsTr("Network streams"), qsTr("Playlists"), qsTr("Recent files")][category], kind: "category"}]
+        const result = [{label: [qsTr("Home"), qsTr("Videos"), qsTr("Music"), qsTr("Network"), qsTr("Playlists"), qsTr("Recent files")][category], kind: "category"}]
+        if (category === 3 && networkLocation.source) {
+            result.push({label: networkLocation.title, kind: "network", location: {source: networkLocation.source, title: networkLocation.title, nodes: []}})
+            for (let i = 0; i < networkLocation.nodes.length; ++i)
+                result.push({label: networkLocation.nodes[i].title, kind: "network", location: {source: networkLocation.source, title: networkLocation.title, nodes: networkLocation.nodes.slice(0, i + 1)}})
+        }
         if (homeSection) result.push({label: homeTitles[homeSection], kind: "home"})
         if (musicSection) result.push({label: qsTr(musicSection), kind: "music"})
         if (currentFolder) {
@@ -198,10 +219,12 @@ RedesignLibraryView {
     canGoBack: backStack.length > 0
     canGoForward: forwardStack.length > 0
     defaultItemIcon: homeSection === "artists" ? "artist" : homeSection === "listening" ? "music" : category === 4 && !selectedPlaylist ? "playlist" : category === 2 ? "music" : category === 3 ? "network" : "video"
-    showingFolders: category === 1 && !currentFolder || showingSongFolders || homeSection === "folders"
+    showingFolders: category === 1 && !currentFolder || folderHasOnlyDirectories || showingSongFolders || homeSection === "folders"
     showAddRow: category > 0 && category < 5 && !selectedCollection && (category !== 1 || !currentFolder || (folderLoader.item && folderLoader.item.directoryCount > 0))
-    canEnqueue: !(category === 2 && musicSection === "")
-    emptyText: homeSection ? homeSections.find(section => section.key === homeSection).emptyText : selectedPlaylist ? qsTr("This playlist is empty.") : category === 4 ? qsTr("Create a playlist to collect your favorite media.") : category === 3 ? qsTr("Open a network stream to add it here.") : qsTr("Add a folder to your library to see your media here.")
+    canEnqueue: !(category === 2 && musicSection === "" || category === 3 && network.atRoot)
+    artworkIconForItem: model => category === 3 && !network.atRoot && network.branch(model) ? "folder"
+        : model.fileIsDir || showingFolders ? "folder" : model.iconName || defaultItemIcon
+    emptyText: homeSection ? homeSections.find(section => section.key === homeSection).emptyText : selectedPlaylist ? qsTr("This playlist is empty.") : category === 4 ? qsTr("Create a playlist to collect your favorite media.") : category === 3 ? network.podcast && !networkLocation.nodes.length ? qsTr("Add a podcast feed.") : network.atRoot || network.saved ? qsTr("Open a network stream to add it here.") : qsTr("This source has no media.") : qsTr("Add a folder to your library to see your media here.")
 
     RedesignLibraryPath { id: folderPath }
     function playlistMenuEntries(target) {
@@ -252,6 +275,12 @@ RedesignLibraryView {
         return target
     }
     function targetForItem(index, section) {
+        if (!section && category === 3) {
+            const item = network.dataAt(index)
+            if (!item) return null
+            if (network.atRoot) return pinTarget("network-source", item.sourceName, item.title, 3, "network", "", "")
+            return {kind: "network-entry", key: String(item.mrl || item.url || ""), name: item.name || item.title, branch: network.branch(item)}
+        }
         if (section) {
             const item = homeItem(section, index)
             if (section === "folders") return pinTarget("folder", folderPath.location(item.key), item.name, item.category, "folder", "", "")
@@ -272,7 +301,8 @@ RedesignLibraryView {
             return item ? pinTarget("folder", folderPath.location(item.fileUrl), item.fileName, category, "folder", "", "") : null
         }
         if (category === 2 && !musicSection) {
-            const section = ["Songs", "Albums", "Artists", "Genres"][index]
+            const item = musicCategories.get(index)
+            const section = item ? item.sectionKey : ""
             return section ? pinTarget("section", section, qsTr(section), 2, "music", "", "") : null
         }
         const item = activeModel.getDataAt(index)
@@ -288,6 +318,7 @@ RedesignLibraryView {
         category = newCategory
         homeSection = ""; selectedPlaylist = undefined; selectedCollection = undefined
         currentFolder = ""; musicSection = ""; selectedName = ""; searchText = ""
+        networkLocation = {source: "", title: "", nodes: []}
     }
     function openTarget(target) {
         if (target.kind === "folder") { openFolder(target.key, target.category); return }
@@ -299,20 +330,21 @@ RedesignLibraryView {
             visits.record("playlists", target.key, target.name)
         } else if (target.kind === "collection") {
             musicSection = target.section; selectedCollection = MediaLib.deserializeMlItemIdFromString(target.key); selectedName = target.name
-        } else if (target.kind === "section") musicSection = target.key
+        } else if (target.kind === "network-source") networkLocation = {source: target.key, title: target.name, nodes: []}
+        else if (target.kind === "section") musicSection = target.key
         else if (target.kind === "home") homeSection = target.key
     }
     function enqueueTarget(target) {
         if (["folder", "file"].includes(target.kind)) MediaLib.addToPlaylist(Qt.resolvedUrl(target.key))
-        else if (!["section", "home"].includes(target.kind)) MediaLib.addToPlaylist(MediaLib.deserializeMlItemIdFromString(target.key))
+        else if (!["section", "home", "network-source"].includes(target.kind)) MediaLib.addToPlaylist(MediaLib.deserializeMlItemIdFromString(target.key))
     }
     function playTarget(target) {
         if (target.kind === "file") MediaLib.addAndPlay(Qt.resolvedUrl(target.key))
         else MediaLib.addAndPlay(MediaLib.deserializeMlItemIdFromString(target.key))
     }
-    function snapshot() { return { category: category, homeSection: homeSection, playlist: selectedPlaylist, collection: selectedCollection, folder: currentFolder, musicSection: musicSection, name: selectedName, search: searchText } }
+    function snapshot() { return { category: category, homeSection: homeSection, playlist: selectedPlaylist, collection: selectedCollection, folder: currentFolder, musicSection: musicSection, networkLocation: networkLocation, name: selectedName, search: searchText } }
     function remember() { backStack = [...backStack, snapshot()]; forwardStack = [] }
-    function restore(state) { category = state.category; homeSection = state.homeSection || ""; selectedPlaylist = state.playlist; selectedCollection = state.collection; currentFolder = state.folder; musicSection = state.musicSection; selectedName = state.name; searchText = state.search; if (currentFolder) visits.record("folders", currentFolder, nameFromUrl(currentFolder), category); else if (selectedPlaylist) visits.record("playlists", selectedPlaylist.toString(), selectedName) }
+    function restore(state) { category = state.category; homeSection = state.homeSection || ""; selectedPlaylist = state.playlist; selectedCollection = state.collection; currentFolder = state.folder; musicSection = state.musicSection; networkLocation = state.networkLocation || {source: "", title: "", nodes: []}; selectedName = state.name; searchText = state.search; if (currentFolder) visits.record("folders", currentFolder, nameFromUrl(currentFolder), category); else if (selectedPlaylist) visits.record("playlists", selectedPlaylist.toString(), selectedName) }
     function openFolder(url, mediaCategory) {
         remember()
         currentFolder = folderPath.location(url)
@@ -332,6 +364,7 @@ RedesignLibraryView {
         if (index < 0 || index >= breadcrumbs.length - 1) return
         const entry = breadcrumbs[index]
         if (entry.kind === "category") categoryRequested(category)
+        else if (entry.kind === "network") { remember(); networkLocation = entry.location; searchText = "" }
         else if (entry.kind === "folder") openFolder(entry.url)
         else if (entry.kind === "music") {
             remember(); currentFolder = ""; selectedCollection = undefined; selectedName = ""; searchText = ""
@@ -341,6 +374,12 @@ RedesignLibraryView {
     onBackRequested: { const stack = backStack.slice(); const state = stack.pop(); forwardStack = [...forwardStack, snapshot()]; backStack = stack; restore(state) }
     onForwardRequested: { const stack = forwardStack.slice(); const state = stack.pop(); backStack = [...backStack, snapshot()]; forwardStack = stack; restore(state) }
     onActivated: index => {
+        if (category === 3) {
+            const next = network.locationAt(index)
+            if (next) { remember(); networkLocation = next; searchText = "" }
+            else network.play(index)
+            return
+        }
         if (homeSection) { openHomeItem(homeSection, index); return }
         if (currentFolder) {
             const url = folderLoader.item.get(index, "fileUrl")
@@ -349,7 +388,9 @@ RedesignLibraryView {
         } else if (category === 1 || showingSongFolders) {
             openFolder(folderEntries.get(index).fileUrl)
         } else if (category === 2 && musicSection === "") {
-            remember(); musicSection = ["Songs", "Albums", "Artists", "Genres"][index]
+            const item = musicCategories.get(index)
+            if (!item) return
+            remember(); musicSection = item.sectionKey; searchText = ""
         } else {
             const item = activeModel.getDataAt(index)
             if (category === 4 && !selectedPlaylist) { remember(); selectedPlaylist = item.id; selectedName = item.name; searchText = ""; visits.record("playlists", item.id.toString(), item.name) }
@@ -358,6 +399,7 @@ RedesignLibraryView {
         }
     }
     onEnqueueRequested: index => {
+        if (category === 3) { network.enqueue(index); return }
         if (homeSection) { enqueueHomeItem(homeSection, index); return }
         if (currentFolder) MediaLib.addToPlaylist(folderLoader.item.get(index, "fileUrl"))
         else if (category === 1 || showingSongFolders) MediaLib.addToPlaylist(folderEntries.get(index).fileUrl)
@@ -365,6 +407,7 @@ RedesignLibraryView {
     }
     onAddRequested: {
         if (selectedPlaylist) playlistMedia.appendFiles(DialogsProvider.selectPlaylistFiles())
+        else if (category === 3 && network.podcast) DialogsProvider.podcastConfigureDialog()
         else if (category === 3) DialogsProvider.openNetDialog()
         else { const folder = DialogsProvider.selectLibraryFolder(); if (folder.toString().length > 0) libraryFolders.add(folder) }
     }
@@ -515,14 +558,20 @@ RedesignLibraryView {
         id: musicCategories
         readonly property var translatedTitles: [qsTr("Songs"), qsTr("Albums"), qsTr("Artists"), qsTr("Genres")]
         function updateTitles() {
-            for (let i = 0; i < count; ++i) setProperty(i, "title", translatedTitles[i])
+            clear()
+            const keys = ["Songs", "Albums", "Artists", "Genres"]
+            const icons = ["music", "library-album", "library-artist", "library-genre"]
+            for (let i = 0; i < keys.length; ++i) {
+                if (!root.searchText || translatedTitles[i].toLocaleLowerCase().includes(root.searchText.toLocaleLowerCase()))
+                    append({title: translatedTitles[i], sectionKey: keys[i], iconName: icons[i]})
+            }
         }
         onTranslatedTitlesChanged: updateTitles()
         Component.onCompleted: updateTitles()
-        ListElement { title: ""; iconName: "music" }
-        ListElement { title: ""; iconName: "library-album" }
-        ListElement { title: ""; iconName: "library-artist" }
-        ListElement { title: ""; iconName: "library-genre" }
+    }
+    Connections {
+        target: root
+        function onSearchTextChanged() { musicCategories.updateTitles() }
     }
     MLAlbumModel { id: albums; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
     MLArtistModel { id: artists; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
@@ -570,7 +619,14 @@ RedesignLibraryView {
         target: playlistMedia
         function onItemsEdited(playlist, success, error) { if (root.selectedPlaylist && root.playlistKey === playlist.toString()) root.playlistEditMessage = success ? "" : error }
     }
-    MLUrlModel { id: streams; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
+    RedesignNetworkStreamLibrary {
+        id: network
+        active: root.category === 3
+        location: root.networkLocation
+        searchText: root.searchText
+        sortField: root.mediaSortField
+        descending: root.descending
+    }
     MLFolderModel { id: libraryFolders; ctx: MainCtx }
     ListModel { id: folderEntries }
     Connections {
