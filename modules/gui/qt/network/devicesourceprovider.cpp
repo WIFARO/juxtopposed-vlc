@@ -175,7 +175,7 @@ void MediaSourceModel::removeItems(const std::vector<SharedInputItem> &inputList
         auto it = std::remove(m_medias.begin(), m_medias.end(), inputItem);
         if (it != m_medias.end())
         {
-            m_medias.erase(it);
+            m_medias.erase(it, m_medias.end());
             mediaRemoved(inputItem);
         }
     }
