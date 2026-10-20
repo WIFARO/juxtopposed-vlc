@@ -8,11 +8,12 @@ on:
         type: string
         default: ''
       rebuild_target:
-        description: 'Target to rebuild; select all for a normal full build'
+        description: 'Targets to rebuild; failed automatically rebuilds failed or missing targets'
         type: choice
         default: all
         options:
           - all
+          - failed
           - macos-x86_64
           - macos-arm64
           - linux-x86_64
@@ -49,6 +50,8 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
       recovery: ${{ steps.plan.outputs.recovery }}
+      reuse: ${{ steps.plan.outputs.reuse }}
+      rebuild_targets: ${{ steps.plan.outputs.rebuild_targets }}
       previous_run: ${{ steps.plan.outputs.previous_run }}
       source_commit: ${{ steps.plan.outputs.source_commit }}
       macos_matrix: ${{ steps.plan.outputs.macos_matrix }}
@@ -85,7 +88,7 @@ jobs:
 
   reuse:
     needs: prepare
-    if: needs.prepare.outputs.recovery == 'true'
+    if: needs.prepare.outputs.reuse == 'true'
     name: reuse (${{ matrix.target }})
     runs-on: ubuntu-22.04
     strategy:
@@ -380,8 +383,8 @@ jobs:
         run: |
           Expand-Archive downloads/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-win64.zip "$env:RUNNER_TEMP/relocated"
           $vlc = "$env:RUNNER_TEMP/relocated/vlc-win64/vlc.exe"
-          python extras/package/release/version.py "$env:RELEASE_TAG" --executable $vlc
-          if ($LASTEXITCODE -ne 0) { throw 'Compiled version does not match release tag' }
+          python extras/package/release/version.py "$env:RELEASE_TAG" --executable $vlc --require-module qt --require-module avcodec --require-module medialibrary
+          if ($LASTEXITCODE -ne 0) { throw 'Compiled version or required plugin verification failed' }
           python -c "import wave; w=wave.open('sample.wav','wb'); w.setparams((1,2,48000,0,'NONE','not compressed')); w.writeframes(b'\0\0'*96000); w.close()"
           $sample = (Resolve-Path sample.wav).Path
           # Reuse the portable profile to exercise the cached graphics probe.
@@ -407,7 +410,7 @@ jobs:
       RELEASE_TAG: ${{ needs.prepare.outputs.version }}
       PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
       PREVIOUS_RUN_ID: ${{ needs.prepare.outputs.previous_run }}
-      REBUILD_TARGET: ${{ inputs.rebuild_target || 'all' }}
+      REBUILD_TARGET: ${{ needs.prepare.outputs.rebuild_targets }}
       REUSED_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
     runs-on: ubuntu-22.04
     permissions:

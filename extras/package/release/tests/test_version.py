@@ -73,6 +73,38 @@ class VersionTests(unittest.TestCase):
         probe.assert_called_once_with(Path('/path with spaces/vlc'), current)
         self.assertEqual(output.getvalue(), banner)
 
+    def test_required_modules_detect_loader_failures_before_gui_startup(self):
+        executable = Path('/release/vlc.exe')
+        output = '  qt Qt interface\n  avcodec Video decoder\n  medialibrary Media library\n'
+        with mock.patch.object(version.subprocess, 'run', return_value=
+                               subprocess.CompletedProcess([], 0, stdout=output)) as run:
+            version.verify_required_modules(executable, ['qt', 'avcodec', 'medialibrary'])
+        self.assertEqual(run.call_args.args[0], [str(executable), '--ignore-config', '--list'])
+        self.assertEqual(run.call_args.kwargs['timeout'], 60)
+        output = 'cannot load plug-in libqt_plugin.dll: error 126\n avcodec Video decoder\n'
+        with mock.patch.object(version.subprocess, 'run', return_value=
+                               subprocess.CompletedProcess([], 0, stdout=output)):
+            with self.assertRaisesRegex(ValueError, 'Required modules missing: qt, medialibrary'):
+                version.verify_required_modules(executable, ['qt', 'avcodec', 'medialibrary'])
+
+    def test_windows_module_probe_captures_console_output(self):
+        result = subprocess.CompletedProcess([], 0, stdout='qt Qt interface\n')
+        with mock.patch.object(version.os, 'name', 'nt'), \
+                mock.patch.object(version.subprocess, 'run', return_value=result) as run:
+            version.verify_required_modules('vlc.exe', ['qt'], {})
+        self.assertTrue(run.call_args.kwargs['env']['PWD'])
+
+    def test_cli_can_require_loadable_modules(self):
+        current = version.source_version()['version']
+        argv = ['version.py', current, '--executable', 'vlc.exe', '--require-module', 'qt',
+                '--require-module', 'medialibrary']
+        with mock.patch.object(sys, 'argv', argv), \
+                mock.patch.object(version, 'verify_binary_version', return_value='banner\n'), \
+                mock.patch.object(version, 'verify_required_modules') as modules, \
+                mock.patch('sys.stdout', new_callable=io.StringIO):
+            version.main()
+        modules.assert_called_once_with(Path('vlc.exe'), ['qt', 'medialibrary'])
+
     def test_source_matches_next_release(self):
         current = version.source_version()['version']
         self.assertEqual(version.validate_tag(current)['version'], current)

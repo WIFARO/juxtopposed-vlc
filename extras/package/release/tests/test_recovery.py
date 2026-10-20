@@ -73,6 +73,30 @@ class RecoveryTests(unittest.TestCase):
             with self.subTest(previous=previous, target=target), self.assertRaises(ValueError):
                 recovery.build_plan(REPO, previous, target, VERSION, NEW)
 
+    def test_failed_selection_rebuilds_intel_and_failed_windows_smoke_test(self):
+        jobs = self.jobs()
+        jobs[1]['conclusion'] = 'failure'
+        jobs[-1]['conclusion'] = 'failure'
+        plan = self.plan(jobs=jobs, target='failed')
+        self.assertEqual(plan['rebuild_targets'], 'macos-x86_64,win64')
+        self.assertEqual(plan['macos_matrix']['include'], [dict(runner='macos-15-intel', arch='x86_64')])
+        self.assertTrue(plan['build_windows'])
+        self.assertFalse(plan['build_linux'])
+        self.assertEqual({p['target'] for p in plan['reuse_matrix']['include']},
+                         {'macos-arm64', 'linux-x86_64'})
+        with self.assertRaisesRegex(ValueError, 'windows-smoke.*failure.*select failed'):
+            self.plan(jobs=jobs)
+
+    def test_failed_selection_handles_missing_artifacts_and_empty_reuse_matrix(self):
+        plan = self.plan(artifacts=[], target='failed')
+        self.assertFalse(plan['reuse'])
+        self.assertEqual(plan['reuse_matrix']['include'], [])
+        self.assertTrue(plan['build_linux'])
+        self.assertTrue(plan['build_windows'])
+        self.assertEqual(len(plan['macos_matrix']['include']), 2)
+        with self.assertRaisesRegex(ValueError, 'All targets passed'):
+            self.plan(target='failed')
+
     def test_previous_checks_and_artifacts_must_be_complete(self):
         jobs = self.jobs()
         jobs[-1]['conclusion'] = 'failure'  # ZIP upload alone does not prove Windows startup.
@@ -181,6 +205,25 @@ class RecoveryTests(unittest.TestCase):
             command('-c', 'commit.gpgsign=false', 'commit', '-m', 'release tooling')
             self.assertIn('extras/package/win32/build.sh', recovery.recovery_changes(old, 'HEAD', root))
 
+    def test_windows_loader_fix_requires_windows_rebuild_but_can_reuse_other_platforms(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old, _, command = self.make_repository(root)
+            loader = root / 'src/win32/plugin.c'
+            loader.parent.mkdir(parents=True)
+            loader.write_text('Windows-only loader change\n')
+            command('add', '.')
+            command('-c', 'commit.gpgsign=false', 'commit', '-m', 'Windows loader fix')
+            with self.assertRaisesRegex(ValueError, 'rebuild win64'):
+                recovery.recovery_changes(old, 'HEAD', root, rebuild_targets={'macos-x86_64'})
+            self.assertIn('src/win32/plugin.c',
+                          recovery.recovery_changes(old, 'HEAD', root, rebuild_targets={'win64', 'macos-x86_64'}))
+            (root / 'meson.build').write_text('shared application change')
+            command('add', '.')
+            command('-c', 'commit.gpgsign=false', 'commit', '-m', 'shared runtime fix')
+            with self.assertRaisesRegex(ValueError, 'full build'):
+                recovery.recovery_changes(old, 'HEAD', root, rebuild_targets={'win64', 'macos-x86_64'})
+
     def test_assembly_preserves_sources_and_produces_complete_manifest_and_checksums(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -229,6 +272,19 @@ class RecoveryTests(unittest.TestCase):
         with mock.patch.object(recovery, 'api', return_value=dict(object=dict(type='commit', sha=OLD))):
             with self.assertRaisesRegex(ValueError, 'never moved'):
                 recovery.check_release_tag(REPO, VERSION, NEW)
+
+    def test_assembly_accepts_two_rebuilt_targets_with_two_reused_packages(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old, new, _ = self.make_repository(root)
+            rebuilt = {'macos-x86_64', 'win64'}
+            for name in recovery.TARGETS:
+                self.fixture_package(root / 'artifacts' / f'{VERSION}-{name}', name,
+                                     new if name in rebuilt else old)
+            manifest = recovery.assemble(root / 'artifacts', root / 'complete', VERSION, new,
+                                         '5678', REPO, '1234', 'macos-x86_64,win64', old, root)
+            self.assertEqual({p['target'] for p in manifest['packages'] if not p['reused']}, rebuilt)
+            self.assertEqual({p['source_commit'] for p in manifest['packages'] if p['reused']}, {old})
 
     def test_plan_cli_outputs_can_drive_github_job_conditions(self):
         with tempfile.TemporaryDirectory() as temp:

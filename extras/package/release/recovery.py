@@ -55,14 +55,15 @@ def pages(repository, path, field):
     raise ValueError(f'Too many pages in {path}')
 
 
-def recovery_changes(source, current, root=ROOT):
+def recovery_changes(source, current, root=ROOT, rebuild_targets=()):
     subprocess.run(['git', '-C', str(root), 'merge-base', '--is-ancestor', source, current], check=True)
     paths = git('diff', '--no-ext-diff', '--no-renames', '--name-only', source, current, root=root).splitlines()
     # Reusing packages is only supported across release tooling/documentation
     # changes. Application, version and dependency changes require full builds.
     forbidden = [p for p in paths if not (
         p.startswith(('extras/package/release/', 'doc/')) or
-        p in ('.github/workflows/beta-release.yml', 'extras/package/win32/build.sh', 'Makefile.am'))]
+        p in ('.github/workflows/beta-release.yml', 'extras/package/win32/build.sh', 'Makefile.am') or
+        ('win64' in rebuild_targets and p in ('bin/winvlc.c', 'src/win32/plugin.c')))]
     if 'Makefile.am' in paths:
         diff = git('diff', '--no-ext-diff', '--unified=0', source, current, '--', 'Makefile.am', root=root)
         edits = [line[1:] for line in diff.splitlines()
@@ -70,15 +71,23 @@ def recovery_changes(source, current, root=ROOT):
         if any(not re.fullmatch(r'\s*extras/package/release/[\w./-]+\s*\\?', line) for line in edits):
             forbidden.append('Makefile.am (changes outside the release-script distribution list)')
     if forbidden:
+        if any(p in ('bin/winvlc.c', 'src/win32/plugin.c') for p in forbidden):
+            raise ValueError('Windows loader changed: rebuild win64 too (select failed to rebuild all failed targets)')
         raise ValueError('Application/build inputs changed; run a full build: ' + ', '.join(forbidden))
     return paths
 
 
+def selected_targets(value):
+    targets = set(TARGETS) if value == 'all' else set(value.split(','))
+    if not targets or not targets.issubset(TARGETS):
+        raise ValueError(f'Unknown rebuild target selection: {value}')
+    return targets
+
+
 def build_plan(repository, previous_run, target, version, current, root=ROOT):
     if bool(previous_run) != (target != 'all'):
-        raise ValueError('Select one rebuild target and provide a previous run ID together, or use all with no run ID')
-    if target != 'all' and target not in TARGETS:
-        raise ValueError(f'Unknown rebuild target: {target}')
+        raise ValueError('Select rebuild targets and provide a previous run ID together, or use all with no run ID')
+    selected = selected_targets(target) if target != 'failed' else set()
     reused = []
     source = current
     changes = []
@@ -93,25 +102,36 @@ def build_plan(repository, previous_run, target, version, current, root=ROOT):
         if run['status'] != 'completed':
             raise ValueError('Wait for the previous run to finish, including Windows startup checks')
         source = run['head_sha']
-        changes = recovery_changes(source, current, root)
         jobs = pages(repository, f'actions/runs/{previous_run}/jobs', 'jobs')
         artifacts = pages(repository, f'actions/runs/{previous_run}/artifacts', 'artifacts')
+        def verified(name):
+            return any(j['name'] == TARGETS[name]['job'] and j['conclusion'] == 'success' for j in jobs)
+        def matching_artifacts(name):
+            return [a for a in artifacts if a['name'] == f'{version}-{name}' and not a['expired']]
+        if target == 'failed':
+            selected = {name for name in TARGETS if not verified(name) or len(matching_artifacts(name)) != 1}
+            if not selected:
+                raise ValueError('All targets passed and have artifacts; select a specific target to rebuild')
+        changes = recovery_changes(source, current, root, rebuild_targets=selected)
         for name, spec in TARGETS.items():
-            if name == target:
+            if name in selected:
                 continue
-            if not any(j['name'] == spec['job'] and j['conclusion'] == 'success' for j in jobs):
-                raise ValueError(f'{name} did not pass its verification job in the previous run; use the original full run')
-            matches = [a for a in artifacts if a['name'] == f'{version}-{name}' and not a['expired']]
+            if not verified(name):
+                states = ', '.join(j['conclusion'] or j['status'] for j in jobs if j['name'] == spec['job']) or 'missing'
+                raise ValueError(f'Cannot reuse {name}: {spec["job"]} in run {previous_run} is {states}; '
+                                 'select failed to rebuild all failed targets')
+            matches = matching_artifacts(name)
             if len(matches) != 1:
                 raise ValueError(f'Missing, expired or ambiguous artifact for {version}-{name}')
             reused.append(dict(target=name, artifact_id=str(matches[0]['id'])))
     macs = [dict(runner='macos-15' if name == 'macos-arm64' else 'macos-15-intel',
                  arch=TARGETS[name]['architecture']) for name in TARGETS
-            if name.startswith('macos-') and target in ('all', name)]
+            if name.startswith('macos-') and name in selected]
     return dict(recovery=bool(previous_run), previous_run=previous_run, source_commit=source,
+                reuse=bool(reused), rebuild_targets=','.join(name for name in TARGETS if name in selected),
                 macos_matrix=dict(include=macs), build_macos=bool(macs),
-                build_linux=target in ('all', 'linux-x86_64'),
-                build_windows=target in ('all', 'win64'),
+                build_linux='linux-x86_64' in selected,
+                build_windows='win64' in selected,
                 reuse_matrix=dict(include=reused), changed_paths=changes)
 
 
@@ -153,9 +173,10 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
     if output.exists():
         raise ValueError(f'Output already exists: {output}')
     packages = []
+    selected = selected_targets(target)
     # Validate the whole set before producing anything that looks complete.
     for name in TARGETS:
-        reused = bool(previous_run) and name != target
+        reused = bool(previous_run) and name not in selected
         commit = source if reused else current
         if not re.fullmatch(r'[0-9a-f]{40}', commit):
             raise ValueError(f'{name}: expected a full source commit SHA')

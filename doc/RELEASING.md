@@ -127,21 +127,27 @@ does not delete or replace existing entries. All release verification jobs remai
 required regardless of cache hits. Use a normal full build with bypass enabled
 when checking that a release can still be built from scratch.
 
-## Recover one failed target
+## Recover failed targets
 
-After fixing a release packaging problem, you can build only that target and
-reuse the other three packages from the original full run:
+After fixing a release problem, you can rebuild one target or automatically
+rebuild every failed target and reuse the verified packages from the original
+full run:
 
 1. Let the original run finish. The targets to reuse must have passed their
    verification jobs; Windows requires **windows-smoke**, not just a ZIP upload.
 2. Commit and push the fix and this workflow to the branch you want to release.
 3. Open **Actions → Build release → Run workflow** and select that branch.
 4. Set **previous_run_id** to the original full run ID (for example,
-   `39372878915`) and **rebuild_target** to `macos-x86_64` for Intel Mac.
+   `39372878915`). Select **rebuild_target = failed** to rebuild targets whose
+   verification failed or whose artifact is missing/expired. A successful Windows
+   compilation with a failed **windows-smoke** check counts as a failed target.
+   For that example run, this rebuilds **macos-x86_64 and win64**, reusing ARM Mac
+   and Linux. To force a single target, select its name instead; every other
+   target must already have passed its checks.
 5. Optionally check **create_draft** to create the draft prerelease directly after
    recovery succeeds. Leave it unchecked to produce only the complete artifact.
-6. Start the workflow. It verifies and copies the three existing packages into
-   this run, builds and tests the selected target, and assembles
+6. Start the workflow. It verifies and copies the reusable packages into this
+   run, builds and tests the selected targets, and assembles
    `4.0.0-beta.4-complete`. Inspect the downloads before publishing the draft.
 
 Recovery requires the original run to use the same version and an ancestor of
@@ -151,7 +157,10 @@ release-script distribution-list changes may differ. Application, version or
 dependency changes require a full build. Review the changed release tooling too:
 if a fix is needed by several packages, rebuild all targets instead of reusing
 packages affected by it. Expired or missing artifacts and failed verification
-jobs stop recovery before a new build begins. A recovery run itself cannot serve
+jobs stop single-target recovery when they affect another target; **failed**
+selects those targets for rebuilding. The Windows-only launcher and plugin-loader
+sources may differ when **win64 is rebuilt**; changes to shared application
+sources still require a full build. A recovery run itself cannot serve
 as the original full run for another recovery; keep using the original run ID.
 
 The completed bundle includes `RELEASE_MANIFEST.json` with each package's source
@@ -284,6 +293,10 @@ Docker emulation when Wine cannot run Windows programs. Native executable
 validation remains a separate Windows CI job.
 That job launches the same portable profile twice and requires both Qt startup
 and audio decoding, covering first launch and cached graphics startup.
+It first requires Qt, avcodec and the media library to appear in VLC's loadable
+module list, so missing plugin dependencies fail before a GUI startup timeout.
+The Windows loader permits dependencies shipped beside the executable as well
+as Windows system DLLs, while excluding the working directory and `PATH`.
 
 `verify.py` checks the installed version, required Qt/avcodec/media-library plugin
 registration, and generated audio playback with VLC preferences ignored and

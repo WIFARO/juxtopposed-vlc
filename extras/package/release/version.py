@@ -62,14 +62,18 @@ def reported_version(output):
     return banner[1]
 
 
-def verify_binary_version(executable, expected=None, env=None):
+def probe_environment(env=None):
     # VLC translates the CLI banner. Force its language only for this probe.
     probe_env = dict(os.environ if env is None else env, LC_ALL='C', LANGUAGE='C')
     if os.name == 'nt':
         # VLC's CLI checks PWD before opening a console, redirecting stdout to
         # vlc-help.txt, and waiting for RETURN. Keep this subprocess capturable.
         probe_env.setdefault('PWD', os.getcwd())
-    result = subprocess.run([str(executable), '--version'], env=probe_env,
+    return probe_env
+
+
+def verify_binary_version(executable, expected=None, env=None):
+    result = subprocess.run([str(executable), '--version'], env=probe_environment(env),
                             timeout=30, check=True, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True)
     actual = reported_version(result.stdout)
@@ -79,16 +83,32 @@ def verify_binary_version(executable, expected=None, env=None):
     return result.stdout
 
 
+def verify_required_modules(executable, required, env=None):
+    result = subprocess.run([str(executable), '--ignore-config', '--list'],
+                            env=probe_environment(env), timeout=60, check=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    loaded = {line.split()[0] for line in result.stdout.splitlines() if line.split()}
+    missing = [name for name in required if name not in loaded]
+    if missing:
+        raise ValueError(f'Required modules missing: {", ".join(missing)}\n{result.stdout}')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('tag', nargs='?', default=os.environ.get('RELEASE_TAG') or None)
     parser.add_argument('--executable', type=Path, help='Also verify the installed VLC executable')
+    parser.add_argument('--require-module', action='append', default=[], help='Require a loadable module in --list output')
     args = parser.parse_args()
     try:
         expected = validate_tag(args.tag)['version']
         if args.executable:
             print(verify_binary_version(args.executable, expected), end='')
+            if args.require_module:
+                verify_required_modules(args.executable, args.require_module)
+                print('Required modules loaded: ' + ', '.join(args.require_module))
         else:
+            if args.require_module:
+                parser.error('--require-module needs --executable')
             print(expected)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         parser.error(str(error))
