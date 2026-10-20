@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from version import verify_binary_version
@@ -13,14 +14,24 @@ parser.add_argument('--expected-version', help='Require the exact compiled relea
 parser.add_argument('--sample', type=Path, help='Use existing media instead of generating it with FFmpeg')
 parser.add_argument('--gui', action='store_true', help='Also open the Qt interface for a short audio playback check')
 parser.add_argument('--video', action='store_true', help='With --gui, also require video decoding and a Qt video window')
+parser.add_argument('--gui-runs', type=int, default=2, help='Repeat GUI startup with the same cache (default: 2)')
+parser.add_argument('--require-opengl', action='store_true', help='Require the Qt Quick OpenGL renderer, not the software scene graph')
 args = parser.parse_args()
 if args.video and not args.gui:
     parser.error('--video requires --gui')
+if args.gui_runs < 1:
+    parser.error('--gui-runs must be positive')
+if args.require_opengl and not (args.gui and args.video):
+    parser.error('--require-opengl requires --gui --video')
 with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
     state = Path(temp)
     env = dict(os.environ, XDG_CONFIG_HOME=str(state / 'config'),
                XDG_DATA_HOME=str(state / 'data'), XDG_CACHE_HOME=str(state / 'cache'),
                VLC_USERDATA_PATH=str(state / 'userdata'))
+    if args.require_opengl:
+        env.update(QT_QUICK_BACKEND='rhi', QSG_RHI_BACKEND='opengl',
+                   QT_LOGGING_RULES=env.get('QT_LOGGING_RULES', '') +
+                   ';qt.scenegraph.general=true;qt.rhi.general=true')
     executable = str(args.executable.resolve())
     try:
         print(verify_binary_version(executable, args.expected_version, env))
@@ -45,10 +56,12 @@ with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
     print(playback.stdout)
     if 'using audio decoder module' not in playback.stdout:
         raise SystemExit('No audio decoder engaged during playback')
-    if args.gui:
+    for attempt in range(args.gui_runs if args.gui else 0):
+        print(f'GUI startup {attempt + 1}/{args.gui_runs}')
         gui = subprocess.run([executable, '--ignore-config', '--no-media-library',
             '--no-metadata-network-access', '-I', 'qt', *([] if args.video else ['--no-video']), '--aout=dummy',
-            '--no-qt-privacy-ask', '--no-qt-updates-notif', '--play-and-exit', '-vv', str(sample)], env=env,
+            '--no-qt-privacy-ask', '--no-qt-updates-notif', '--play-and-exit',
+            *(['--qt-verbose'] if args.require_opengl else []), '-vv', str(sample)], env=env,
             timeout=60, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         print(gui.stdout)
         if 'using interface module "qt"' not in gui.stdout:
@@ -59,7 +72,12 @@ with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
                     raise SystemExit(f'Video playback missing: {required}')
             if 'using vout display module "vdummy"' in gui.stdout or 'video output display creation failed' in gui.stdout:
                 raise SystemExit('Video output did not render to a working display')
-        for failure in ('failed to load component', 'QQmlApplicationEngine failed', 'is not installed', 'qml loading', 'Cannot load the VLC interface', 'svg icon plugin is not found'):
-            if failure in gui.stdout:
+        for failure in ('failed to load component', 'qqmlapplicationengine failed', 'is not installed', 'qml loading', 'cannot load the vlc interface', 'svg icon plugin is not found',
+                        'failed to load client buffer integration', 'scene graph error:',
+                        'failed to initialize graphics backend', 'failed to create opengl context'):
+            if failure in gui.stdout.lower():
                 raise SystemExit(f'Qt interface reported: {failure}')
+        if args.require_opengl and not (re.search(r'Created OpenGL context|Using existing QOpenGLContext', gui.stdout, re.I)
+                                       and re.search(r'Created QRhi\b', gui.stdout, re.I)):
+            raise SystemExit('Qt Quick did not confirm a working OpenGL renderer')
 print('Release version, required modules and playback smoke checks passed.')

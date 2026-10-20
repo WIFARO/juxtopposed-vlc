@@ -18,37 +18,19 @@ Icon=vlc-juxtopposed
 Categories=AudioVideo;Player;
 Terminal=false
 EOF
-# Override VLC's compile-time install paths after relocation.
-cat > "$appdir/AppRun" <<'EOF'
-#!/usr/bin/env bash
-set -e
-APPDIR=${APPDIR:-$(cd "$(dirname "$0")" && pwd)}
-export VLC_PLUGIN_PATH="$APPDIR/usr/lib/vlc/plugins"
-export VLC_LIB_PATH="$APPDIR/usr/lib/vlc"
-export VLC_LIBEXEC_PATH="$APPDIR/usr/libexec/vlc"
-export VLC_DATA_PATH="$APPDIR/usr/share/vlc"
-export VLC_LOCALE_PATH="$APPDIR/usr/share/locale"
-export LD_LIBRARY_PATH="$APPDIR/usr/lib:$APPDIR/usr/lib/vlc:${LD_LIBRARY_PATH:-}"
-export QT_PLUGIN_PATH="$APPDIR/usr/plugins"
-export QML2_IMPORT_PATH="$APPDIR/usr/qml"
-export QML_IMPORT_PATH="$APPDIR/usr/qml"
-exec "$APPDIR/usr/bin/vlc" -I qt "$@"
-EOF
+# Keep library overrides out of the launched app's child processes.
+cp "$root/extras/package/release/AppRun.linux" "$appdir/AppRun"
 chmod +x "$appdir/AppRun"
-for tool in linuxdeploy linuxdeploy-plugin-qt; do
-    path="$output/tools/downloads/$tool-x86_64.AppImage"
-    if [[ ! -f "$path" ]]; then
-        curl --fail --location --retry 3 "https://github.com/linuxdeploy/$tool/releases/download/continuous/$tool-x86_64.AppImage" -o "$path"
-        chmod +x "$path"
-    fi
-done
-sha256sum "$output"/tools/downloads/*.AppImage > "$output/linux-packaging-tools.sha256"
+python3 "$root/extras/package/release/fetch-linux-tools.py" "$output/tools/downloads" \
+    > "$output/linux-packaging-tools.sha256"
 # Extract the tools as data. Their static AppImage runtimes cannot run under
 # Docker Desktop's Rosetta emulation, while the inner dynamic executables can.
 for tool in linuxdeploy linuxdeploy-plugin-qt; do
     extracted="$output/tools/$tool.AppDir"
-    if [[ ! -e "$extracted/AppRun" ]]; then
-        offset=$(python3 - "$output/tools/downloads/$tool-x86_64.AppImage" <<'PY'
+    # Cached archives are checksum-verified above. Never trust an old extracted
+    # executable tree, which can differ from its verified archive.
+    rm -rf -- "$extracted"
+    offset=$(python3 - "$output/tools/downloads/$tool-x86_64.AppImage" <<'PY'
 import struct, sys
 with open(sys.argv[1], 'rb') as stream:
     header = stream.read(64)
@@ -63,8 +45,7 @@ with open(sys.argv[1], 'rb') as stream:
     print(offset)
 PY
 )
-        unsquashfs -q -d "$extracted" -o "$offset" "$output/tools/downloads/$tool-x86_64.AppImage"
-    fi
+    unsquashfs -q -d "$extracted" -o "$offset" "$output/tools/downloads/$tool-x86_64.AppImage"
     printf '#!/bin/sh\nexec "%s/AppRun" "$@"\n' "$extracted" > "$output/tools/$tool"
     chmod +x "$output/tools/$tool"
 done
@@ -81,7 +62,8 @@ export LD_LIBRARY_PATH="$stage/lib:$stage/lib/vlc:${RELEASE_DEPS_DIR:-$root/buil
     --executable "$appdir/usr/libexec/vlc/vlc-cache-gen" \
     --executable "$appdir/usr/libexec/vlc/vlc-qt-check" \
     --plugin qt
-python3 "$root/extras/package/release/bundle-linux-runtime.py" "$appdir"
+python3 "$root/extras/package/release/bundle-linux-runtime.py" "$appdir" \
+    --qt-plugins "$("$QMAKE" -query QT_INSTALL_PLUGINS)"
 # The directory bundle works without FUSE or a system VLC installation.
 cp "$root/COPYING" "$root/COPYING.LIB" "$root/README.md" "$appdir/"
 cp "$root/modules/gui/qt/fonts/LICENSE.txt" "$appdir/Inter-LICENSE.txt"
@@ -90,7 +72,7 @@ tar -C "$(dirname "$appdir")" -czf "$output/vlc-juxtopposed-$tag-linux-x86_64.ta
 cd "$output"
 sha256sum "vlc-juxtopposed-$tag-linux-x86_64.tar.gz" > "vlc-juxtopposed-$tag-linux-x86_64.tar.gz.sha256"
 python3 - "$tag" <<'PYMETA'
-import hashlib, json, pathlib, sys
+import hashlib, json, os, pathlib, subprocess, sys
 metadata_path = pathlib.Path("linux-build.json")
 metadata = json.loads(metadata_path.read_text())
 archive = pathlib.Path(f"vlc-juxtopposed-{sys.argv[1]}-linux-x86_64.tar.gz")
@@ -100,5 +82,11 @@ with archive.open("rb") as stream:
         digest.update(block)
 metadata.update(asset_name=archive.name, size=archive.stat().st_size, sha256=digest.hexdigest(),
                 package_type="portable-tar", minimum_glibc="2.35")
+runtime = json.loads(pathlib.Path("linux-x86_64/AppDir/LINUX-RUNTIME.json").read_text())
+metadata["minimum_glibcxx"] = runtime["minimum_glibcxx"]
+metadata["runtime_audit"] = {key: value for key, value in runtime.items() if key != "files"}
+metadata["qt_version"] = subprocess.check_output([os.environ["QMAKE"], "-query", "QT_VERSION"], text=True).strip()
+metadata["packaging_tools"] = {pathlib.Path(path).name: value for value, path in
+    (line.split(maxsplit=1) for line in pathlib.Path("linux-packaging-tools.sha256").read_text().splitlines())}
 metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
 PYMETA

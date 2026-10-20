@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+APPDIR=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+export VLC_PLUGIN_PATH="$APPDIR/usr/lib/vlc/plugins"
+export VLC_LIB_PATH="$APPDIR/usr/lib/vlc"
+export VLC_LIBEXEC_PATH="$APPDIR/usr/libexec/vlc"
+export VLC_DATA_PATH="$APPDIR/usr/share/vlc"
+export VLC_LOCALE_PATH="$APPDIR/usr/share/locale"
+# ELF RUNPATH and each executable's qt.conf locate the bundled libraries.
+# Do not pass bundle/SDK paths to browsers, file managers or other child apps.
+unset LD_LIBRARY_PATH QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML2_IMPORT_PATH QML_IMPORT_PATH
+exec "$APPDIR/usr/bin/vlc" -I qt "$@"

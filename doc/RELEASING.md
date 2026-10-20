@@ -7,7 +7,7 @@ The release pipeline builds four native targets. The next release is `4.0.0-beta
 | Windows 10 (1809+) / 11, x86_64 | `vlc-juxtopposed-4.0.0-beta.4-win64.zip` (portable) |
 | macOS Apple Silicon | `vlc-juxtopposed-4.0.0-beta.4-macos-arm64.zip` |
 | macOS Intel | `vlc-juxtopposed-4.0.0-beta.4-macos-x86_64.zip` |
-| Linux x86_64, glibc >= 2.35 | `.tar.gz` portable directory bundle |
+| Linux x86_64, glibc >= 2.35, GLIBCXX >= 3.4.30 | `.tar.gz` portable directory bundle |
 
 The Mac packages are separate native apps, rather than a universal binary.
 Both include Qt, VLC plugins and their non-system dynamic libraries. Packaging
@@ -34,6 +34,28 @@ Linux packages include Qt/QML and VLC's plugin dependency closure using
 linuxdeploy. Host graphics drivers, glibc and desktop services remain system
 requirements. `AppDir/AppRun` sets VLC's relocated resource/helper paths and runs
 the Qt redesign. The archive requires no FUSE installation.
+The bundle includes the Wayland EGL client buffer integrations as well as the
+QPA platform, shell and decoration plugins. The platform plugins alone are not
+sufficient for Qt Quick/OpenGL (see [issue 26](https://github.com/dsojevic/juxtopposed-vlc/issues/26)).
+Every ELF has a relative runtime search path. Each Qt executable has a relative
+`qt.conf`; AppRun clears inherited library/Qt search overrides so these paths do
+not affect browsers, file managers or other launched applications. The packager
+audits the dependency closure without `LD_LIBRARY_PATH`, rejects unexpected host
+dependencies and build paths, and verifies the glibc 2.35 baseline. The shipped
+`LINUX-RUNTIME.json` records required plugins, host ABI libraries and ELF hashes.
+Host graphics drivers and their EGL/GL/Vulkan dispatch libraries stay together;
+the bundle does not mix an older Mesa or libdrm with a newer host GPU driver.
+The host also supplies `libstdc++` and `libgcc_s`, since newer graphics drivers
+can require C++ symbols absent from an older bundled runtime. The required
+`GLIBCXX` ABI is recorded as `minimum_glibcxx` in the runtime/build metadata;
+the standard updated Ubuntu 22.04 runtime satisfies this build's requirement.
+
+These checks apply the runtime-plugin, relocation and environment-isolation
+advice in the [pkgforge portable-AppImage guide](https://github.com/pkgforge-dev/Anylinux-AppImages/blob/main/HOW-TO-MAKE-THESE.md).
+This release remains a FUSE-free directory archive with a documented glibc/host
+graphics requirement. It does not bundle libc or use sharun, and does not claim
+support for musl, non-FHS systems or all Linux distributions. Moving to a fully
+bundled libc/graphics runtime needs separate compatibility and driver testing.
 The Linux build requires both X11 and Wayland backends. Its image provides
 checksum-pinned Wayland scanner/protocol tools while retaining Ubuntu 22.04's
 runtime libraries; missing backend prerequisites fail configuration.
@@ -331,7 +353,17 @@ registration, and generated audio playback with VLC preferences ignored and
 temporary XDG directories on Linux. `--gui` additionally checks Qt startup;
 macOS Qt settings still use Qt's native preferences domain. `--gui --video`
 also requires a Qt video window, video decoding and a working video output;
-both Mac CI jobs and the Linux X11/Wayland checks use this mode. This is a
+both Mac CI jobs and the Linux X11/Wayland checks use this mode. GUI checks start
+twice using the same cache, to cover first launch and cached graphics startup.
+Linux requires a working Qt Quick OpenGL context on both X11 and native Wayland,
+using Mesa's software GPU driver in CI. This exercises EGL and the normal RHI
+rendering path; `QT_QUICK_BACKEND=software` is a separate fallback check. The
+verifier rejects graphics-context and missing-buffer-integration errors even
+when VLC exits with status zero. The runtime audit also runs after extraction
+and relocation, without the build SDK's library paths. A required disposable
+Ubuntu 24.04 runtime test repeats Wayland/OpenGL, X11/OpenGL and software playback
+without system Qt or a build SDK. It uses the identical read-only package and
+also checks compatibility with newer Mesa/LLVM/C++ libraries. This is a
 smoke check, not a complete codec, GUI, GPU, HDR or hardware-device certification.
 Mac packaging also verifies code signatures and all bundled dependency paths.
 
@@ -341,8 +373,13 @@ The release source snapshot includes the contrib recipes, patches, source URLs
 and SHA-512 sums. Retain build logs and exact dependency versions with release
 artifacts. For dependency modifications, distribute the corresponding patched
 source as required by each dependency's license; do not substitute an unrecorded
-local library build. The Linux deployment tool hashes are recorded alongside the
-artifact. VLC and design/font attribution remain in `README.md` and the bundle.
+local library build. Linux deployment-tool SHA-256 digests are pinned in
+`fetch-linux-tools.py` and verified before extraction, including cached downloads.
+Extracted tool trees are recreated from those verified archives. Review the
+upstream release asset and update its pin when adopting a newer tool; a changed
+continuous-release download fails closed until then. Tool hashes are also
+recorded alongside the artifact. VLC and design/font attribution remain in
+`README.md` and the bundle.
 
 ## Update discovery and future installation
 

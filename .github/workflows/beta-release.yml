@@ -262,12 +262,14 @@ jobs:
       - name: Install playback test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg xvfb xauth weston libgl1-mesa-dri
+          sudo apt-get install -y --no-install-recommends ffmpeg xvfb xauth weston libgl1-mesa-dri libegl1 libegl-mesa0 libglx-mesa0
       - name: Verify relocated directory bundle
         run: |
           mkdir -p "$RUNNER_TEMP/relocated"
           tar -xzf build-release-output/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated"
-          QT_QUICK_BACKEND=software xvfb-run -a python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video "$RUNNER_TEMP/relocated/AppDir/AppRun"
+          python3 extras/package/release/bundle-linux-runtime.py --verify-only "$RUNNER_TEMP/relocated/AppDir"
+          QT_QPA_PLATFORM=xcb LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a \
+            python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video --require-opengl "$RUNNER_TEMP/relocated/AppDir/AppRun"
       - name: Verify native Wayland playback
         run: |
           export XDG_RUNTIME_DIR="$RUNNER_TEMP/wayland-runtime"
@@ -283,8 +285,20 @@ jobs:
             cat "$RUNNER_TEMP/weston.log"
             exit 1
           fi
-          QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY=wayland-release QT_QUICK_BACKEND=software \
-            python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video "$RUNNER_TEMP/relocated/AppDir/AppRun"
+          QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY=wayland-release LIBGL_ALWAYS_SOFTWARE=1 \
+            QT_WAYLAND_CLIENT_BUFFER_INTEGRATION=wayland-egl \
+            python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video --require-opengl "$RUNNER_TEMP/relocated/AppDir/AppRun"
+      - name: Verify software-rendering fallback
+        run: >-
+          QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software xvfb-run -a
+          python3 extras/package/release/verify.py --expected-version "$RELEASE_TAG" --gui --video
+          "$RUNNER_TEMP/relocated/AppDir/AppRun"
+      - name: Verify newer Linux graphics stack without system Qt
+        run: |
+          docker run --rm --cpus=2 --memory=2g \
+            --mount "type=bind,source=$RUNNER_TEMP/relocated,target=/release,readonly" \
+            --mount "type=bind,source=$PWD/extras/package/release,target=/src/extras/package/release,readonly" \
+            ubuntu:24.04 bash /src/extras/package/release/verify-linux-container.sh "$RELEASE_TAG" /release/AppDir
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.prepare.outputs.version }}-linux-x86_64
