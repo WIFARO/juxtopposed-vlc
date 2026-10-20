@@ -194,6 +194,16 @@ static char **paths_to_list( const char *psz_dir, char *psz_path )
                   psz_subdir[0] == '.' ? psz_dir : "",
                   psz_subdir ) == -1 )
             break;
+#ifdef _WIN32
+        /* vlc_opendir uses an extended Windows path, which does not resolve
+         * dot components. Resolve paths such as media\\.\\subtitles first. */
+        char *normalized = realpath( subdirs[i], NULL );
+        if( normalized != NULL )
+        {
+            free( subdirs[i] );
+            subdirs[i] = normalized;
+        }
+#endif
         i++;
     }
     subdirs[i] = NULL;
