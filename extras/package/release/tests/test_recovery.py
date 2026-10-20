@@ -97,6 +97,40 @@ class RecoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'All targets passed'):
             self.plan(target='failed')
 
+    def test_collect_completed_builds_without_repeating_any_build(self):
+        original = dict(source_commit=OLD, jobs=self.jobs(), artifacts=self.artifacts())
+        original['jobs'][1]['conclusion'] = 'failure'
+        original['jobs'][-1]['conclusion'] = 'failure'
+        completed = dict(source_commit='c' * 40, jobs=self.jobs(), artifacts=self.artifacts())
+        with mock.patch.object(recovery, 'run_snapshot', side_effect=[original, completed]), \
+                mock.patch.object(recovery, 'recovery_changes', return_value=[]) as changes:
+            plan = recovery.build_plan(REPO, '1234', 'failed', VERSION, NEW, completed_run='5678')
+        self.assertEqual(plan['rebuild_targets'], 'none')
+        self.assertFalse(plan['build_macos'])
+        self.assertFalse(plan['build_linux'])
+        self.assertFalse(plan['build_windows'])
+        self.assertEqual(len(plan['reuse_matrix']['include']), 4)
+        for entry in plan['reuse_matrix']['include']:
+            new = entry['target'] in ('macos-x86_64', 'win64')
+            self.assertEqual(entry['run_id'], '5678' if new else '1234')
+            self.assertEqual(entry['source_commit'], 'c' * 40 if new else OLD)
+        # No platform exception is allowed when checking the collected binaries.
+        self.assertEqual(changes.call_args_list[-1].args, ('c' * 40, NEW, recovery.ROOT))
+        self.assertEqual(changes.call_args_list[-1].kwargs, {})
+
+    def test_collection_rejects_failed_checks_instead_of_silently_rebuilding(self):
+        original = dict(source_commit=OLD, jobs=self.jobs(), artifacts=self.artifacts())
+        original['jobs'][1]['conclusion'] = 'failure'
+        original['jobs'][-1]['conclusion'] = 'failure'
+        incomplete = dict(source_commit='c' * 40, jobs=self.jobs(), artifacts=self.artifacts())
+        incomplete['jobs'][-1]['conclusion'] = 'failure'
+        with mock.patch.object(recovery, 'run_snapshot', side_effect=[original, incomplete]), \
+                mock.patch.object(recovery, 'recovery_changes', return_value=[]):
+            with self.assertRaisesRegex(ValueError, 'windows-smoke in run 5678 is failure'):
+                recovery.build_plan(REPO, '1234', 'failed', VERSION, NEW, completed_run='5678')
+        with self.assertRaisesRegex(ValueError, 'original previous run'):
+            recovery.build_plan(REPO, '', 'all', VERSION, NEW, completed_run='5678')
+
     def test_previous_checks_and_artifacts_must_be_complete(self):
         jobs = self.jobs()
         jobs[-1]['conclusion'] = 'failure'  # ZIP upload alone does not prove Windows startup.
@@ -285,6 +319,33 @@ class RecoveryTests(unittest.TestCase):
                                          '5678', REPO, '1234', 'macos-x86_64,win64', old, root)
             self.assertEqual({p['target'] for p in manifest['packages'] if not p['reused']}, rebuilt)
             self.assertEqual({p['source_commit'] for p in manifest['packages'] if p['reused']}, {old})
+
+    def test_collection_manifest_records_two_build_runs_and_exact_source_archives(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old, built, command = self.make_repository(root)
+            (root / 'doc/RELEASING.md').write_text('Collector fix\n')
+            command('add', '.')
+            command('-c', 'commit.gpgsign=false', 'commit', '-m', 'collector fix')
+            packaging = recovery.git('rev-parse', 'HEAD', root=root)
+            origins = {}
+            for name in recovery.TARGETS:
+                newer = name in ('macos-x86_64', 'win64')
+                commit = built if newer else old
+                origins[name] = dict(source_commit=commit, run_id='5678' if newer else '1234')
+                self.fixture_package(root / 'artifacts' / f'{VERSION}-{name}', name, commit)
+            manifest = recovery.assemble(root / 'artifacts', root / 'complete', VERSION, packaging,
+                                         '9012', REPO, '1234', 'none', old, root, origins=origins)
+            for package in manifest['packages']:
+                self.assertTrue(package['reused'])
+                self.assertEqual(package['source_commit'], origins[package['target']]['source_commit'])
+                self.assertEqual(package['run_id'], origins[package['target']]['run_id'])
+            for commit in (old, built):
+                self.assertTrue((root / f'complete/vlc-juxtopposed-{VERSION}-source-{commit}.tar.gz').exists())
+            self.assertEqual(manifest['packaging_commit'], packaging)
+            with self.assertRaisesRegex(ValueError, 'Missing artifact origin'):
+                recovery.assemble(root / 'artifacts', root / 'missing-origin', VERSION, packaging,
+                                  '9012', REPO, '1234', 'none', old, root, origins={})
 
     def test_plan_cli_outputs_can_drive_github_job_conditions(self):
         with tempfile.TemporaryDirectory() as temp:

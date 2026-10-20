@@ -78,61 +78,91 @@ def recovery_changes(source, current, root=ROOT, rebuild_targets=()):
 
 
 def selected_targets(value):
-    targets = set(TARGETS) if value == 'all' else set(value.split(','))
-    if not targets or not targets.issubset(TARGETS):
+    targets = set() if value == 'none' else set(TARGETS) if value == 'all' else set(value.split(','))
+    if not targets.issubset(TARGETS):
         raise ValueError(f'Unknown rebuild target selection: {value}')
     return targets
 
 
-def build_plan(repository, previous_run, target, version, current, root=ROOT):
+def run_snapshot(repository, run_id):
+    if not re.fullmatch(r'[1-9][0-9]*', run_id):
+        raise ValueError('Run IDs must be positive integers')
+    run = api(repository, f'actions/runs/{run_id}')
+    if (run['head_repository']['full_name'] != repository or
+            run['path'] != '.github/workflows/beta-release.yml' or
+            run['event'] not in ('push', 'workflow_dispatch')):
+        raise ValueError(f'Run {run_id} must be a Build release run from this repository')
+    if run['status'] != 'completed':
+        raise ValueError(f'Wait for run {run_id} to finish, including Windows startup checks')
+    return dict(source_commit=run['head_sha'],
+                jobs=pages(repository, f'actions/runs/{run_id}/jobs', 'jobs'),
+                artifacts=pages(repository, f'actions/runs/{run_id}/artifacts', 'artifacts'))
+
+
+def matching_artifacts(snapshot, version, name):
+    return [a for a in snapshot['artifacts'] if a['name'] == f'{version}-{name}' and not a['expired']]
+
+
+def verified(snapshot, name):
+    return any(j['name'] == TARGETS[name]['job'] and j['conclusion'] == 'success' for j in snapshot['jobs'])
+
+
+def reuse_entry(snapshot, run_id, name, version):
+    if not verified(snapshot, name):
+        job = TARGETS[name]['job']
+        states = ', '.join(j.get('conclusion') or j.get('status', 'unknown')
+                           for j in snapshot['jobs'] if j['name'] == job) or 'missing'
+        raise ValueError(f'Cannot reuse {name}: {job} in run {run_id} is {states}; '
+                         'select failed to rebuild all failed targets')
+    matches = matching_artifacts(snapshot, version, name)
+    if len(matches) != 1:
+        raise ValueError(f'Missing, expired or ambiguous artifact for {version}-{name} in run {run_id}')
+    return dict(target=name, artifact_id=str(matches[0]['id']), run_id=run_id,
+                source_commit=snapshot['source_commit'])
+
+
+def build_plan(repository, previous_run, target, version, current, root=ROOT, completed_run=''):
     if bool(previous_run) != (target != 'all'):
         raise ValueError('Select rebuild targets and provide a previous run ID together, or use all with no run ID')
+    if completed_run and not previous_run:
+        raise ValueError('A completed build run requires an original previous run ID and target selection')
     selected = selected_targets(target) if target != 'failed' else set()
     reused = []
     source = current
     changes = []
     if previous_run:
-        if not re.fullmatch(r'[1-9][0-9]*', previous_run):
-            raise ValueError('The previous run ID must be a positive integer')
-        run = api(repository, f'actions/runs/{previous_run}')
-        if (run['head_repository']['full_name'] != repository or
-                run['path'] != '.github/workflows/beta-release.yml' or
-                run['event'] not in ('push', 'workflow_dispatch')):
-            raise ValueError('Reuse requires a Build release run from this repository')
-        if run['status'] != 'completed':
-            raise ValueError('Wait for the previous run to finish, including Windows startup checks')
-        source = run['head_sha']
-        jobs = pages(repository, f'actions/runs/{previous_run}/jobs', 'jobs')
-        artifacts = pages(repository, f'actions/runs/{previous_run}/artifacts', 'artifacts')
-        def verified(name):
-            return any(j['name'] == TARGETS[name]['job'] and j['conclusion'] == 'success' for j in jobs)
-        def matching_artifacts(name):
-            return [a for a in artifacts if a['name'] == f'{version}-{name}' and not a['expired']]
+        snapshot = run_snapshot(repository, previous_run)
+        source = snapshot['source_commit']
         if target == 'failed':
-            selected = {name for name in TARGETS if not verified(name) or len(matching_artifacts(name)) != 1}
+            selected = {name for name in TARGETS if not verified(snapshot, name) or
+                        len(matching_artifacts(snapshot, version, name)) != 1}
             if not selected:
                 raise ValueError('All targets passed and have artifacts; select a specific target to rebuild')
         changes = recovery_changes(source, current, root, rebuild_targets=selected)
-        for name, spec in TARGETS.items():
+        for name in TARGETS:
             if name in selected:
                 continue
-            if not verified(name):
-                states = ', '.join(j['conclusion'] or j['status'] for j in jobs if j['name'] == spec['job']) or 'missing'
-                raise ValueError(f'Cannot reuse {name}: {spec["job"]} in run {previous_run} is {states}; '
-                                 'select failed to rebuild all failed targets')
-            matches = matching_artifacts(name)
-            if len(matches) != 1:
-                raise ValueError(f'Missing, expired or ambiguous artifact for {version}-{name}')
-            reused.append(dict(target=name, artifact_id=str(matches[0]['id'])))
+            reused.append(reuse_entry(snapshot, previous_run, name, version))
+        if completed_run:
+            completed = run_snapshot(repository, completed_run)
+            # Collected binaries must already include every application change.
+            # Only release tooling/docs may differ from the packaging commit.
+            recovery_changes(completed['source_commit'], current, root)
+            for name in TARGETS:
+                if name in selected:
+                    reused.append(reuse_entry(completed, completed_run, name, version))
+            selected = set()
     macs = [dict(runner='macos-15' if name == 'macos-arm64' else 'macos-15-intel',
                  arch=TARGETS[name]['architecture']) for name in TARGETS
             if name.startswith('macos-') and name in selected]
     return dict(recovery=bool(previous_run), previous_run=previous_run, source_commit=source,
-                reuse=bool(reused), rebuild_targets=','.join(name for name in TARGETS if name in selected),
+                reuse=bool(reused), rebuild_targets=','.join(name for name in TARGETS if name in selected) or 'none',
                 macos_matrix=dict(include=macs), build_macos=bool(macs),
                 build_linux='linux-x86_64' in selected,
                 build_windows='win64' in selected,
-                reuse_matrix=dict(include=reused), changed_paths=changes)
+                reuse_matrix=dict(include=reused), changed_paths=changes,
+                reuse_origins={entry['target']: dict(source_commit=entry['source_commit'], run_id=entry['run_id'])
+                               for entry in reused})
 
 
 def validate_package(directory, target, version, source):
@@ -169,7 +199,7 @@ def file_digest(path):
 
 
 def assemble(artifacts, output, version, current, run_id, repository, previous_run='',
-             target='all', source='', root=ROOT):
+             target='all', source='', root=ROOT, origins=None):
     if output.exists():
         raise ValueError(f'Output already exists: {output}')
     packages = []
@@ -177,13 +207,21 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
     # Validate the whole set before producing anything that looks complete.
     for name in TARGETS:
         reused = bool(previous_run) and name not in selected
-        commit = source if reused else current
+        if not reused:
+            origin = dict(source_commit=current, run_id=run_id)
+        elif origins is None:
+            origin = dict(source_commit=source, run_id=previous_run)
+        else:
+            origin = origins.get(name)
+        if not origin:
+            raise ValueError(f'Missing artifact origin for {name}')
+        commit = origin['source_commit']
         if not re.fullmatch(r'[0-9a-f]{40}', commit):
             raise ValueError(f'{name}: expected a full source commit SHA')
         directory = artifacts / f'{version}-{name}'
         metadata = validate_package(directory, name, version, commit)
         packages.append(dict(target=name, source_commit=commit, reused=reused,
-                             run_id=str(previous_run if reused else run_id),
+                             run_id=str(origin['run_id']),
                              asset_name=metadata['asset_name'], size=metadata['size'],
                              sha256=metadata['sha256']))
     output.mkdir(parents=True)
@@ -241,6 +279,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['plan', 'validate', 'assemble', 'publish'])
     parser.add_argument('--previous-run', default=os.environ.get('PREVIOUS_RUN_ID', ''))
+    parser.add_argument('--completed-run', default=os.environ.get('COMPLETED_BUILD_RUN_ID', ''))
     parser.add_argument('--target', default=os.environ.get('REBUILD_TARGET') or 'all')
     parser.add_argument('--repository', default=os.environ.get('GITHUB_REPOSITORY', ''))
     parser.add_argument('--source', default=os.environ.get('REUSED_SOURCE_COMMIT', ''))
@@ -251,7 +290,8 @@ def main():
         version = validate_tag(os.environ.get('RELEASE_TAG') or None)['version']
         current = git('rev-parse', 'HEAD')
         if args.command == 'plan':
-            plan = build_plan(args.repository, args.previous_run, args.target, version, current)
+            plan = build_plan(args.repository, args.previous_run, args.target, version, current,
+                              completed_run=args.completed_run)
             print(json.dumps(plan, indent=2))
             if os.environ.get('CREATE_DRAFT') == 'true':
                 check_release_tag(args.repository, version, current)
@@ -262,7 +302,8 @@ def main():
             validate_package(args.directory, args.target, version, args.source)
         elif args.command == 'assemble':
             assemble(args.directory, args.output, version, current, os.environ['GITHUB_RUN_ID'],
-                     args.repository, args.previous_run, args.target, args.source)
+                     args.repository, args.previous_run, args.target, args.source,
+                     origins=json.loads(os.environ['REUSE_ORIGINS']) if os.environ.get('REUSE_ORIGINS') else None)
         else:
             check_release_tag(args.repository, version, current)
             flags = ['--prerelease'] if validate_tag(version)['channel'] != 'stable' else []

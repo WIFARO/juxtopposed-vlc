@@ -177,8 +177,36 @@ already point to that exact commit; the workflow never moves tags or replaces an
 existing release. Draft creation leaves publication to you. This avoids pushing
 a tag yourself and starting another full build after a successful recovery.
 
+### Collect builds after a reuse or aggregation failure
+
+If the native builds pass but reuse/aggregation fails, let the existing run finish
+and keep its artifacts. A new workflow can collect those completed builds without
+compiling them again. Set:
+
+| Input | Example |
+| --- | --- |
+| **previous_run_id** | `39372878915` (the original full run) |
+| **rebuild_target** | `failed` |
+| **completed_build_run_id** | `39413427739` (the run containing the rebuilt packages) |
+| **create_draft** | Checked if a draft is wanted |
+
+The planner obtains the already-verified packages from the original run and the
+selected replacements from the completed build run. It starts no native build
+jobs. The overall completed run may be red because reuse failed, but every
+collected target must have a successful verification job and an available
+artifact. Missing packages, failed checks or application changes since the
+completed build stop collection; they never silently start another compilation.
+The original full run remains the baseline, so a recovery run is not used as a
+replacement baseline. Each artifact keeps its own run ID, source commit and hash
+in `RELEASE_MANIFEST.json`, and each distinct source commit is archived.
+
+The v4 download action nests artifacts downloaded by ID under their artifact
+name unless `merge-multiple: true` is set. Reuse downloads explicitly use that
+option so package metadata, archives and checksums are at the expected root.
+
 GitHub's **Re-run failed jobs** uses the original commit. To pick up a committed
-packaging fix, start a new recovery run. The original failed run remains failed.
+packaging fix, start a new recovery or collection run. The original failed run
+remains failed.
 
 ## Create a release with a pushed tag
 

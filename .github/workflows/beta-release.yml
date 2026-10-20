@@ -7,6 +7,10 @@ on:
         description: 'Recovery: original full run ID to reuse (blank for a full build)'
         type: string
         default: ''
+      completed_build_run_id:
+        description: 'Optional: collect rebuilt targets from this completed run instead of rebuilding them'
+        type: string
+        default: ''
       rebuild_target:
         description: 'Targets to rebuild; failed automatically rebuilds failed or missing targets'
         type: choice
@@ -59,6 +63,7 @@ jobs:
       build_linux: ${{ steps.plan.outputs.build_linux }}
       build_windows: ${{ steps.plan.outputs.build_windows }}
       reuse_matrix: ${{ steps.plan.outputs.reuse_matrix }}
+      reuse_origins: ${{ steps.plan.outputs.reuse_origins }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -82,6 +87,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PREVIOUS_RUN_ID: ${{ inputs.previous_run_id }}
+          COMPLETED_BUILD_RUN_ID: ${{ inputs.completed_build_run_id }}
           REBUILD_TARGET: ${{ inputs.rebuild_target || 'all' }}
           CREATE_DRAFT: ${{ inputs.create_draft }}
         run: python3 extras/package/release/recovery.py plan
@@ -99,13 +105,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           artifact-ids: ${{ matrix.artifact_id }}
-          run-id: ${{ needs.prepare.outputs.previous_run }}
+          run-id: ${{ matrix.run_id }}
           github-token: ${{ github.token }}
           path: reused
+          merge-multiple: true
       - name: Verify reused package version, source and checksum
         env:
           REBUILD_TARGET: ${{ matrix.target }}
-          REUSED_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
+          REUSED_SOURCE_COMMIT: ${{ matrix.source_commit }}
           RELEASE_TAG: ${{ needs.prepare.outputs.version }}
         run: python3 extras/package/release/recovery.py validate --directory reused
       - uses: actions/upload-artifact@v4
@@ -412,6 +419,7 @@ jobs:
       PREVIOUS_RUN_ID: ${{ needs.prepare.outputs.previous_run }}
       REBUILD_TARGET: ${{ needs.prepare.outputs.rebuild_targets }}
       REUSED_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
+      REUSE_ORIGINS: ${{ needs.prepare.outputs.reuse_origins }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
