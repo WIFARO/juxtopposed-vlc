@@ -440,6 +440,13 @@ static block_t *ImageWrite( image_handler_t *p_image, picture_t *p_pic,
     {
         p_block = vlc_encoder_EncodeVideo(p_image->p_enc, p_pic);
         picture_Release(p_pic);
+        if (p_block == NULL)
+        {
+            /* Some image encoders return their single image only on drain. */
+            p_block = vlc_encoder_EncodeVideo(p_image->p_enc, NULL);
+            vlc_encoder_Destroy(p_image->p_enc);
+            p_image->p_enc = NULL;
+        }
     }
 
     if( !p_block )

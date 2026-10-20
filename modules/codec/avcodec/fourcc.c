@@ -258,7 +258,7 @@ static const struct vlc_avcodec_fourcc video_codecs[] =
     { VLC_CODEC_G2M4, AV_CODEC_ID_G2M },
     { VLC_CODEC_G2M2, AV_CODEC_ID_G2M },
     { VLC_CODEC_G2M3, AV_CODEC_ID_G2M },
-    /* AV_CODEC_ID_WEBP */
+    { VLC_CODEC_WEBP, AV_CODEC_ID_WEBP },
     { VLC_CODEC_HNM4_VIDEO, AV_CODEC_ID_HNM4_VIDEO },
     { VLC_CODEC_HEVC, AV_CODEC_ID_HEVC },
 

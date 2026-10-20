@@ -505,7 +505,7 @@ static void webp_write_header(uint8_t *p_header, uint32_t i_size, size_t i_heade
     assert(i_header_size == sizeof(webp_simple_lossy_header));
 
     memcpy(p_header, webp_simple_lossy_header, i_header_size);
-    SetDWLE(p_header + 1*sizeof(uint32_t), i_size + 4 + 8);
+    SetDWLE(p_header + 1*sizeof(uint32_t), i_size + (i_size & 1) + 4 + 8);
     SetDWLE(p_header + 4*sizeof(uint32_t), i_size);
 }
 

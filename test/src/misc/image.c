@@ -47,6 +47,34 @@
 const char vlc_module_name[] = MODULE_STRING;
 
 static atomic_bool encoder_opened = false;
+static atomic_uint delayed_opened;
+static atomic_uint delayed_drained;
+static atomic_uint delayed_closed;
+
+static void CheckDelayedEncoder(vlc_object_t *root)
+{
+    image_handler_t *image = image_HandlerCreate(root);
+    assert(image != NULL);
+    video_format_t format;
+    video_format_Init(&format, VLC_CODEC_RGBA);
+    video_format_Setup(&format, VLC_CODEC_RGBA, 16, 16, 16, 16, 1, 1);
+    picture_t *picture = picture_NewFromFormat(&format);
+    assert(picture != NULL);
+    for (unsigned i = 1; i <= 2; ++i)
+    {
+        block_t *block = image_Write(image, picture, &format,
+                                     VLC_CODEC_WEBP, &format);
+        assert(block != NULL && block->i_buffer == 1);
+        assert(block->p_buffer[0] == 42);
+        block_Release(block);
+        assert(atomic_load(&delayed_opened) == i);
+        assert(atomic_load(&delayed_drained) == i);
+        assert(atomic_load(&delayed_closed) == i);
+    }
+    image_HandlerDelete(image);
+    picture_Release(picture);
+    video_format_Clean(&format);
+}
 
 static void CheckPictureExport(vlc_object_t *root)
 {
@@ -129,6 +157,7 @@ static int OpenIntf(vlc_object_t *root)
 
     image_HandlerDelete(ih);
     CheckPictureExport(root);
+    CheckDelayedEncoder(root);
 
     return VLC_SUCCESS;
 }
@@ -141,6 +170,31 @@ static block_t * EncodeVideo(encoder_t *encoder, picture_t *pic)
     return block_Alloc(1);
 }
 
+static block_t *EncodeDelayed(encoder_t *encoder, picture_t *picture)
+{
+    bool *pending = (bool *)encoder->p_sys;
+    if (picture != NULL)
+    {
+        assert(!*pending);
+        *pending = true;
+        return NULL;
+    }
+    assert(*pending);
+    *pending = false;
+    atomic_fetch_add(&delayed_drained, 1);
+    block_t *block = block_Alloc(1);
+    assert(block != NULL);
+    block->p_buffer[0] = 42;
+    return block;
+}
+
+static void CloseDelayed(encoder_t *encoder)
+{
+    assert(!*(bool *)encoder->p_sys);
+    free(encoder->p_sys);
+    atomic_fetch_add(&delayed_closed, 1);
+}
+
 static int OpenEncoder(vlc_object_t *obj)
 {
     encoder_t *encoder = (encoder_t*)obj;
@@ -149,6 +203,17 @@ static int OpenEncoder(vlc_object_t *obj)
         .encode_video = EncodeVideo
     };
     encoder->ops = &ops;
+    if (encoder->fmt_out.i_codec == VLC_CODEC_WEBP)
+    {
+        static const struct vlc_encoder_operations delayed_ops = {
+            .encode_video = EncodeDelayed,
+            .close = CloseDelayed,
+        };
+        encoder->p_sys = calloc(1, sizeof(bool));
+        assert(encoder->p_sys != NULL);
+        encoder->ops = &delayed_ops;
+        atomic_fetch_add(&delayed_opened, 1);
+    }
     atomic_store(&encoder_opened, true);
     return VLC_SUCCESS;
 }
