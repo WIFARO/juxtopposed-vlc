@@ -567,6 +567,14 @@ QString trackOption(const QString& name)
     return {};
 }
 
+es_format_category_e enabledTrackCategory(const QString& name)
+{
+    if (name == QLatin1String("audio")) return AUDIO_ES;
+    if (name == QLatin1String("video")) return VIDEO_ES;
+    if (name == QLatin1String("spu")) return SPU_ES;
+    return UNKNOWN_ES;
+}
+
 QString languageOption(const QString& name)
 {
     if (name == QLatin1String("redesign-audio-language")) return QStringLiteral("audio-language");
@@ -1984,6 +1992,10 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         result.insert(QStringLiteral("help"), qtr("Request a higher process priority from the system. Restart VLC after a change."));
     if (name == QLatin1String("spu"))
         result.insert(QStringLiteral("help"), qtr("Turn this off to hide subtitles. After you turn it on, select a track or open the file again."));
+    if (name == QLatin1String("audio"))
+        result.insert(QStringLiteral("help"), qtr("Turn this off to stop audio. After you turn it on, select a track or open the file again."));
+    if (name == QLatin1String("video"))
+        result.insert(QStringLiteral("help"), qtr("Turn this off to hide video. After you turn it on, select a track or open the file again."));
     if (name == QLatin1String("freetype-font") || name == QLatin1String("freetype-monofont")) {
         const bool family = cfg->i_type == CONFIG_ITEM_FONT;
         const bool monospace = name == QLatin1String("freetype-monofont");
@@ -2671,10 +2683,10 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
         applyToPlayer = normalized.toBool() != value(name).toBool();
     if (m_ctx && name == QLatin1String("recursive"))
         applyToPlayer = normalized.toString() != value(name).toString();
-    if (m_ctx && name == QLatin1String("spu")) {
+    if (const auto category = enabledTrackCategory(name); m_ctx && category != UNKNOWN_ES) {
         auto* player = m_ctx->getIntf()->p_player;
         vlc_player_Lock(player);
-        applyToPlayer = normalized.toBool() != vlc_player_IsSubtitleEnabled(player);
+        applyToPlayer = normalized.toBool() != vlc_player_IsTrackCategoryEnabled(player, category);
         vlc_player_Unlock(player);
     }
     if (m_ctx && (name == QLatin1String("sub-text-scale") || name == QLatin1String("sub-text-size-mode")
@@ -2879,14 +2891,16 @@ bool RedesignPreferences::save()
         else var_SetInteger(instance, bytes.constData(), value(name).toLongLong());
     }
 
-    // Apply audio effects to the current output after persistence succeeds.
-    // Defaults remain available for the next output if nothing is playing.
+    // Update cached player preferences only after persistence succeeds.
     auto* player = m_ctx->getIntf()->p_player;
     // Language preferences are cached by the player. Updating the config alone
     // would leave subsequent episodes using the language from player creation.
     vlc_player_Lock(player);
-    if (previous.contains(QStringLiteral("spu")))
-        vlc_player_SetSubtitleEnabled(player, value(QStringLiteral("spu")).toBool());
+    for (const auto* option : {"audio", "video", "spu"}) {
+        const auto name = qfu(option);
+        if (previous.contains(name))
+            vlc_player_SetTrackCategoryEnabled(player, enabledTrackCategory(name), value(name).toBool());
+    }
     if (previous.contains(QStringLiteral("audio-desync")))
         vlc_player_SetAudioDelay(player, VLC_TICK_FROM_MS(value(QStringLiteral("audio-desync")).toLongLong()), VLC_PLAYER_WHENCE_ABSOLUTE);
     if (previous.contains(QStringLiteral("sub-delay")) || previous.contains(QStringLiteral("sub-delay-ms")))
@@ -3175,7 +3189,13 @@ bool RedesignPreferences::resetAll()
     applyOsdPreferences(intf);
     vlc_subpicture_InvalidateTextStyle();
     vlc_player_Lock(intf->p_player);
-    vlc_player_SetSubtitleEnabled(intf->p_player, bool(config_GetInt("spu")));
+    for (const auto* option : {"audio", "video", "spu"})
+        vlc_player_SetTrackCategoryEnabled(intf->p_player, enabledTrackCategory(qfu(option)), bool(config_GetInt(option)));
+    for (const auto category : {AUDIO_ES, SPU_ES}) {
+        char* language = config_GetPsz(category == AUDIO_ES ? "audio-language" : "sub-language");
+        vlc_player_SelectCategoryLanguage(intf->p_player, category, language);
+        free(language);
+    }
     vlc_player_SetSubtitleTextScale(intf->p_player, config_GetInt("sub-text-scale"));
     vlc_player_SetSubtitleTextSizeMode(intf->p_player, static_cast<vlc_player_subtitle_size_mode>(config_GetInt("sub-text-size-mode")));
     vlc_player_SetSubtitleTextPixelSize(intf->p_player, config_GetInt("sub-text-size-pixels"));
