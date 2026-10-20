@@ -70,13 +70,60 @@ git diff beta-3..HEAD -- .github/workflows extras/package/release doc/RELEASING.
 
 Generated files go into ignored `build-release-*` and `contrib/contrib-*`
 directories, plus the shared `contrib/tarballs` download cache. No script pushes
-Git refs or publishes a release. Local builds can be reviewed before any push.
+Git refs or publishes a release. Local builds can be reviewed before any push;
+the workflow's optional final step creates a draft and may create its version tag.
 
-Use **Run workflow** on the source branch to build and upload artifacts without
+Use **Run workflow** on the source branch with the default inputs (`all`, no
+previous run ID, draft creation unchecked) to build and upload artifacts without
 creating a GitHub release. This is available once the workflow is on the default
 branch. Review the job logs and the `<version>-complete` artifact. The final job
 requires both Mac builds, Linux relocation/playback checks, and native Windows
-startup checks to pass.
+startup checks to pass, either in this run or in the original run when recovering.
+
+## Recover one failed target
+
+After fixing a release packaging problem, you can build only that target and
+reuse the other three packages from the original full run:
+
+1. Let the original run finish. The targets to reuse must have passed their
+   verification jobs; Windows requires **windows-smoke**, not just a ZIP upload.
+2. Commit and push the fix and this workflow to the branch you want to release.
+3. Open **Actions → Build release → Run workflow** and select that branch.
+4. Set **previous_run_id** to the original full run ID (for example,
+   `39372878915`) and **rebuild_target** to `macos-x86_64` for Intel Mac.
+5. Optionally check **create_draft** to create the draft prerelease directly after
+   recovery succeeds. Leave it unchecked to produce only the complete artifact.
+6. Start the workflow. It verifies and copies the three existing packages into
+   this run, builds and tests the selected target, and assembles
+   `4.0.0-beta.4-complete`. Inspect the downloads before publishing the draft.
+
+Recovery requires the original run to use the same version and an ancestor of
+the current commit. Only release tooling, release workflow, documentation and
+release-script distribution-list changes may differ. Application, version or
+dependency changes require a full build. Review the changed release tooling too:
+if a fix is needed by several packages, rebuild all targets instead of reusing
+packages affected by it. Expired or missing artifacts and failed verification
+jobs stop recovery before a new build begins. A recovery run itself cannot serve
+as the original full run for another recovery; keep using the original run ID.
+
+The completed bundle includes `RELEASE_MANIFEST.json` with each package's source
+commit, originating run, size, hash and reuse status. Existing package metadata
+and embedded source commits are preserved. `SOURCE_COMMIT.txt` identifies the
+current release packaging commit, not every binary's source: the release notes
+and manifest list the sources individually. The usual source archive contains
+the current commit; additional `-source-<commit>.tar.gz` archives contain the exact
+sources for reused binaries. `SHA256SUMS.txt` covers the assembled files.
+
+**create_draft** is also available for full manual builds. It uses the checked-out
+commit as the version tag's target if the tag does not exist. An existing tag must
+already point to that exact commit; the workflow never moves tags or replaces an
+existing release. Draft creation leaves publication to you. This avoids pushing
+a tag yourself and starting another full build after a successful recovery.
+
+GitHub's **Re-run failed jobs** uses the original commit. To pick up a committed
+packaging fix, start a new recovery run. The original failed run remains failed.
+
+## Create a release with a pushed tag
 
 Before tagging, update `meson.build`'s project version and `configure.ac`'s
 `AC_INIT` / `VERSION_*` fields together. Add `doc/releases/<version>.md`, then run:
@@ -109,9 +156,11 @@ source commit, Mac build metadata and `SHA256SUMS.txt`. The notes are taken from
 the tagged source and include its commit hash. Inspect and publish the draft
 manually only after downloading and trying the appropriate binaries.
 
-The manual workflow run is a preflight build. Pushing the tag starts a separate
-build of the tagged commit before creating the draft; it does not promote the
-manual run's artifacts. Keep the candidate source unchanged between a successful
+With draft creation unchecked, the manual workflow run is a preflight build.
+Pushing the tag starts a separate build of the tagged commit before creating the
+draft; it does not promote the
+manual run's artifacts. To reuse successful packages, use the recovery inputs
+and **create_draft** above. Keep the candidate source unchanged between a successful
 preflight and tagging, or repeat the preflight for the revised source.
 
 Do not move a tag that has already been pushed. If a release source change is

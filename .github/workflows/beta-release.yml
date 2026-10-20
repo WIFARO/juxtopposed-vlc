@@ -2,11 +2,31 @@ name: Build release
 
 on:
   workflow_dispatch:
+    inputs:
+      previous_run_id:
+        description: 'Recovery: original full run ID to reuse (blank for a full build)'
+        type: string
+        default: ''
+      rebuild_target:
+        description: 'Target to rebuild; select all for a normal full build'
+        type: choice
+        default: all
+        options:
+          - all
+          - macos-x86_64
+          - macos-arm64
+          - linux-x86_64
+          - win64
+      create_draft:
+        description: 'Create a draft release and version tag at this commit after verification'
+        type: boolean
+        default: false
   push:
     tags: ['[0-9]*.[0-9]*.[0-9]*']
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: beta-release-${{ github.ref }}
@@ -21,8 +41,18 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      recovery: ${{ steps.plan.outputs.recovery }}
+      previous_run: ${{ steps.plan.outputs.previous_run }}
+      source_commit: ${{ steps.plan.outputs.source_commit }}
+      macos_matrix: ${{ steps.plan.outputs.macos_matrix }}
+      build_macos: ${{ steps.plan.outputs.build_macos }}
+      build_linux: ${{ steps.plan.outputs.build_linux }}
+      build_windows: ${{ steps.plan.outputs.build_windows }}
+      reuse_matrix: ${{ steps.plan.outputs.reuse_matrix }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Validate release version
         id: version
         env:
@@ -37,19 +67,52 @@ jobs:
             echo 'prerelease=false' >> "$GITHUB_OUTPUT"
           fi
           python3 -m unittest discover -s extras/package/release/tests
+      - name: Plan builds and validate recovery source
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_RUN_ID: ${{ inputs.previous_run_id }}
+          REBUILD_TARGET: ${{ inputs.rebuild_target || 'all' }}
+          CREATE_DRAFT: ${{ inputs.create_draft }}
+        run: python3 extras/package/release/recovery.py plan
+
+  reuse:
+    needs: prepare
+    if: needs.prepare.outputs.recovery == 'true'
+    name: reuse (${{ matrix.target }})
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.reuse_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ matrix.artifact_id }}
+          run-id: ${{ needs.prepare.outputs.previous_run }}
+          github-token: ${{ github.token }}
+          path: reused
+      - name: Verify reused package version, source and checksum
+        env:
+          REBUILD_TARGET: ${{ matrix.target }}
+          REUSED_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.version }}
+        run: python3 extras/package/release/recovery.py validate --directory reused
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ needs.prepare.outputs.version }}-${{ matrix.target }}
+          path: reused/*
+          if-no-files-found: error
 
   macos:
     needs: prepare
+    if: needs.prepare.outputs.build_macos == 'true'
+    name: macos (${{ matrix.runner }}, ${{ matrix.arch }})
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.version }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x86_64
+      matrix: ${{ fromJSON(needs.prepare.outputs.macos_matrix) }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     steps:
@@ -93,6 +156,7 @@ jobs:
 
   linux:
     needs: prepare
+    if: needs.prepare.outputs.build_linux == 'true'
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.version }}
     runs-on: ubuntu-22.04
@@ -148,6 +212,7 @@ jobs:
 
   windows:
     needs: prepare
+    if: needs.prepare.outputs.build_windows == 'true'
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.version }}
     runs-on: ubuntu-22.04
@@ -210,43 +275,40 @@ jobs:
           }
 
   draft:
-    needs: [prepare, macos, linux, windows-smoke]
+    needs: [prepare, reuse, macos, linux, windows, windows-smoke]
+    # Recovery intentionally skips the targets being reused. Do not let those
+    # skips suppress aggregation, or allow a failure/cancellation to look green.
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success' &&
+          !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.version }}
       PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+      PREVIOUS_RUN_ID: ${{ needs.prepare.outputs.previous_run }}
+      REBUILD_TARGET: ${{ inputs.rebuild_target || 'all' }}
+      REUSED_SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
-          path: downloads
-          merge-multiple: true
+          path: release-artifacts
       - name: Prepare provenance and checksums
-        run: |
-          git rev-parse HEAD > downloads/SOURCE_COMMIT.txt
-          git archive --format=tar.gz --prefix=vlc-juxtopposed-${{ needs.prepare.outputs.version }}-source/ HEAD > downloads/vlc-juxtopposed-${{ needs.prepare.outputs.version }}-source.tar.gz
-          cat doc/releases/${{ needs.prepare.outputs.version }}.md > downloads/RELEASE_NOTES.md
-          printf '\nSource commit: `%s`\n' "$(git rev-parse HEAD)" >> downloads/RELEASE_NOTES.md
-          cd downloads
-          sha256sum vlc-juxtopposed-* > SHA256SUMS.txt
+        run: python3 extras/package/release/recovery.py assemble
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.prepare.outputs.version }}-complete
           path: downloads/*
-      # Manual runs only produce artifacts. A pushed tag creates a draft;
-      # publication remains an explicit action by the maintainer.
-      - name: Create draft release for a pushed version tag
-        if: startsWith(github.ref, 'refs/tags/')
+          overwrite: true
+      # Manual runs only create artifacts unless explicitly asked for a draft.
+      # Publication remains an explicit action by the maintainer.
+      - name: Create draft release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.create_draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          flags=()
-          if [[ "$PRERELEASE" == true ]]; then flags+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" --verify-tag --draft "${flags[@]}" \
-            --title 'VLC Juxtopposed Redesign - ${{ needs.prepare.outputs.version }}' \
-            --notes-file downloads/RELEASE_NOTES.md downloads/vlc-juxtopposed-* \
-            downloads/SHA256SUMS.txt downloads/SOURCE_COMMIT.txt downloads/*-build.json
+        run: python3 extras/package/release/recovery.py publish

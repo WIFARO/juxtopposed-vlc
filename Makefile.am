@@ -19,6 +19,7 @@ EXTRA_DIST = \
 	extras/package/macosx/package.mak \
 	extras/package/win32/package.mak \
 	extras/package/release/version.py \
+	extras/package/release/recovery.py \
 	extras/package/release/package.py \
 	extras/package/release/build-native.sh \
 	extras/package/release/build-windows.sh \
@@ -30,6 +31,7 @@ EXTRA_DIST = \
 	extras/package/release/tests/test_version.py \
 	extras/package/release/tests/test_verify.py \
 	extras/package/release/tests/test_package.py \
+	extras/package/release/tests/test_recovery.py \
 	doc/RELEASING.md \
 	extras/package/npapi.am
 
