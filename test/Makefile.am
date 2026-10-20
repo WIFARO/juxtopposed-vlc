@@ -68,6 +68,7 @@ check_PROGRAMS = \
 	test_src_input_stream_fifo \
 	test_src_preparser_cmp_internal_external \
 	test_src_preparser_subtree_identity \
+	test_src_preparser_folder_options \
 	test_src_playlist_preparse_depth \
 	test_src_preparser_fetcher_shutdown \
 	test_src_preparser_thumbnail \
@@ -312,6 +313,8 @@ test_src_input_stream_fifo_SOURCES = src/input/stream_fifo.c
 test_src_input_stream_fifo_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_preparser_cmp_internal_external_SOURCES = src/preparser/cmp_internal_external.c
 test_src_preparser_cmp_internal_external_LDADD = $(LIBVLCCORE) $(LIBVLC)
+test_src_preparser_folder_options_SOURCES = src/preparser/folder_options.c
+test_src_preparser_folder_options_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_preparser_subtree_identity_SOURCES = src/preparser/subtree_identity.c
 test_src_preparser_subtree_identity_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_playlist_preparse_depth_SOURCES = src/playlist/preparse_depth.c

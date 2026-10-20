@@ -950,8 +950,11 @@ void var_OptionParse( vlc_object_t *p_obj, const char *psz_option,
     }
     if( !i_type ) goto cleanup; /* Option doesn't exist */
 
-    if( ( i_type != VLC_VAR_BOOL ) &&
-        ( !psz_value || !*psz_value ) ) goto cleanup; /* Invalid value */
+    /* An empty string clears a string option. Other non-boolean options
+     * still need a value. */
+    if( i_type != VLC_VAR_BOOL &&
+        ( !psz_value || ( !*psz_value && i_type != VLC_VAR_STRING ) ) )
+        goto cleanup;
 
     /* check if option is unsafe */
     if( !trusted && !config_IsSafe( psz_name ) )

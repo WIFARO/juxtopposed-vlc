@@ -1098,6 +1098,20 @@ toJSON_vlc_thumbnailer_output(struct serdes_sys *sys,
 }
 
 static void
+toJSON_input_option(struct serdes_sys *sys,
+                    const struct vlc_preparser_input_option *option,
+                    const char *name)
+{
+    if (name != NULL) {
+        json_stringify_utf8string(sys, name);
+        if (serdes_buf_puts(sys, ": ") < 0)
+            return;
+    }
+    json_stringify_first(string, sys, "value", option->value);
+    json_stringify_last(number, sys, "flags", option->flags);
+}
+
+static void
 toJSON_vlc_preparser_msg_req(struct serdes_sys *sys,
                              const struct vlc_preparser_msg_req *req,
                              const char *name)
@@ -1146,6 +1160,10 @@ toJSON_vlc_preparser_msg_req(struct serdes_sys *sys,
         json_stringify(boolean, sys, "hw_dec", req->arg.hw_dec);
     }
 
+    json_stringify_array(toJSON_input_option, req->input_options.size, sys,
+                         "input_options", req->input_options.data);
+    if (serdes_buf_puts(sys, ", ") < 0)
+        return;
     json_stringify_last(string, sys, "uri", req->uri);
 }
 

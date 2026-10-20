@@ -49,6 +49,11 @@ enum vlc_preparser_msg_req_type {
     VLC_PREPARSER_MSG_REQ_TYPE_THUMBNAIL_TO_FILES,
 };
 
+struct vlc_preparser_input_option {
+    char *value;
+    unsigned flags;
+};
+
 /**
  * Preparser request.
  */
@@ -81,6 +86,10 @@ struct vlc_preparser_msg_req {
     /* `uri` will be freed so it must be heap allocated or set to
      * NULL before a `vlc_preparser_msg_Clean` call. */
     char *uri;
+
+    /** Ordered input options, including their original trust flags.
+     * Values are owned by the request and freed by vlc_preparser_msg_Clean(). */
+    struct VLC_VECTOR(struct vlc_preparser_input_option) input_options;
 };
 
 /**

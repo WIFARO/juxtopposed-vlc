@@ -324,8 +324,25 @@ preparser_task_req_Release(struct vlc_preparser_req *req)
 /**
  * Create a new task.
  */
+static bool
+preparser_req_AddInputOption(struct vlc_preparser_msg_req *req,
+                            const char *value, unsigned flags)
+{
+    struct vlc_preparser_input_option option = {
+        .value = strdup(value),
+        .flags = flags,
+    };
+    if (option.value == NULL)
+        return false;
+    if (!vlc_vector_push(&req->input_options, option)) {
+        free(option.value);
+        return false;
+    }
+    return true;
+}
+
 static struct preparser_task*
-preparser_task_New(input_item_t *item,
+preparser_task_New(vlc_object_t *parent, input_item_t *item,
                    enum vlc_preparser_msg_req_type req_type)
 {
     assert(item != NULL);
@@ -360,6 +377,36 @@ preparser_task_New(input_item_t *item,
             free(task);
             return NULL;
         }
+    }
+
+    /* Workers have independent configuration. Snapshot the current folder
+     * defaults for each request, then apply media-specific options last. */
+    const char *hidden = var_InheritBool(parent, "show-hiddenfiles")
+                       ? "show-hiddenfiles" : "no-show-hiddenfiles";
+    char *ignored = var_InheritString(parent, "ignore-filetypes");
+    char *filter = NULL;
+    bool copied = asprintf(&filter, "ignore-filetypes=%s",
+                           ignored != NULL ? ignored : "") >= 0;
+    free(ignored);
+    if (copied)
+        copied = preparser_req_AddInputOption(&task->req_msg.req, hidden,
+                                              VLC_INPUT_OPTION_TRUSTED)
+              && preparser_req_AddInputOption(&task->req_msg.req, filter,
+                                              VLC_INPUT_OPTION_TRUSTED);
+    free(filter);
+
+    vlc_mutex_lock(&item->lock);
+    for (int i = 0; copied && i < item->i_options; ++i)
+        copied = preparser_req_AddInputOption(&task->req_msg.req,
+                                              item->ppsz_options[i],
+                                              item->optflagv[i]);
+    vlc_mutex_unlock(&item->lock);
+    if (!copied) {
+        vlc_interrupt_destroy(task->interrupt);
+        vlc_preparser_msg_Clean(&task->req_msg);
+        vlc_preparser_msg_Clean(&task->res_msg);
+        free(task);
+        return NULL;
     }
 
     task->item = input_item_Hold(item);
@@ -984,7 +1031,7 @@ preparser_req_NewParse(void *opaque, input_item_t *item, int options,
     };
 
     struct preparser_task *task = NULL;
-    task = preparser_task_New(item, VLC_PREPARSER_MSG_REQ_TYPE_PARSE);
+    task = preparser_task_New(sys->parent, item, VLC_PREPARSER_MSG_REQ_TYPE_PARSE);
     if (task == NULL) {
         return NULL;
     }
@@ -1015,7 +1062,7 @@ preparser_req_NewThumbnail(void *opaque, input_item_t *item,
     };
 
     struct preparser_task *task = NULL;
-    task = preparser_task_New(item, VLC_PREPARSER_MSG_REQ_TYPE_THUMBNAIL);
+    task = preparser_task_New(sys->parent, item, VLC_PREPARSER_MSG_REQ_TYPE_THUMBNAIL);
     if (task == NULL) {
         return NULL;
     }
@@ -1048,7 +1095,7 @@ preparser_req_NewThumbnailToFiles(void *opaque, input_item_t *item,
     };
 
     struct preparser_task *task = NULL;
-    task = preparser_task_New(item,
+    task = preparser_task_New(sys->parent, item,
                               VLC_PREPARSER_MSG_REQ_TYPE_THUMBNAIL_TO_FILES);
     if (task == NULL) {
         return NULL;

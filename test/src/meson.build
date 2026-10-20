@@ -201,6 +201,14 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name' : 'test_src_preparser_folder_options',
+    'sources' : files('preparser/folder_options.c'),
+    'suite' : ['src', 'test_src'],
+    'link_with' : [libvlc, libvlccore],
+    'module_depends' : ['filesystem', 'preparserserializer_json'],
+}
+
+vlc_tests += {
     'name' : 'test_src_preparser_subtree_identity',
     'sources' : files('preparser/subtree_identity.c'),
     'suite' : ['src', 'test_src'],

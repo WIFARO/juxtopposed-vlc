@@ -220,6 +220,12 @@ preparser_req_Preparse(vlc_preparser_t *preparser, struct preparser *pp)
         goto end;
     }
 
+    struct vlc_preparser_input_option *option;
+    vlc_vector_foreach_ref(option, &pp->req_msg.req.input_options)
+        if (input_item_AddOption(pp->res_msg.res.item, option->value,
+                                  option->flags) != VLC_SUCCESS)
+            goto end;
+
     struct vlc_preparser_req *req = NULL;
     switch (pp->req_msg.req_type) {
         case VLC_PREPARSER_MSG_REQ_TYPE_PARSE:

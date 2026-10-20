@@ -90,6 +90,7 @@ vlc_preparser_msg_Init(struct vlc_preparser_msg *msg, int msg_type,
         vlc_vector_init(&msg->req.outputs);
         vlc_vector_init(&msg->req.outputs_path);
         msg->req.uri = NULL;
+        vlc_vector_init(&msg->req.input_options);
     } else {
         msg->res.type = req_type;
         vlc_vector_init(&msg->res.attachments);
@@ -107,6 +108,10 @@ vlc_preparser_msg_Clean(struct vlc_preparser_msg *msg)
     assert(msg != NULL);
 
     if (msg->type == VLC_PREPARSER_MSG_TYPE_REQ) {
+        struct vlc_preparser_input_option *option;
+        vlc_vector_foreach_ref(option, &msg->req.input_options)
+            free(option->value);
+        vlc_vector_clear(&msg->req.input_options);
         vlc_vector_clear(&msg->req.outputs);
         char *ptr = NULL;
         vlc_vector_foreach(ptr, &msg->req.outputs_path) {

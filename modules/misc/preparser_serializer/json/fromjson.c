@@ -1387,6 +1387,28 @@ fromJSON_vlc_preparser_msg_req(struct serdes_sys *sys,
     }
     json_object_to_string(obj, "uri", &req->uri, &err);
 
+    /* Accept requests made before input options were added to the protocol. */
+    if (json_get(obj, "input_options") != NULL) {
+        json_array_foreach_ref(obj, "input_options", v, &err) {
+            if (v->type != JSON_OBJECT) {
+                err = true;
+                break;
+            }
+            struct vlc_preparser_input_option option = {0};
+            int flags = 0;
+            json_object_to_string(&v->object, "value", &option.value, &err);
+            json_object_to_integer(&v->object, "flags", &flags, &err,
+                                     0, UINT8_MAX);
+            option.flags = flags;
+            if (err || option.value == NULL ||
+                !vlc_vector_push(&req->input_options, option)) {
+                free(option.value);
+                err = true;
+                break;
+            }
+        }
+    }
+
     *error |= err;
 }
 
