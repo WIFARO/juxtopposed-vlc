@@ -178,7 +178,8 @@ ColumnLayout {
     }
     Loader {
         Layout.fillWidth: true
-        Layout.topMargin: active ? theme.dp(8) : 0
+        Layout.topMargin: active ? theme.dp(1) : 0
+        Layout.bottomMargin: active ? theme.dp(5) : 0
         active: !!root.presentation.equalizer
         visible: active
         sourceComponent: RedesignEqualizer {
@@ -390,7 +391,7 @@ ColumnLayout {
         id: languageEditor
         Item {
             id: languageControl
-            implicitHeight: theme.dp(root.compact ? 36 : 34)
+            implicitHeight: theme.dp(root.presentation.editorHeight || (root.compact ? 36 : 34))
             property bool custom: false
             function cancelCustom() {
                 if (languageOrder.invalid) root.backend.cancelLanguageEdit(root.optionName)
@@ -584,16 +585,18 @@ ColumnLayout {
                 }
                 background: Rectangle {
                     x: slider.leftPadding; y: (slider.height - height) / 2
-                    width: slider.availableWidth; height: theme.dp(root.presentation.trackHeight || 14); radius: theme.dp(5); color: theme.field
+                    width: slider.availableWidth; height: theme.dp(root.presentation.trackHeight || 14); radius: theme.dp(root.presentation.trackRadius || 5); color: theme.field
                     Rectangle {
                         readonly property real origin: {
                             const crossesZero = Math.min(slider.from, slider.to) < 0 && Math.max(slider.from, slider.to) > 0
                             const position = crossesZero ? -slider.from / (slider.to - slider.from) : 0
                             return slider.mirrored ? 1 - position : position
                         }
-                        x: Math.min(slider.visualPosition, origin) * parent.width
-                        width: Math.abs(slider.visualPosition - origin) * parent.width
-                        height: parent.height; radius: parent.radius; color: theme.progress
+                        readonly property real inset: theme.dp(root.presentation.trackInset || 0)
+                        x: inset + Math.min(slider.visualPosition, origin) * (parent.width - 2 * inset)
+                        y: inset
+                        width: Math.abs(slider.visualPosition - origin) * (parent.width - 2 * inset)
+                        height: parent.height - 2 * inset; radius: Math.max(0, parent.radius - inset); color: theme.progress
                     }
                     Repeater {
                         model: root.presentation.trackTicks || []
