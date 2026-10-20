@@ -207,10 +207,11 @@ ColumnLayout {
     Component {
         id: segmentedEditor
         Rectangle {
-            implicitHeight: theme.dp(root.compact ? 36 : 34)
-            radius: theme.dp(4); color: theme.field
+            objectName: "preferenceSegmentedEditor"
+            implicitHeight: theme.dp(root.presentation.editorHeight || (root.compact ? 36 : 34))
+            radius: theme.dp(root.presentation.inset ? 6 : 4); color: theme.field
             RowLayout {
-                anchors.fill: parent; spacing: theme.dp(2)
+                anchors.fill: parent; anchors.margins: theme.dp(root.presentation.inset || 0); spacing: theme.dp(2)
                 Repeater {
                     model: root.choices
                     RedesignButton {
@@ -223,7 +224,7 @@ ColumnLayout {
                         selected: root.displayedValue === modelData.value
                         background: Rectangle {
                             radius: theme.dp(4)
-                            color: parent.selected ? theme.progress : parent.hovered ? theme.hover : theme.background
+                            color: parent.selected ? theme.progress : parent.hovered ? theme.hover : root.presentation.inset && !root.lightTheme ? "#191919" : theme.background
                             border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent
                         }
                         onClicked: root.commit(modelData.value)
@@ -236,7 +237,7 @@ ColumnLayout {
         id: numberChoiceEditor
         Item {
             id: numberControl
-            implicitHeight: theme.dp(root.compact ? 36 : 34)
+            implicitHeight: theme.dp(root.presentation.editorHeight || (root.compact ? 36 : 34))
             property bool custom: false
             readonly property string nativeOption: root.description.name || ""
             onNativeOptionChanged: if (custom) cancel()
@@ -681,15 +682,16 @@ ColumnLayout {
     Component {
         id: colorEditor
         RedesignButton {
-            implicitHeight: theme.dp(root.compact ? 36 : 34)
-            leftPadding: theme.dp(14); rightPadding: theme.dp(root.compact ? 7 : 6)
+            objectName: "preferenceColorEditor"
+            implicitHeight: theme.dp(root.presentation.editorHeight || (root.compact ? 36 : 34))
+            leftPadding: theme.dp(root.presentation.flatColorField ? 12 : 14); rightPadding: theme.dp(root.presentation.flatColorField ? 5 : root.compact ? 7 : 6)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             readonly property string chosenColor: "#" + Number(root.currentValue).toString(16).padStart(6, "0")
             caption: chosenColor.toUpperCase(); text: qsTr("Choose %1").arg(root.label)
-            background: Rectangle { radius: theme.dp(root.compact ? 6 : 4); border.width: root.compact ? theme.dp(2) : 1; color: theme.field; border.color: root.compact && !root.lightTheme ? "#191919" : theme.border }
+            background: Rectangle { radius: theme.dp(root.compact ? 6 : 4); border.width: root.presentation.flatColorField ? 0 : root.compact ? theme.dp(2) : 1; color: theme.field; border.color: root.compact && !root.lightTheme ? "#191919" : theme.border }
             contentItem: RowLayout {
                 Text { Layout.fillWidth: true; text: parent.parent.caption; color: theme.foreground; font.pixelSize: theme.dp(14) }
-                Rectangle { width: theme.dp(root.compact ? 22 : 20); height: width; color: parent.parent.chosenColor; border.width: root.compact ? theme.dp(1.5) : 1; border.color: root.compact ? Qt.rgba(1, 1, 1, .21) : theme.border; radius: theme.dp(2) }
+                Rectangle { objectName: "preferenceColorSwatch"; width: theme.dp(root.presentation.flatColorField || root.compact ? 22 : 20); height: width; color: parent.parent.chosenColor; border.width: root.presentation.flatColorField ? Math.max(color.r, color.g, color.b) > 0.2 ? 0 : 1 : root.compact ? theme.dp(1.5) : 1; border.color: root.presentation.flatColorField && !root.lightTheme ? "#323232" : root.compact ? Qt.rgba(1, 1, 1, .21) : theme.border; radius: theme.dp(2) }
             }
             onClicked: { const color = root.backend.chooseColor(chosenColor); if (color.length) root.commit(parseInt(color.slice(1), 16)) }
         }
@@ -768,8 +770,9 @@ ColumnLayout {
                 inputMethodHints: root.description.kind === "integer" || root.description.kind === "float" ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                 Accessible.name: root.label || root.description.title
                 background: Rectangle {
-                    x: -theme.dp(root.presentation.fieldOutset || 0)
-                    width: field.width + 2 * theme.dp(root.presentation.fieldOutset || 0); height: field.height
+                    anchors.fill: parent
+                    anchors.leftMargin: -theme.dp(root.presentation.fieldOutset || 0)
+                    anchors.rightMargin: -theme.dp(root.presentation.fieldOutset || 0)
                     radius: theme.dp(root.presentation.fieldRadius || 6); border.width: theme.dp(2); color: theme.field
                     border.color: field.invalid ? "#e56b6b" : field.activeFocus ? theme.accent : !root.lightTheme ? "#191919" : theme.border
                 }

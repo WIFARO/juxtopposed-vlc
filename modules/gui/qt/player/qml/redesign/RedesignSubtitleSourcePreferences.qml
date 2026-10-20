@@ -11,7 +11,7 @@ ColumnLayout {
     property color accentColor: "#d37918"
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     spacing: theme.dp(10)
-    Text { text: qsTr("Online Subtitles"); color: root.theme.bright; font.pixelSize: root.theme.dp(16); Layout.topMargin: root.theme.dp(24) }
+    Text { text: qsTr("Online Subtitles"); color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16); Layout.topMargin: root.theme.dp(24) }
     Text {
         objectName: "subtitleProviderStatus"
         Layout.fillWidth: true

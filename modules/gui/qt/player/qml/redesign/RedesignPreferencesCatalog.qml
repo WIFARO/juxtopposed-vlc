@@ -10,6 +10,13 @@ QtObject {
         return Object.assign({editor: "slider", inlineSlider: true, sliderPadding: 0,
             trackHeight: 16, trackRadius: 6, trackInset: 2, fillFromMinimum: true, hideHelp: true}, options)
     }
+    function subtitleSlider(options) {
+        return Object.assign({editor: "slider", rowHeight: 67, sliderHeight: 51,
+            sliderSpacing: 8, tickHeight: 15, tickFontSize: 12, mutedTicks: true,
+            alignTicksToHandle: false, alignSliderTop: true, sliderTopMargin: 7,
+            sliderPadding: 0, trackHeight: 16, trackRadius: 6, trackInset: 2,
+            fillFromMinimum: true, hideHelp: true}, options)
+    }
     function visibleSections(category, backend) {
         return (sections[category] || []).filter(section => !section.appearance
             && (section.rows.some(row => backend.describe(row[0]).kind !== undefined)
@@ -132,24 +139,24 @@ QtObject {
             { title: qsTr("Tracks"), rows: [ ["redesign-audio-language", qsTr("Preferred audio language"), {editorHeight: 36}], ["audio-desync", qsTr("Audio delay"), {factor: 0.001, decimals: 2, suffix: " s", rowHeight: 46}] ] },
             { title: qsTr("Visualization"), rows: [ ["audio-visual", qsTr("Visualizer"), {choiceLabels: {none: qsTr("Disabled")}}] ] } ],
         subtitles: [
-            { title: qsTr("Tracks & Languages"), rows: [ ["spu", qsTr("Enable subtitles")], ["redesign-sub-language", qsTr("Preferred language")], ["redesign-subtitle-encoding", qsTr("Text encoding"), {dynamicChoices: true}] ] },
+            { title: qsTr("Tracks & Languages"), rows: [ ["spu", qsTr("Enable subtitles")], ["redesign-sub-language", qsTr("Preferred language"), {editorHeight: 36}], ["redesign-subtitle-encoding", qsTr("Text encoding"), {dynamicChoices: true}] ] },
             { title: qsTr("Loading Subtitles"), rows: [ ["sub-autodetect-file", qsTr("Load subtitle files automatically")], ["sub-autodetect-fuzzy", qsTr("File name matching"), {dynamicChoices: true}] ] },
             { title: qsTr("Appearance"), rows: [ ["freetype-font", qsTr("Font"), {placeholder: qsTr("System, sans-serif")}],
-                ["sub-text-size-mode", qsTr("Size values"), {editor: "segmented"}],
-                ["redesign-subtitle-font-size", qsTr("Font size"), {dynamicChoices: true}],
-                ["freetype-bold", qsTr("Bold")], ["freetype-color", qsTr("Text color")],
-                ["freetype-opacity", qsTr("Text opacity"), {editor: "slider", from: 0, to: 100, factor: 100/255, suffix: "%", ticks: [0, 50, 100], trackTicks: [10, 20, 30, 40, 50, 60, 70, 80, 90]}],
-                ["freetype-outline-thickness", qsTr("Outline thickness"), {choices: [{label: qsTr("None"), value: 0}, {label: qsTr("Thin"), value: 1}, {label: qsTr("Normal"), value: 4}, {label: qsTr("Thick"), value: 8}]}], ["freetype-outline-color", qsTr("Outline color")],
+                ["sub-text-size-mode", qsTr("Size values"), {editor: "segmented", editorHeight: 36, rowHeight: 48, inset: 2}],
+                ["redesign-subtitle-font-size", qsTr("Font size"), {dynamicChoices: true, editorHeight: 36, hideHelp: true}],
+                ["freetype-bold", qsTr("Bold")], ["freetype-color", qsTr("Text color"), {rowHeight: 42, editorHeight: 32, flatColorField: true, hideHelp: true}],
+                ["freetype-opacity", qsTr("Text opacity"), subtitleSlider({from: 0, to: 100, factor: 100/255, suffix: "%", ticks: [0, 50, 100], trackTicks: [10, 20, 30, 40, 50, 60, 70, 80, 90]})],
+                ["freetype-outline-thickness", qsTr("Outline thickness"), {choices: [{label: qsTr("None"), value: 0}, {label: qsTr("Thin"), value: 1}, {label: qsTr("Normal"), value: 4}, {label: qsTr("Thick"), value: 8}]}], ["freetype-outline-color", qsTr("Outline color"), {rowHeight: 42, editorHeight: 32, flatColorField: true, hideHelp: true}],
                 ["freetype-shadow-opacity", qsTr("Shadow"), {editor: "toggle", toggleValues: {on: 128, off: 0}}],
-                ["freetype-shadow-color", qsTr("Shadow color")], ["freetype-shadow-distance", qsTr("Shadow distance"), {dynamicChoices: true}],
-                ["redesign-subtitle-background", qsTr("Background")], ["freetype-background-color", qsTr("Background color")],
-                ["redesign-subtitle-background-opacity", qsTr("Background opacity"), {editor: "slider", from: 0, to: 100, factor: 100/255, suffix: "%", ticks: [0, 50, 100], trackTicks: [10, 20, 30, 40, 50, 60, 70, 80, 90]}],
+                ["freetype-shadow-color", qsTr("Shadow color"), {rowHeight: 42, editorHeight: 32, flatColorField: true, hideHelp: true}], ["freetype-shadow-distance", qsTr("Shadow distance"), {dynamicChoices: true}],
+                ["redesign-subtitle-background", qsTr("Background")], ["freetype-background-color", qsTr("Background color"), {rowHeight: 42, editorHeight: 32, flatColorField: true, hideHelp: true}],
+                ["redesign-subtitle-background-opacity", qsTr("Background opacity"), subtitleSlider({from: 0, to: 100, factor: 100/255, suffix: "%", ticks: [0, 50, 100], trackTicks: [10, 20, 30, 40, 50, 60, 70, 80, 90]})],
                 ["sub-text-vertical-position", qsTr("Vertical position")] ] },
-            { title: qsTr("Timing"), rows: [ ["redesign-subtitle-delay", qsTr("Subtitle delay"), {editor: "slider", from: -5, to: 5, factor: 0.001, step: 0.001, decimals: 3, suffix: " s", ticks: [-5, 0, 5], positiveTickSign: true, trackTicks: [-4, -3, -2, -1, 0, 1, 2, 3, 4]}] ] },
+            { title: qsTr("Timing"), rows: [ ["redesign-subtitle-delay", qsTr("Subtitle delay"), subtitleSlider({from: -5, to: 5, factor: 0.001, step: 0.001, decimals: 3, suffix: " s", ticks: [-5, 0, 5], positiveTickSign: true, trackTicks: [-4, -3, -2, -1, 0, 1, 2, 3, 4]})] ] },
             { title: qsTr("On-Screen Messages"), rows: [ ["osd", qsTr("Show feedback for shortcuts")],
-                ["osd-duration", qsTr("Show feedback for"), {editor: "slider", from: 0.5, to: 5, factor: 0.001, step: 0.1, decimals: 1, suffix: " s", ticks: [0.5, 5], trackTicks: [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5], enabledWhen: "osd"}],
+                ["osd-duration", qsTr("Show feedback for"), subtitleSlider({from: 0.5, to: 5, factor: 0.001, step: 0.1, decimals: 1, suffix: " s", ticks: [0.5, 5], trackTicks: [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5], enabledWhen: "osd"})],
                 ["video-title-show", qsTr("Show filename when a video starts")],
-                ["video-title-timeout", qsTr("Show filename for"), {editor: "slider", from: 1, to: 10, factor: 0.001, step: 0.1, suffix: " s", ticks: [1, 10], trackTicks: [2, 3, 4, 5, 6, 7, 8, 9]}] ] } ],
+                ["video-title-timeout", qsTr("Show filename for"), subtitleSlider({from: 1, to: 10, factor: 0.001, step: 0.1, suffix: " s", ticks: [1, 10], trackTicks: [2, 3, 4, 5, 6, 7, 8, 9]})] ] } ],
         library: [
             { title: qsTr("Opening Files"), rows: [ ["one-instance", qsTr("Only allow one VLC window")],
                 ["one-instance-when-started-from-file", qsTr("Apply to files opened from the file manager"), {enabledWhen: "one-instance", hideDisabledValue: true, disabledOpacity: 0.3}],
@@ -205,7 +212,7 @@ QtObject {
             ["freetype-shadow-angle", qsTr("Shadow angle")], ["freetype-text-direction", qsTr("Text direction"), {choices: [
                 {label: qsTr("Automatic"), value: 2}, {label: qsTr("Left to right"), value: 0},
                 {label: qsTr("Right to left"), value: 1}]}],
-            ["freetype-monofont", qsTr("Monospace font"), {placeholder: qsTr("System monospace")}] ] } ],
+            ["freetype-monofont", qsTr("Monospace font"), {placeholder: qsTr("System monospace")}], ["visualization-size", qsTr("Visualization size"), {dynamicChoices: true}] ] } ],
         performance: [ {title: qsTr("Developer"), rows: [
             ["sout-transcode-venc", qsTr("Video encoder"), {dynamicChoices: true, emptyChoiceValue: "none"}],
             ["sout-transcode-aenc", qsTr("Audio encoder"), {dynamicChoices: true, emptyChoiceValue: "none"}],

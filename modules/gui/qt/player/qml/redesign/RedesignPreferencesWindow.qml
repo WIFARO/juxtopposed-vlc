@@ -15,7 +15,7 @@ RedesignSettingsDialog {
     accentColor: MainCtx.redesignAccent
     lightTheme: !VLCStyle.palette.isDark
     property string category: "general"
-    readonly property bool usesReferenceSpacing: category === "interface" || category === "privacy" || category === "controls" || category === "library" || category === "audio" || category === "playback" || category === "video"
+    readonly property bool usesReferenceSpacing: category === "interface" || category === "privacy" || category === "controls" || category === "library" || category === "audio" || category === "playback" || category === "video" || category === "subtitles"
     readonly property string categoryTitle: specification.pageTitles[category] || ""
     property bool advanced: false
     property bool expert: false
@@ -394,15 +394,10 @@ RedesignSettingsDialog {
                         }
                     }
                 }
-                RedesignSubtitleSourcePreferences {
-                    width: parent.width
-                    visible: root.search.length ? [qsTr("Online Subtitles"), "OpenSubtitles", qsTr("API key")].some(text => text.toLowerCase().includes(root.search.toLowerCase())) : root.category === "subtitles"
-                    sourceService: SubtitleSources
-                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                }
+
                 Item {
                     visible: !root.search.length
-                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" ? 53 : 50)
+                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles" ? 53 : 50)
                     RedesignButton {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                         height: theme.dp(38)
@@ -426,7 +421,7 @@ RedesignSettingsDialog {
                     delegate: Column {
                         required property var modelData
                         width: parent.width
-                        topPadding: (root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video") && !modelData.title.length ? theme.dp(15) : 0
+                        topPadding: (root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles") && !modelData.title.length ? theme.dp(15) : 0
                         Text {
                             visible: text.length > 0; topPadding: theme.dp(root.category === "general" ? 24 : 20); bottomPadding: theme.dp(10)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
@@ -451,6 +446,12 @@ RedesignSettingsDialog {
                         plugins: preferenceStore.pluginCatalog()
                         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     }
+                }
+                RedesignSubtitleSourcePreferences {
+                    width: parent.width
+                    visible: root.search.length ? [qsTr("Online Subtitles"), "OpenSubtitles", qsTr("API key")].some(text => text.toLowerCase().includes(root.search.toLowerCase())) : root.category === "subtitles"
+                    sourceService: SubtitleSources
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 }
                 RedesignButton {
                     visible: root.advanced && !root.search.length
