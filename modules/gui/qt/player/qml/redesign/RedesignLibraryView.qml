@@ -47,6 +47,7 @@ Item {
     property bool canEnqueue: true
     property string unnamedItemTitle: ""
     property string defaultItemIcon: category === 4 ? "queue" : category === 2 ? "music" : category === 3 ? "network" : "video"
+    property var artworkForItem: model => model.thumbnail || model.small_cover || model.cover || ""
     property var artworkIconForItem: model => model.fileIsDir || root.showingFolders ? "folder" : model.iconName || root.defaultItemIcon
     property bool showingFolders: false
     property bool showAddRow: category > 0 && category < 5
@@ -499,7 +500,7 @@ Item {
                 readonly property string itemTitle: model.title || model.name || model.fileName || (model.url ? root.nameFromUrl(model.url) : "") || root.unnamedItemTitle
                 readonly property string itemArtist: model.main_artist || ""
                 readonly property string displayTitle: itemTitle + ((!root.expanded || !root.grid) && itemArtist ? " - " + itemArtist : "")
-                readonly property string itemArtwork: model.thumbnail || model.small_cover || model.cover || ""
+                readonly property string itemArtwork: root.artworkForItem(model)
                 function focusMediaItem() { mediaButton.forceActiveFocus(Qt.TabFocusReason) }
                 RedesignButton {
                     id: grip

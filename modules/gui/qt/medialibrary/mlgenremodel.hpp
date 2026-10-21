@@ -24,6 +24,7 @@
 #endif
 
 #include <memory>
+#include <QTimer>
 #include "mlbasemodel.hpp"
 #include "mlgenre.hpp"
 
@@ -33,6 +34,7 @@ class MLGenreModel : public MLBaseModel
 
     Q_PROPERTY(QString coverDefault READ getCoverDefault WRITE setCoverDefault
                NOTIFY coverDefaultChanged FINAL)
+    Q_PROPERTY(bool coverDefaultSingle READ coverDefaultSingle WRITE setCoverDefaultSingle NOTIFY coverDefaultSingleChanged FINAL)
 
 public:
     enum Roles
@@ -55,9 +57,12 @@ public:
 
     QString getCoverDefault() const;
     void setCoverDefault(const QString& defaultCover);
+    bool coverDefaultSingle() const { return m_coverDefaultSingle; }
+    void setCoverDefaultSingle(bool single);
 
 signals:
     void coverDefaultChanged() const;
+    void coverDefaultSingleChanged();
 
 protected:
     QVariant itemRoleData(const MLItem *item, int role) const override;
@@ -70,7 +75,11 @@ private:
 
     QString getCover(const MLGenre* genre, int blur) const;
 
+    void refreshCovers();
     QString m_coverDefault;
+    bool m_coverDefaultSingle = false;
+    quint64 m_coverRevision = 0;
+    QTimer m_coverRefreshTimer;
 
 private:
     struct Loader : public MLListCacheLoader::MLOp

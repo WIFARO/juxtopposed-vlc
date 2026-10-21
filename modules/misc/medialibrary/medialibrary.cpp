@@ -2029,8 +2029,13 @@ int MediaLibrary::controlMedia( int query, va_list args )
         {
             auto mrl = va_arg( args, const char* );
             auto sizeType = va_arg( args, int );
-            m->setThumbnail( mrl, static_cast<medialibrary::ThumbnailSizeType>( sizeType ) );
-            return VLC_SUCCESS;
+            if ( sizeType < VLC_ML_THUMBNAIL_SMALL || sizeType >= VLC_ML_THUMBNAIL_SIZE_COUNT )
+                return VLC_EGENERIC;
+            const auto size = static_cast<medialibrary::ThumbnailSizeType>( sizeType );
+            const bool success = m->setThumbnail( mrl, size );
+            // Manual thumbnail changes need the same notification as generated ones.
+            onMediaThumbnailReady( m, size, success );
+            return success ? VLC_SUCCESS : VLC_EGENERIC;
         }
         case VLC_ML_MEDIA_ADD_EXTERNAL_MRL:
         {

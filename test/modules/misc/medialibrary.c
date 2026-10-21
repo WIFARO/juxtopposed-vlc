@@ -149,6 +149,50 @@ static void ValidateThumbnail(void *data, const vlc_ml_event_t *event)
     vlc_sem_post(sem);
 }
 
+struct ManualThumbnail {
+    vlc_sem_t seen;
+    int64_t media_id;
+    const char *mrl;
+};
+
+static void ValidateManualThumbnail(void *data, const vlc_ml_event_t *event)
+{
+    struct ManualThumbnail *expected = data;
+    if (event->i_type != VLC_ML_EVENT_MEDIA_THUMBNAIL_GENERATED
+        || event->media_thumbnail_generated.p_media->i_id != expected->media_id
+        || event->media_thumbnail_generated.i_size != VLC_ML_THUMBNAIL_BANNER)
+        return;
+    assert(event->media_thumbnail_generated.b_success);
+    const vlc_ml_thumbnail_t *thumbnail =
+        &event->media_thumbnail_generated.p_media->thumbnails[VLC_ML_THUMBNAIL_BANNER];
+    assert(thumbnail->i_status == VLC_ML_THUMBNAIL_STATUS_AVAILABLE);
+    assert(thumbnail->psz_mrl && !strcmp(thumbnail->psz_mrl, expected->mrl));
+    vlc_sem_post(&expected->seen);
+}
+
+static void TestManualThumbnail(vlc_medialibrary_t *ml, int64_t media_id)
+{
+    vlc_ml_media_t *media = vlc_ml_get_media(ml, media_id);
+    assert(media);
+    assert(media->thumbnails[VLC_ML_THUMBNAIL_SMALL].i_status == VLC_ML_THUMBNAIL_STATUS_AVAILABLE);
+    struct ManualThumbnail expected = {
+        .media_id = media_id,
+        .mrl = media->thumbnails[VLC_ML_THUMBNAIL_SMALL].psz_mrl,
+    };
+    vlc_sem_init(&expected.seen, 0);
+    vlc_ml_event_callback_t *listener =
+        vlc_ml_event_register_callback(ml, ValidateManualThumbnail, &expected);
+    assert(vlc_ml_media_set_thumbnail(ml, media_id, expected.mrl,
+                                     (vlc_ml_thumbnail_size_t)-1) == VLC_EGENERIC);
+    assert(vlc_ml_media_set_thumbnail(ml, media_id, expected.mrl,
+                                     VLC_ML_THUMBNAIL_SIZE_COUNT) == VLC_EGENERIC);
+    assert(vlc_ml_media_set_thumbnail(ml, media_id, expected.mrl,
+                                     VLC_ML_THUMBNAIL_BANNER) == VLC_SUCCESS);
+    assert(vlc_sem_timedwait(&expected.seen, vlc_tick_now() + VLC_TICK_FROM_SEC(2)) == 0);
+    vlc_ml_event_unregister_callback(ml, listener);
+    vlc_ml_media_release(media);
+}
+
 static void TestBookmarks(vlc_medialibrary_t *ml, int64_t media_id)
 {
     assert(vlc_ml_media_add_bookmark(ml, media_id, 42023) == VLC_SUCCESS);
@@ -442,6 +486,7 @@ static int OpenIntf(vlc_object_t *root)
     vlc_sem_wait(&sem);
     vlc_ml_event_unregister_callback(ml, listener);
 
+    TestManualThumbnail(ml, media->i_id);
     TestAssociatedTracks(root, ml, media, MOCK_URL);
     TestBookmarks(ml, media->i_id);
     TestResumeProgress(root, ml);

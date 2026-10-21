@@ -115,7 +115,6 @@ public:
 
     bool isNew() const;
     void setIsNew(bool isNew);
-    void setSmallCover(vlc_ml_thumbnail_status_t status, QString mrl);
     QString getResolutionName() const;
     QString getChannel() const;
     QString getDisplayMRL() const;

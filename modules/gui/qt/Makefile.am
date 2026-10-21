@@ -971,6 +971,8 @@ libqt_plugin_la_RES = \
 	pixmaps/icons/ic_fluent_arrow_sync_24_regular.svg \
 	pixmaps/icons/regex.svg \
 	pixmaps/icons/ic_fluent_text_change_case_24_regular.svg \
+	pixmaps/redesign/music-dark.svg \
+	pixmaps/redesign/music-light.svg \
 	pixmaps/menu/redesign/play.svg \
 	pixmaps/menu/redesign/stop.svg \
 	pixmaps/menu/redesign/previous.svg \

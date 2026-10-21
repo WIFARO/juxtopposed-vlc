@@ -1,4 +1,8 @@
 <RCC>
+    <qresource prefix="/redesign">
+        <file alias="music-dark.svg">pixmaps/redesign/music-dark.svg</file>
+        <file alias="music-light.svg">pixmaps/redesign/music-light.svg</file>
+    </qresource>
     <qresource prefix="/fonts">
         <file alias="DMMono-Regular.ttf">fonts/DMMono-Regular.ttf</file>
         <file alias="DMMono-LICENSE.txt">fonts/DMMono-LICENSE.txt</file>

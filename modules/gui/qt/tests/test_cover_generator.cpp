@@ -37,6 +37,36 @@ private slots:
         for (int y=0;y<image.height();++y) for (int x=0;x<image.width();++x)
             QCOMPARE(image.pixelColor(x,y),QColor("#428b69"));
     }
+    void singleDefaultUsesOneImageAndIgnoresUnreadableCovers() {
+        QTemporaryDir directory;
+        QImage pattern(100,60,QImage::Format_RGB32);
+        pattern.fill(Qt::red);
+        QPainter painter(&pattern); painter.fillRect(50,0,50,60,Qt::blue); painter.end();
+        const auto path=directory.filePath("fallback.png"); QVERIFY(pattern.save(path));
+        CoverGenerator generator; generator.setSize({200,100});
+        generator.setCountX(4); generator.setCountY(2); generator.setSplit(CoverGenerator::Duplicate);
+        generator.setDefaultThumbnail(path);
+        QCOMPARE(generator.execute({}).pixelColor(37,30),QColor(Qt::blue));
+        generator.setSingleDefault(true);
+        for (const auto& files : {QStringList{},QStringList{QStringLiteral("/missing/cover.png")}}) {
+            const auto image=generator.execute(files);
+            QCOMPARE(image.pixelColor(37,30),QColor(Qt::red));
+            QCOMPARE(image.pixelColor(150,30),QColor(Qt::blue));
+        }
+    }
+    void singleDefaultPreservesTransparencyInRealArtwork() {
+        QTemporaryDir directory;
+        QImage art(20,20,QImage::Format_ARGB32_Premultiplied); art.fill(Qt::transparent);
+        QPainter painter(&art); painter.fillRect(0,0,10,20,Qt::red); painter.end();
+        const auto path=directory.filePath("real.png"); QVERIFY(art.save(path));
+        QImage fallback(20,20,QImage::Format_RGB32); fallback.fill(Qt::blue);
+        const auto fallbackPath=directory.filePath("fallback.png"); QVERIFY(fallback.save(fallbackPath));
+        CoverGenerator generator; generator.setSize({100,60});
+        generator.setDefaultThumbnail(fallbackPath); generator.setSingleDefault(true);
+        const auto image=generator.execute({path});
+        QCOMPARE(image.pixelColor(20,30),QColor(Qt::red));
+        QCOMPARE(image.pixelColor(80,30).alpha(),0);
+    }
     void explicitDefaultAndCollageRemainAvailable() {
         QTemporaryDir directory;
         QImage source(20,20,QImage::Format_RGB32);

@@ -68,6 +68,7 @@ public: // Interface
     void setBlur(int radius);
 
     void setDefaultThumbnail(const QString & fileName);
+    void setSingleDefault(bool single) { m_singleDefault = single; }
 
     int requiredNoOfThumbnails() const;
 
@@ -95,6 +96,7 @@ private:
     int m_blur;
 
     QString m_default;
+    bool m_singleDefault = false;
 };
 
 #endif // COVERGENERATOR_HPP

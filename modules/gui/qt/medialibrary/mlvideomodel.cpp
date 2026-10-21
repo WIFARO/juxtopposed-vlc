@@ -149,7 +149,7 @@ void MLVideoModel::thumbnailUpdated(const QModelIndex& idx, MLItem* mlitem, cons
 {
     auto videoItem = static_cast<MLVideo*>(mlitem);
     videoItem->setSmallCover(status, mrl);
-    emit dataChanged(idx, idx, {VIDEO_THUMBNAIL});
+    emit dataChanged(idx, idx, {VIDEO_THUMBNAIL, MEDIA_SMALL_COVER});
 }
 
 void MLVideoModel::generateThumbnail(uint64_t id) const

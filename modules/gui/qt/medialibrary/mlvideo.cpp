@@ -123,11 +123,6 @@ void MLVideo::setIsNew(bool isNew)
     m_isNew = isNew;
 }
 
-void MLVideo::setSmallCover(vlc_ml_thumbnail_status_t status, QString mrl)
-{
-    m_smallThumbnail = {std::move(mrl), status};
-}
-
 QString MLVideo::getDisplayMRL() const
 {
     return m_mrl.toString(QUrl::PrettyDecoded | QUrl::RemoveUserInfo | QUrl::PreferLocalFile | QUrl::NormalizePathSegments);

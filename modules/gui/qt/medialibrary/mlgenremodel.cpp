@@ -23,6 +23,7 @@
 
 // MediaLibrary includes
 #include "mlcustomcover.hpp"
+#include <QUrlQuery>
 #include "mlartistmodel.hpp"
 
 //-------------------------------------------------------------------------------------------------
@@ -42,6 +43,9 @@ static const int MLGENREMODEL_COVER_BLUR = 4;
 MLGenreModel::MLGenreModel(QObject *parent)
     : MLBaseModel(parent)
 {
+    m_coverRefreshTimer.setSingleShot(true);
+    m_coverRefreshTimer.setInterval(100);
+    connect(&m_coverRefreshTimer, &QTimer::timeout, this, &MLGenreModel::refreshCovers);
 }
 
 QVariant MLGenreModel::itemRoleData(const MLItem *item, const int role) const
@@ -94,12 +98,38 @@ void MLGenreModel::setCoverDefault(const QString& defaultCover)
         return;
     m_coverDefault = defaultCover;
     emit coverDefaultChanged();
+    refreshCovers();
+}
+
+void MLGenreModel::setCoverDefaultSingle(bool single)
+{
+    if (m_coverDefaultSingle == single) return;
+    m_coverDefaultSingle = single;
+    emit coverDefaultSingleChanged();
+    refreshCovers();
+}
+
+void MLGenreModel::refreshCovers()
+{
+    ++m_coverRevision;
+    const int rows = rowCount();
+    if (rows > 0)
+        emit dataChanged(index(0), index(rows - 1), {GENRE_COVER, GENRE_COVER_NONBLUR});
 }
 
 void MLGenreModel::onVlcMlEvent(const MLEvent &event)
 {
     switch (event.i_type)
     {
+        case VLC_ML_EVENT_MEDIA_THUMBNAIL_GENERATED:
+            if (event.media_thumbnail_generated.b_success
+                && event.media_thumbnail_generated.i_size == VLC_ML_THUMBNAIL_SMALL
+                && event.media_thumbnail_generated.i_media_type == VLC_ML_MEDIA_TYPE_AUDIO)
+                m_coverRefreshTimer.start();
+            break;
+        case VLC_ML_EVENT_ALBUM_UPDATED:
+            m_coverRefreshTimer.start();
+            break;
         case VLC_ML_EVENT_GENRE_ADDED:
             emit resetRequested();
             return;
@@ -129,13 +159,17 @@ vlc_ml_sorting_criteria_t MLGenreModel::nameToCriteria(QByteArray name) const
 
 QString MLGenreModel::getCover(const MLGenre * genre, int blur) const
 {
-    return MLCustomCover::url(genre->getId()
+    QUrl url(MLCustomCover::url(genre->getId()
                             , QSize(MLGENREMODEL_COVER_WIDTH, MLGENREMODEL_COVER_HEIGHT)
                             , m_coverDefault
                             , MLGENREMODEL_COVER_COUNTX
                             , MLGENREMODEL_COVER_COUNTY
                             , blur
-                            , true);
+                            , true, m_coverDefaultSingle));
+    QUrlQuery query(url);
+    query.addQueryItem(QStringLiteral("revision"), QString::number(m_coverRevision));
+    url.setQuery(query);
+    return url.toString();
 }
 
 //-------------------------------------------------------------------------------------------------

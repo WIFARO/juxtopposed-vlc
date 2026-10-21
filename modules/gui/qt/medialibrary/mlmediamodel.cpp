@@ -188,6 +188,18 @@ QVariant MLMediaModel::itemRoleData(const MLItem *item, int role) const
     return {};
 }
 
+void MLMediaModel::thumbnailUpdated(const QModelIndex& idx, MLItem* item,
+                                   const QString& mrl, vlc_ml_thumbnail_status_t status)
+{
+    static_cast<MLMedia*>(item)->setSmallCover(status, mrl);
+    QList<int> roles {MEDIA_SMALL_COVER};
+    // MLAudioModel also exposes the same artwork through the older cover role.
+    const int alias = roleNames().key(QByteArrayLiteral("cover"), -1);
+    if (alias >= 0 && alias != MEDIA_SMALL_COVER)
+        roles.append(alias);
+    emit dataChanged(idx, idx, roles);
+}
+
 void MLMediaModel::onVlcMlEvent(const MLEvent &event)
 {
     switch(event.i_type)

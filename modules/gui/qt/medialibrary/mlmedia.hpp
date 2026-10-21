@@ -95,6 +95,11 @@ public:
         return m_smallThumbnail.mrl;
     }
 
+    void setSmallCover(vlc_ml_thumbnail_status_t status, QString mrl)
+    {
+        m_smallThumbnail = {std::move(mrl), status};
+    }
+
     QString bannerCover(vlc_ml_thumbnail_status_t* status = nullptr) const
     {
         if (status) *status = m_bannerThumbnail.status;

@@ -60,6 +60,7 @@ struct MLEvent
         {
             int64_t i_media_id;
             vlc_ml_thumbnail_size_t i_size;
+            vlc_ml_media_type_t i_media_type;
             bool b_success;
             vlc_ml_thumbnail_status_t i_status;
             char* psz_mrl;
@@ -129,6 +130,7 @@ struct MLEvent
                 media_thumbnail_generated.i_media_id = event->media_thumbnail_generated.p_media->i_id;
                 media_thumbnail_generated.b_success = event->media_thumbnail_generated.b_success;
                 media_thumbnail_generated.i_size = thumbnailSize;
+                media_thumbnail_generated.i_media_type = event->media_thumbnail_generated.p_media->i_type;
                 media_thumbnail_generated.i_status = thumbnail.i_status;
                 if (media_thumbnail_generated.b_success && mrl)
                     media_thumbnail_generated.psz_mrl = strdup(mrl);

@@ -245,6 +245,8 @@ RedesignLibraryView {
     unnamedItemTitle: category === 2 && !currentFolder && !selectedCollection && musicSection !== "Songs" ? collectionFallbackTitle : ""
     showAddRow: category > 0 && category < 5 && !(category === 3 && network.linked) && (category !== 1 || !currentFolder || (folderLoader.item && folderLoader.item.directoryCount > 0))
     canEnqueue: !(category === 2 && musicSection === "" || category === 3 && network.atRoot)
+    artworkForItem: model => category === 2 && musicSection === "Genres" && !selectedCollection && !currentFolder
+        ? model.coverNonBlur || "" : model.thumbnail || model.small_cover || model.cover || ""
     artworkIconForItem: model => category === 3 && !network.atRoot && network.branch(model) ? "folder"
         : model.fileIsDir || showingFolders ? "folder" : model.iconName || defaultItemIcon
     emptyText: homeSection ? homeSections.find(section => section.key === homeSection).emptyText : selectedPlaylist ? qsTr("This playlist is empty.") : category === 4 ? qsTr("Create a playlist to collect your favorite media.") : category === 3 ? network.podcast && !networkLocation.nodes.length ? qsTr("Add a podcast feed.") : network.atRoot || network.saved ? qsTr("Open a network stream to add it here.") : qsTr("This source has no media.") : qsTr("Add a folder to your library to see your media here.")
@@ -609,7 +611,7 @@ RedesignLibraryView {
     }
     MLAlbumModel { id: albums; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
     MLArtistModel { id: artists; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
-    MLGenreModel { id: genres; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
+    MLGenreModel { id: genres; ml: MediaLib; coverDefaultSingle: true; coverDefault: root.lightTheme ? ":/redesign/music-light.svg" : ":/redesign/music-dark.svg"; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
     MLAudioModel { id: collectionTracks; ml: MediaLib; parentId: root.selectedCollection || root.emptyParentId; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
     MLRecentMediaModel { id: recent; ml: MediaLib; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder; searchPattern: root.searchText }
     MLPlaylistListModel { id: playlists; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }

@@ -55,6 +55,7 @@ struct CoverData
     int blur;
     int split;
     QString defaultCover;
+    bool singleDefault = false;
 };
 
 QUrlQuery toQuery(const CoverData &data)
@@ -69,6 +70,7 @@ QUrlQuery toQuery(const CoverData &data)
     query.addQueryItem(BLUR_KEY, QString::number(data.blur));
     query.addQueryItem(SPLIT_KEY, QString::number(data.split));
     query.addQueryItem(DEFAULT_COVER_KEY, data.defaultCover);
+    if (data.singleDefault) query.addQueryItem(QStringLiteral("single_default"), QStringLiteral("1"));
     return query;
 }
 
@@ -105,6 +107,7 @@ CoverData fromQuery(const QUrlQuery &query, QString *error)
         data.blur = intValue(BLUR_KEY);
         data.split = intValue(SPLIT_KEY);
         data.defaultCover = getValue(DEFAULT_COVER_KEY);
+        data.singleDefault = query.queryItemValue(QStringLiteral("single_default")) == QStringLiteral("1");
 
         return data;
     }
@@ -136,6 +139,11 @@ QStringList getGenreMediaThumbnails(vlc_medialibrary_t* p_ml, const int count, c
 
     thumbnailCopy(ml_range_iterate<vlc_ml_album_t>(list), std::back_inserter(thumbnails), count);
 
+    if (thumbnails.isEmpty())
+    {
+        ml_unique_ptr<vlc_ml_media_list_t> media(vlc_ml_list_media_of(p_ml, &params, VLC_ML_PARENT_GENRE, id));
+        thumbnailCopy(ml_range_iterate<vlc_ml_media_t>(media), std::back_inserter(thumbnails), count);
+    }
     return thumbnails;
 }
 
@@ -278,6 +286,7 @@ private:
                 generator.setSize(data.size);
                 generator.setSplit((CoverGenerator::Split)data.split);
                 generator.setBlur(data.blur);
+                generator.setSingleDefault(data.singleDefault);
 
                 // The redesign draws its own theme-aware playlist placeholder
                 // below this image. Leave it visible until real covers exist.
@@ -314,12 +323,12 @@ MLCustomCover::MLCustomCover(MediaLib *ml)
 }
 
 QString MLCustomCover::url(const MLItemId &parentId, const QSize &size, const QString &defaultCover
-                           , const int countX, const int countY, const int blur, const bool split_duplicate)
+                           , const int countX, const int countY, const int blur, const bool split_duplicate, const bool single_default)
 {
     QUrl url;
     url.setScheme(QStringLiteral("image"));
     url.setHost(MLCustomCover::providerId);
-    url.setQuery(toQuery({parentId, size, countX, countY, blur, split_duplicate, defaultCover}));
+    url.setQuery(toQuery({parentId, size, countX, countY, blur, split_duplicate, defaultCover, single_default}));
     return url.toString();
 }
 

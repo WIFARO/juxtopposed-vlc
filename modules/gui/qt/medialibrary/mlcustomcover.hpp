@@ -41,7 +41,8 @@ public:
                 , const int countX = 2
                 , const int countY = 2
                 , const int blur = 0
-                , const bool split_duplicate = false);
+                , const bool split_duplicate = false
+                , const bool single_default = false);
 
     QQuickImageResponse *requestImageResponse(const QString &id, const QSize &requestedSize);
 
