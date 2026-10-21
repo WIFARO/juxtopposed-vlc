@@ -84,6 +84,7 @@ C.Popup {
             RedesignComboBox {
                 id: filter
                 objectName: "shortcutFilter"
+                leftPadding: theme.dp(12); labelVerticalOffset: 0.5
                 anchors.right: parent.right
                 width: Math.min(theme.dp(200), parent.width * 0.35); height: parent.height
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
@@ -98,10 +99,10 @@ C.Popup {
         Row {
             objectName: "shortcutColumns"
             x: theme.dp(20); y: theme.dp(120); width: parent.width - theme.dp(40); height: theme.dp(41)
-            Text { width: parent.width * .376; text: qsTr("Action"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
-            Text { width: parent.width * .268; horizontalAlignment: Text.AlignHCenter; text: qsTr("Hotkey"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
+            Text { width: parent.width * .376; topPadding: theme.dp(0.5); bottomPadding: -topPadding; text: qsTr("Action"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
+            Text { width: parent.width * .268; leftPadding: -theme.dp(2.5); rightPadding: -leftPadding; topPadding: theme.dp(0.5); bottomPadding: -topPadding; horizontalAlignment: Text.AlignHCenter; text: qsTr("Hotkey"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
             Item { width: parent.width * .088; height: 1 }
-            Text { width: parent.width * .268; horizontalAlignment: Text.AlignHCenter; text: qsTr("Global Hotkey"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
+            Text { width: parent.width * .268; leftPadding: -theme.dp(6.5); rightPadding: -leftPadding; topPadding: theme.dp(0.5); bottomPadding: -topPadding; horizontalAlignment: Text.AlignHCenter; text: qsTr("Global Hotkey"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
         }
         ListView {
             id: list
@@ -124,6 +125,7 @@ C.Popup {
                     Rectangle { width: parent.width; height: theme.dp(1); color: root.lightTheme ? theme.border : "#222222" }
                     Text {
                         y: theme.dp(20); height: theme.dp(30); width: parent.width
+                        topPadding: -theme.dp(0.5); bottomPadding: -topPadding
                         verticalAlignment: Text.AlignVCenter
                         text: row.modelData.group; color: theme.playerHeading; font.pixelSize: theme.dp(16)
                         elide: Text.ElideRight
@@ -135,6 +137,7 @@ C.Popup {
                     Text {
                         width: parent.width * .376; height: parent.height
                         verticalAlignment: Text.AlignVCenter
+                        topPadding: theme.dp(0.5); bottomPadding: -topPadding
                         text: row.modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(14)
                         elide: Text.ElideRight; rightPadding: theme.dp(16)
                     }

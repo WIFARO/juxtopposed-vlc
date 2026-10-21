@@ -378,6 +378,7 @@ C.Dialog {
     Shortcut { sequences: ["Ctrl+Return", "Ctrl+Enter"]; enabled: root.visible && !root.saving; onActivated: root.submit() }
 
     component HeaderComboBox: RedesignComboBox {
+        leftPadding: root.theme.dp(12); labelVerticalOffset: 0.5
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         background: Rectangle {
             color: root.lightTheme ? root.theme.panel : "#151515"; radius: root.theme.dp(6)
@@ -603,7 +604,7 @@ C.Dialog {
                             text: qsTr("Select tracks for %1").arg(entry.modelData.name)
                             tooltipTextFormat: Text.PlainText
                             contentItem: RowLayout {
-                                spacing: root.theme.dp(14)
+                                spacing: root.theme.dp(13)
                                 RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel }
                                 Text { objectName: "trackAssignmentSelection_" + entry.index; Layout.fillWidth: true; text: root.tracks(entry.modelData.url).length ? root.tracks(entry.modelData.url).map(url => root.fileName(url)).join(", ") : qsTr("Select tracks"); textFormat: Text.PlainText; elide: Text.ElideMiddle; color: root.theme.playerHeading; font.pixelSize: root.theme.dp(14) }
                             }

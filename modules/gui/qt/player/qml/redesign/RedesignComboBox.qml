@@ -15,6 +15,7 @@ C.ComboBox {
     property bool restrictChoices: false
     property real choiceHeight: 34
     property real subsequentLabelOffset: 0
+    property real labelVerticalOffset: 0
     property real popupGap: 4
     property real popupBottomPadding: 2
     property Component videoBackdropContent
@@ -77,6 +78,7 @@ C.ComboBox {
     leftPadding: theme.dp(16); rightPadding: theme.dp(40)
     contentItem: Text {
         text: root.displayText; font: root.font
+        topPadding: root.theme.dp(root.labelVerticalOffset); bottomPadding: -topPadding
         color: root.theme.foreground
         verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
     }

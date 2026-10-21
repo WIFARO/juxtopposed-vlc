@@ -116,6 +116,7 @@ C.Dialog {
                     color: root.theme.settingsHeading; placeholderTextColor: root.lightTheme ? root.theme.foreground : "#404040"
                     selectionColor: root.theme.accent; selectedTextColor: root.theme.field
                     font.pixelSize: root.theme.dp(14); padding: root.theme.dp(14)
+                    leftPadding: root.theme.dp(14); topPadding: root.theme.dp(10.5)
                     wrapMode: TextEdit.Wrap
                     selectByMouse: true; readOnly: root.busy
                     Accessible.name: qsTr("Network URLs")
@@ -141,7 +142,9 @@ C.Dialog {
                     id: nameHeading
                     x: root.theme.dp(20); width: parent.width - root.theme.dp(40)
                     y: root.theme.dp(39) - baselineOffset
-                    text: qsTr("Playlist Name (optional)"); color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16)
+                    text: qsTr("Playlist Name <font color='%1'>(optional)</font>").arg(root.theme.playerLabel)
+                    textFormat: Text.RichText
+                    color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16)
                     wrapMode: Text.WordWrap
                 }
                 Text {
