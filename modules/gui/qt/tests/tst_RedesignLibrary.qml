@@ -1066,6 +1066,37 @@ TestCase {
         }
         compare(settings.writes,0)
     }
+    function test_musicCollectionAddImportsFilesInBothLayouts() {
+        library.category = 2
+        library.locationPinTarget = {kind: "collection", key: "artist:1", name: "Artist"}
+        mouseClick(findChild(library, "libraryAddRow"))
+        compare(filesSpy.count, 1)
+        compare(addSpy.count, 0)
+        expandLibrary()
+        const button = findChild(library, "libraryToolbarAddButton")
+        verify(button.visible)
+        compare(button.text, "Add File")
+        mouseClick(button)
+        compare(filesSpy.count, 2)
+        compare(addSpy.count, 0)
+    }
+    function test_narrowLibraryToggleDescribesItsTarget_data() {
+        return [{tag: "compact", expanded: false, icon: "expand", label: "Open full library"},
+                {tag: "expanded", expanded: true, icon: "sidebar", label: "Open compact library"}]
+    }
+    function test_narrowLibraryToggleDescribesItsTarget(data) {
+        testCase.width = 640
+        testCase.Window.window.width = 640
+        library.expanded = data.expanded
+        wait(20)
+        const button = findChild(library, "expandLibraryButton")
+        verify(button.visible)
+        compare(button.iconName, data.icon)
+        compare(button.text, data.label)
+        fullLibrarySpy.clear()
+        mouseClick(button)
+        compare(fullLibrarySpy.count, 1)
+    }
     function test_expandedLibraryKeepsControlsInsideNarrowWindow() {
         testCase.width = 640
         testCase.Window.window.width = 640

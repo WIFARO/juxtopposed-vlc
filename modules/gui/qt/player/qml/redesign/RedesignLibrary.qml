@@ -240,7 +240,7 @@ RedesignLibraryView {
     canGoForward: forwardStack.length > 0
     defaultItemIcon: homeSection === "artists" ? "artist" : homeSection === "listening" ? "music" : category === 4 && !selectedPlaylist ? "playlist" : category === 2 ? "music" : category === 3 ? "network" : "video"
     showingFolders: category === 1 && !currentFolder || folderHasOnlyDirectories || showingSongFolders || homeSection === "folders"
-    showAddRow: category > 0 && category < 5 && !selectedCollection && !(category === 3 && network.linked) && (category !== 1 || !currentFolder || (folderLoader.item && folderLoader.item.directoryCount > 0))
+    showAddRow: category > 0 && category < 5 && !(category === 3 && network.linked) && (category !== 1 || !currentFolder || (folderLoader.item && folderLoader.item.directoryCount > 0))
     canEnqueue: !(category === 2 && musicSection === "" || category === 3 && network.atRoot)
     artworkIconForItem: model => category === 3 && !network.atRoot && network.branch(model) ? "folder"
         : model.fileIsDir || showingFolders ? "folder" : model.iconName || defaultItemIcon

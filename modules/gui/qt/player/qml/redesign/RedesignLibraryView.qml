@@ -122,7 +122,8 @@ Item {
     }
     function addMedia() {
         if (playlistOpen && playlistBusy) return
-        if (category === 4 && !playlistOpen) newPlaylistRequested()
+        if (locationPinTarget?.kind === "collection") filesRequested()
+        else if (category === 4 && !playlistOpen) newPlaylistRequested()
         else addRequested()
     }
     RedesignLibrarySort {
@@ -344,7 +345,8 @@ Item {
                 MoreButton {}
                 LibraryButton {
                     objectName: "expandLibraryButton"
-                    iconName: "expand"; text: qsTr("Open full library")
+                    iconName: root.expanded ? "sidebar" : "expand"
+                    text: root.expanded ? qsTr("Open compact library") : qsTr("Open full library")
                     foreground: root.theme.playerLabel
                     onClicked: root.fullLibraryRequested()
                 }
@@ -387,12 +389,12 @@ Item {
                 SearchField { Layout.preferredWidth: Math.min(root.theme.dp(325), root.width * 0.24); Layout.leftMargin: root.theme.dp(14); Layout.rightMargin: root.theme.dp(14) }
                 LibraryButton {
                     objectName: "libraryToolbarAddButton"
-                    readonly property bool folderLocation: root.locationPinTarget?.kind === "folder"
-                    visible: root.showAddRow || folderLocation
+                    readonly property bool fileLocation: ["folder", "collection"].includes(root.locationPinTarget?.kind)
+                    visible: root.showAddRow || fileLocation
                     enabled: !root.playlistOpen || !root.playlistBusy
-                    iconName: "add"; text: folderLocation ? qsTr("Add File") : root.addLabel
+                    iconName: "add"; text: fileLocation ? qsTr("Add File") : root.addLabel
                     foreground: root.theme.playerLabel
-                    onClicked: folderLocation ? root.filesRequested() : root.addMedia()
+                    onClicked: fileLocation ? root.filesRequested() : root.addMedia()
                 }
                 MoreButton {}
             }
