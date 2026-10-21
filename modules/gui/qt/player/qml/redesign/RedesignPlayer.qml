@@ -228,6 +228,12 @@ FocusScope {
             }
         }
     }
+    Binding {
+        target: MainCtx.videoSurfaceProvider
+        property: "subtitleArea"
+        value: view.subtitleArea
+        when: !!MainCtx.videoSurfaceProvider
+    }
     Binding { target: Player; property: "audioWaveformEnabled"; value: !!MainCtx.redesignPlayerPreferences.audioWaveform }
     Binding { target: Player; property: "subtitleTimelineEnabled"; value: MainCtx.redesignPlayerPreferences.subtitleTimeline }
 

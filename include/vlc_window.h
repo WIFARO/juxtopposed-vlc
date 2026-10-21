@@ -325,6 +325,9 @@ struct vlc_window_callbacks {
      *                indicate absence of an ICC profile
      */
     void (*icc_event)(struct vlc_window *, vlc_icc_profile_t *profile);
+    /** Visible area for default-position subtitles, in normalized window coordinates. */
+    void (*subtitle_area)(struct vlc_window *, float left, float top,
+                          float right, float bottom);
 };
 
 /**
@@ -595,6 +598,14 @@ static inline void vlc_window_ReportSize(vlc_window_t *window,
                                           unsigned width, unsigned height)
 {
     window->owner.cbs->resized(window, width, height, NULL, NULL);
+}
+
+/** Report the visible subtitle area without changing the video size. */
+static inline void vlc_window_ReportSubtitleArea(vlc_window_t *window,
+        float left, float top, float right, float bottom)
+{
+    if (window->owner.cbs->subtitle_area != NULL)
+        window->owner.cbs->subtitle_area(window, left, top, right, bottom);
 }
 
 /**

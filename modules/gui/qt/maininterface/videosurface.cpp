@@ -50,6 +50,8 @@ void VideoSurfaceProvider::enable(vlc_window_t* voutWindow)
     assert(voutWindow);
     m_voutWindow = voutWindow;
     m_pressedButtons = 0;
+    vlc_window_ReportSubtitleArea(m_voutWindow, m_subtitleArea.left(), m_subtitleArea.top(),
+        m_subtitleArea.right(), m_subtitleArea.bottom());
     emit videoEnabledChanged(true);
 }
 
@@ -59,6 +61,19 @@ void VideoSurfaceProvider::disable()
     m_voutWindow = nullptr;
     m_pressedButtons = 0;
     emit videoEnabledChanged(false);
+}
+
+void VideoSurfaceProvider::setSubtitleArea(const QRectF& requested)
+{
+    QRectF area = requested;
+    if (!(area.left() >= 0 && area.top() >= 0 && area.right() <= 1
+          && area.bottom() <= 1 && area.width() > 0 && area.height() > 0))
+        area = QRectF(0, 0, 1, 1);
+    if (area == m_subtitleArea) return;
+    m_subtitleArea = area;
+    if (m_voutWindow)
+        vlc_window_ReportSubtitleArea(m_voutWindow, area.left(), area.top(), area.right(), area.bottom());
+    emit subtitleAreaChanged();
 }
 
 void VideoSurfaceProvider::setVideoEmbed(bool embed)

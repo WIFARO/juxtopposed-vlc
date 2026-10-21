@@ -31,6 +31,7 @@
 #include <vlc_vout_display.h>
 #include <vlc_ancillary.h>
 #include "video_window.h"
+#include "subtitle_area.h"
 #include "vout_internal.h"
 
 #define DOUBLE_CLICK_TIME VLC_TICK_FROM_MS(300)
@@ -58,6 +59,7 @@ typedef struct vout_display_window
 
     video_format_t format;
     struct vout_display_placement display;
+    struct vlc_subtitle_area subtitle_area;
     vlc_mutex_t lock;
 
     struct {
@@ -250,6 +252,28 @@ static void vout_display_window_IccEvent(vlc_window_t *window,
     vout_ChangeIccProfile(vout, profile);
 }
 
+static void vout_display_window_SubtitleArea(vlc_window_t *window,
+        float left, float top, float right, float bottom)
+{
+    vout_display_window_t *state = window->owner.sys;
+    struct vlc_subtitle_area area = { left, top, right, bottom };
+    if (!vlc_subtitle_area_IsValid(area)) area = VLC_SUBTITLE_AREA_FULL;
+    vlc_mutex_lock(&state->lock);
+    state->subtitle_area = area;
+    vlc_mutex_unlock(&state->lock);
+    vout_InvalidateSubtitleArea(state->vout);
+}
+
+void vout_display_window_GetSubtitleArea(vlc_window_t *window, struct vlc_subtitle_area *area)
+{
+    *area = VLC_SUBTITLE_AREA_FULL;
+    if (!window) return;
+    vout_display_window_t *state = window->owner.sys;
+    vlc_mutex_lock(&state->lock);
+    *area = state->subtitle_area;
+    vlc_mutex_unlock(&state->lock);
+}
+
 static const struct vlc_window_callbacks vout_display_window_cbs = {
     .resized = vout_display_window_ResizeNotify,
     .closed = vout_display_window_CloseNotify,
@@ -260,6 +284,7 @@ static const struct vlc_window_callbacks vout_display_window_cbs = {
     .keyboard_event = vout_display_window_KeyboardEvent,
     .output_event = vout_display_window_OutputEvent,
     .icc_event = vout_display_window_IccEvent,
+    .subtitle_area = vout_display_window_SubtitleArea,
 };
 
 void vout_display_window_SetMouseHandler(vlc_window_t *window,
@@ -401,6 +426,7 @@ vlc_window_t *vout_display_window_New(vout_thread_t *vout)
     video_format_Init(&state->format, 0);
     state->display.width = state->display.height = 0;
     vlc_mutex_init(&state->lock);
+    state->subtitle_area = VLC_SUBTITLE_AREA_FULL;
     vlc_mouse_Init(&state->mouse.window);
     vlc_mouse_Init(&state->mouse.video);
     state->mouse.last_left_press = VLC_TICK_MIN;

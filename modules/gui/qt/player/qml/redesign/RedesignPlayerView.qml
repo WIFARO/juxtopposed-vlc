@@ -103,6 +103,11 @@ FocusScope {
     property Component settingsContent
     property QtObject trackPopup
     readonly property alias videoItem: videoLoader.item
+    readonly property rect subtitleArea: videoCanvas.width > 0 && videoCanvas.height > 0
+        ? Qt.rect(root.libraryExpanded ? 0 : viewport.x / videoCanvas.width,
+                  root.libraryExpanded ? 0 : viewport.y / videoCanvas.height,
+                  viewport.width / videoCanvas.width, viewport.height / videoCanvas.height)
+        : Qt.rect(0, 0, 1, 1)
     readonly property alias libraryItem: libraryLoader.item
     readonly property alias settingsItem: settingsLoader.item
     readonly property alias queueItem: queueLoader.item
@@ -275,8 +280,19 @@ FocusScope {
             leftMargin: root.libraryExpanded || root.fullscreen ? 0 : theme.dp(10)
             rightMargin: root.libraryExpanded || root.fullscreen ? 0 : theme.dp(10)
         }
+        clip: true
         Rectangle { anchors.fill: parent; color: audioArtwork.ready && audioArtwork.visible ? "transparent" : "black"; radius: theme.dp(10) }
-        Loader { id: videoLoader; anchors.fill: parent; sourceComponent: root.videoContent }
+        Item {
+            id: videoCanvas
+            objectName: "redesignVideoCanvas"
+            // Fit the picture to the client area, then mask it with the frame.
+            // The mini player retains its own picture plane and aspect ratio.
+            x: root.libraryExpanded ? 0 : -viewport.x
+            y: root.libraryExpanded ? 0 : -viewport.y
+            width: root.libraryExpanded ? viewport.width : root.width
+            height: root.libraryExpanded ? viewport.height : root.height
+            Loader { id: videoLoader; anchors.fill: parent; sourceComponent: root.videoContent }
+        }
         Rectangle {
             // The outer border leaves a rounded opening over the native video layer.
             anchors.fill: parent

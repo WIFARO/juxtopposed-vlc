@@ -40,6 +40,7 @@
 
 #include "../libvlc.h"
 #include "vout_internal.h"
+#include "subtitle_area.h"
 #include "../misc/subpicture.h"
 #include "../input/input_internal.h"
 #include "../clock/clock.h"
@@ -1396,7 +1397,8 @@ static vlc_render_subpicture *SpuRenderSubpictures(spu_t *spu,
                                           const vout_display_place_t *video_position,
                                           vlc_tick_t system_now,
                                           vlc_tick_t render_subtitle_date,
-                                          bool external_scale)
+                                          bool external_scale,
+                                          const vout_display_place_t *safe_area)
 {
     spu_private_t *sys = container_of(spu, spu_private_t, spu);
     const int configured_position = var_InheritInteger(spu, "sub-text-vertical-position");
@@ -1525,6 +1527,8 @@ static vlc_render_subpicture *SpuRenderSubpictures(spu_t *spu,
             /* Check scale validity */
             assert(scale.w != 0 && scale.h != 0);
 
+            const bool default_placement = subpic->b_subtitle && !region->b_absolute
+                && (region->text_flags & VLC_SUBPIC_TEXT_FLAG_DEFAULT_POSITION);
             bool cached_is_in_window;
             int cached_alignment;
             int cached_x, cached_y;
@@ -1533,6 +1537,10 @@ static vlc_render_subpicture *SpuRenderSubpictures(spu_t *spu,
             const int vertical_position = subpic->b_subtitle && entry->channel_order == VLC_VOUT_ORDER_PRIMARY
                 && !region->b_absolute && (region->text_flags & VLC_SUBPIC_TEXT_FLAG_DEFAULT_POSITION)
                 ? default_position : -1;
+            int interface_alignment = entry->channel_order == VLC_VOUT_ORDER_SECONDARY && sys->secondary_alignment >= 0
+                ? sys->secondary_alignment : region->i_align;
+            if (vertical_position >= 0)
+                interface_alignment = (interface_alignment & ~(SUBPICTURE_ALIGN_TOP | SUBPICTURE_ALIGN_BOTTOM)) | vertical_position;
             if (subpic->b_subtitle && !region->b_absolute)
             {
                 cache_pos =
@@ -1583,6 +1591,12 @@ static vlc_render_subpicture *SpuRenderSubpictures(spu_t *spu,
                 output_last_ptr->place.y += video_position->y;
             }
 
+            if (safe_area && default_placement)
+            {
+                const vout_display_place_t target = { .x = output_x, .y = output_y,
+                    .width = output_width, .height = output_height };
+                vlc_subtitle_area_PlaceDefault(&output_last_ptr->place, &target, safe_area, interface_alignment);
+            }
             vlc_vector_push(&output->regions, output_last_ptr);
 
             if (subpic->b_subtitle) {
@@ -2286,7 +2300,7 @@ static int SubSourceGenerate( filter_t *p_filter, void *opaque )
     return VLC_SUCCESS;
 }
 
-vlc_render_subpicture *spu_Render(spu_t *spu,
+vlc_render_subpicture *spu_RenderWithArea(spu_t *spu,
                          const vlc_fourcc_t *chroma_list,
                          const video_format_t *fmt_dst,
                          const video_format_t *fmt_src,
@@ -2294,7 +2308,8 @@ vlc_render_subpicture *spu_Render(spu_t *spu,
                          const vout_display_place_t *video_position,
                          vlc_tick_t system_now,
                          vlc_tick_t render_subtitle_date,
-                         bool ignore_osd)
+                         bool ignore_osd,
+                         const vout_display_place_t *safe_area)
 {
     spu_private_t *sys = container_of(spu, spu_private_t, spu);
     const bool external_scale = chroma_list != NULL;
@@ -2426,11 +2441,20 @@ vlc_render_subpicture *spu_Render(spu_t *spu,
                                                 video_position,
                                                 system_now,
                                                 render_subtitle_date,
-                                                external_scale);
+                                                external_scale, safe_area);
     free(subpicture_array);
     vlc_mutex_unlock(&sys->lock);
 
     return render;
+}
+
+vlc_render_subpicture *spu_Render(spu_t *spu, const vlc_fourcc_t *chroma_list,
+        const video_format_t *fmt_dst, const video_format_t *fmt_src,
+        bool spu_in_full_window, const vout_display_place_t *video_position,
+        vlc_tick_t system_now, vlc_tick_t render_subtitle_date, bool ignore_osd)
+{
+    return spu_RenderWithArea(spu, chroma_list, fmt_dst, fmt_src, spu_in_full_window,
+        video_position, system_now, render_subtitle_date, ignore_osd, NULL);
 }
 
 ssize_t spu_RegisterChannelInternal(spu_t *spu, vlc_clock_t *clock,

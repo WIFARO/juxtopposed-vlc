@@ -59,6 +59,7 @@
 #include "display.h"
 #include "snapshot.h"
 #include "video_window.h"
+#include "subtitle_area.h"
 #include "../misc/variables.h"
 #include "../misc/threads.h"
 #include "../clock/clock.h"
@@ -472,6 +473,14 @@ void vout_ChangeWindowState(vout_thread_t *vout, unsigned st)
     vlc_mutex_lock(&sys->window_lock);
     vlc_window_SetState(sys->display_cfg.window, st);
     vlc_mutex_unlock(&sys->window_lock);
+}
+
+void vout_InvalidateSubtitleArea(vout_thread_t *vout)
+{
+    vout_thread_sys_t *sys = VOUT_THREAD_TO_SYS(vout);
+    assert(!sys->dummy);
+    VoutRenderWakeUpUrgent(sys);
+    vout_control_Wake(&sys->control);
 }
 
 void vout_ChangeDisplaySize(vout_thread_t *vout,
@@ -1253,15 +1262,21 @@ static vlc_render_subpicture *RenderSPUs(vout_thread_sys_t *sys,
                                 const video_format_t *spu_frame,
                                 vlc_tick_t system_now, vlc_tick_t render_subtitle_date,
                                 bool ignore_osd, bool spu_in_full_window,
-                                const vout_display_place_t *video_position)
+                                const vout_display_place_t *video_position, bool window_coordinates)
 {
     if (unlikely(sys->spu == NULL))
         return NULL;
-    return spu_Render(sys->spu,
+    struct vlc_subtitle_area area;
+    vout_display_window_GetSubtitleArea(sys->display->cfg->window, &area);
+    vout_display_place_t bounds;
+    const bool has_bounds = vlc_subtitle_area_GetBounds(area,
+        sys->display->cfg->display.width, sys->display->cfg->display.height,
+        sys->display->place, spu_frame, window_coordinates, &bounds);
+    return spu_RenderWithArea(sys->spu,
                       subpicture_chromas, spu_frame,
                       sys->display->source, spu_in_full_window, video_position,
                       system_now, render_subtitle_date,
-                      ignore_osd);
+                      ignore_osd, has_bounds ? &bounds : NULL);
 }
 
 static int PrerenderPicture(vout_thread_sys_t *sys, picture_t *filtered,
@@ -1358,7 +1373,7 @@ static int PrerenderPicture(vout_thread_sys_t *sys, picture_t *filtered,
     if (!vd_does_blending && blending_before_converter && sys->spu_blend) {
         vlc_render_subpicture *subpic = RenderSPUs(sys, NULL, &fmt_spu_rot,
                                           system_now, render_subtitle_date,
-                                          do_snapshot, spu_in_full_window, video_place);
+                                          do_snapshot, spu_in_full_window, video_place, vd_does_blending);
         if (subpic) {
             picture_t *blent = picture_pool_Get(sys->private_pool);
             if (blent) {
@@ -1409,7 +1424,7 @@ static int PrerenderPicture(vout_thread_sys_t *sys, picture_t *filtered,
     {
         vlc_render_subpicture *subpic = RenderSPUs(sys, NULL, &fmt_spu_rot,
                                           system_now, render_subtitle_date,
-                                          do_snapshot, spu_in_full_window, video_place);
+                                          do_snapshot, spu_in_full_window, video_place, vd_does_blending);
         if (subpic)
         {
             picture_BlendSubpicture(todisplay, sys->spu_blend, subpic);
@@ -1421,7 +1436,7 @@ static int PrerenderPicture(vout_thread_sys_t *sys, picture_t *filtered,
     if (vd_does_blending)
         *out_subpic = RenderSPUs(sys, vd->info.subpicture_chromas, &fmt_spu_rot,
                                  system_now, render_subtitle_date,
-                                 false, spu_in_full_window, video_place);
+                                 false, spu_in_full_window, video_place, vd_does_blending);
     else
         *out_subpic = NULL;
 

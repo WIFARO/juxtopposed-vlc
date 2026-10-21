@@ -600,6 +600,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_video_output_subtitle_area',
+    'sources': files('video_output/subtitle_area.c'),
+    'suite': ['src', 'test_src'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_video_output_filter_format',
     'sources': files('video_output/filter_format.c'),
     'suite': ['src', 'test_src'],

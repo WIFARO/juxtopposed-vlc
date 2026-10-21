@@ -30,3 +30,6 @@ void vout_display_ResizeWindow(vlc_window_t *,
                                const struct vout_display_placement *restrict dp);
 void vout_display_window_SetMouseHandler(vlc_window_t *,
                                          vlc_mouse_event, void *);
+
+struct vlc_subtitle_area;
+void vout_display_window_GetSubtitleArea(vlc_window_t *, struct vlc_subtitle_area *);

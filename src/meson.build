@@ -237,6 +237,7 @@ libvlccore_sources_base = files(
     'video_output/vout_wrapper.h',
     'video_output/video_window.c',
     'video_output/video_window.h',
+    'video_output/subtitle_area.h',
     'video_output/opengl.c',
     'video_output/vout_intf.c',
     'video_output/vout_internal.h',

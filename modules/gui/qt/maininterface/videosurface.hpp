@@ -20,6 +20,7 @@
 
 #include "widgets/native/viewblockingrectangle.hpp"
 #include <QMutex>
+#include <QRectF>
 #include <QRunnable>
 #include <QPointer>
 #include "qt.hpp"
@@ -40,6 +41,7 @@ class VideoSurface;
 class VideoSurfaceProvider : public VideoBackdropProvider
 {
     Q_OBJECT
+    Q_PROPERTY(QRectF subtitleArea READ subtitleArea WRITE setSubtitleArea NOTIFY subtitleAreaChanged FINAL)
 
     QPointer<VideoSurface> m_videoSurface;
 
@@ -52,6 +54,8 @@ public:
     bool isEnabled();
 
     void setVideoEmbed(bool embed);
+    QRectF subtitleArea() const { return m_subtitleArea; }
+    void setSubtitleArea(const QRectF& area);
     bool hasVideoEmbed() const;
 
     QPointer<VideoSurface> videoSurface() { return m_videoSurface; }
@@ -60,6 +64,7 @@ public:
     bool supportsThreadedSurfaceUpdates() const { return m_threadedSurfaceUpdates; };
 
 signals:
+    void subtitleAreaChanged();
     void ctxChanged(MainCtx*);
     bool videoEnabledChanged(bool);
     bool hasVideoEmbedChanged(bool);
@@ -81,6 +86,7 @@ public slots:
                                     const std::optional<qreal>& scale);
 
 protected:
+    QRectF m_subtitleArea {0, 0, 1, 1};
     vlc_window_t* m_voutWindow = nullptr;
     unsigned m_pressedButtons = 0;
     bool m_videoEmbed = false;

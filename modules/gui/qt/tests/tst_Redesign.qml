@@ -18,6 +18,7 @@ TestCase {
         visible: false
     }
     property var seekEventOrder: []
+    Component { id: videoClickProbe; SignalSpy { signalName: "clicked" } }
     property bool consumeVideoHover: false
     property int activeBackdrops: 0
     Component {
@@ -1027,6 +1028,51 @@ TestCase {
         wait(20)
         compare(findChild(player, "redesignToolbar").height, 81)
         verify(findChild(player, "redesignViewport").height > 0)
+    }
+    function test_pictureUsesClientPlaneAndMiniPlayerKeepsItsOwnSurface() {
+        testCase.width = 1920; testCase.height = 1080
+        wait(20)
+        const video = player.videoItem
+        for (const mode of ["normal", "minimal", "fullscreen"]) {
+            player.minimalView = mode === "minimal"
+            player.fullscreen = mode === "fullscreen"
+            wait(20)
+            compare(video.mapToItem(player, 0, 0), Qt.point(0, 0))
+            compare(video.width, player.width)
+            compare(video.height, player.height)
+            const viewport = findChild(player, "redesignViewport")
+            compare(player.subtitleArea, Qt.rect(viewport.x / player.width, viewport.y / player.height,
+                                                 viewport.width / player.width, viewport.height / player.height))
+        }
+        player.fullscreen = false; player.minimalView = false
+        testCase.width = 640; testCase.height = 360
+        wait(20)
+        compare(video.mapToItem(player, 0, 0), Qt.point(0, 0))
+        compare(video.width, player.width)
+        compare(video.height, player.height)
+        const mini = openMiniPlayer()
+        compare(player.videoItem, video)
+        compare(video.mapToItem(mini.videoArea, 0, 0), Qt.point(0, 0))
+        compare(video.width, mini.videoArea.width)
+        compare(video.height, mini.videoArea.height)
+        compare(player.subtitleArea, Qt.rect(0, 0, 1, 1))
+        player.libraryOpen = false
+        wait(20)
+        compare(video.mapToItem(player, 0, 0), Qt.point(0, 0))
+        compare(video.width, player.width)
+        compare(video.height, player.height)
+    }
+    function test_picturePlaneDoesNotReceiveBorderOrChromeClicks() {
+        consumeVideoHover = true
+        const video = player.videoItem
+        const spy = createTemporaryObject(videoClickProbe, testCase, {target: video})
+        mouseClick(player, 5, 180)
+        compare(spy.count, 0)
+        mouseClick(player, 20, 180)
+        compare(spy.count, 1)
+        mouseClick(findChild(player, "playButton"))
+        compare(spy.count, 1)
+        verify(player.playing)
     }
     function test_lightPaletteAndExpandedLibrary() {
         player.lightTheme = true
