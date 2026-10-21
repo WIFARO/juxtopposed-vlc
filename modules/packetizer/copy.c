@@ -166,7 +166,14 @@ static block_t *Packetize ( decoder_t *p_dec, block_t **pp_block )
     decoder_sys_t *p_sys = p_dec->p_sys;
     block_t *p_ret = p_sys->p_block;
 
-    if( pp_block == NULL || *pp_block == NULL )
+    if( pp_block == NULL )
+    {
+        p_sys->p_block = NULL;
+        if( p_ret && p_sys->pf_parse )
+            p_sys->pf_parse( p_dec, p_ret );
+        return p_ret;
+    }
+    if( *pp_block == NULL )
         return NULL;
     if( (*pp_block)->i_flags&(BLOCK_FLAG_CORRUPTED) )
     {
