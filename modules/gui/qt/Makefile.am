@@ -849,8 +849,14 @@ ui_%.h: %.ui
 EXTRA_DIST += fonts/README.md
 
 libqt_plugin_la_RES = \
-	fonts/InterVariable.ttf \
-	fonts/InterVariable-Italic.ttf \
+	fonts/Inter-Regular.otf \
+	fonts/Inter-Medium.otf \
+	fonts/Inter-SemiBold.otf \
+	fonts/Inter-Bold.otf \
+	fonts/Inter-Italic.otf \
+	fonts/Inter-MediumItalic.otf \
+	fonts/Inter-SemiBoldItalic.otf \
+	fonts/Inter-BoldItalic.otf \
 	fonts/LICENSE.txt \
 	pixmaps/VLCIcons.ttf \
 	pixmaps/addons/addon_default.svg \

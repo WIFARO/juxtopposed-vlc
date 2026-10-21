@@ -952,8 +952,15 @@ static void *Thread( void *obj )
 
     // Use the Figma design's font on every platform, including machines where
     // Inter is not installed. Preserve system fallback for other scripts.
-    const int interfaceFont = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/InterVariable.ttf"));
-    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/InterVariable-Italic.ttf"));
+    // Static styles let older Qt/font backends select the medium and semibold
+    // weights as well, instead of treating every non-bold weight as regular.
+    const int interfaceFont = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Inter-Regular.otf"));
+    for (const auto &style : {"Medium", "SemiBold", "Bold", "Italic", "MediumItalic",
+                              "SemiBoldItalic", "BoldItalic"})
+    {
+        if (QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Inter-%1.otf").arg(QLatin1String(style))) < 0)
+            msg_Warn(p_intf, "Cannot load bundled Inter font style %s", style);
+    }
     const auto families = QFontDatabase::applicationFontFamilies(interfaceFont);
     if (!families.isEmpty()) {
         auto font = app.font();

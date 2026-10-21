@@ -1,7 +1,13 @@
 <RCC>
     <qresource prefix="/fonts">
-        <file alias="InterVariable.ttf">fonts/InterVariable.ttf</file>
-        <file alias="InterVariable-Italic.ttf">fonts/InterVariable-Italic.ttf</file>
+        <file alias="Inter-Regular.otf">fonts/Inter-Regular.otf</file>
+        <file alias="Inter-Medium.otf">fonts/Inter-Medium.otf</file>
+        <file alias="Inter-SemiBold.otf">fonts/Inter-SemiBold.otf</file>
+        <file alias="Inter-Bold.otf">fonts/Inter-Bold.otf</file>
+        <file alias="Inter-Italic.otf">fonts/Inter-Italic.otf</file>
+        <file alias="Inter-MediumItalic.otf">fonts/Inter-MediumItalic.otf</file>
+        <file alias="Inter-SemiBoldItalic.otf">fonts/Inter-SemiBoldItalic.otf</file>
+        <file alias="Inter-BoldItalic.otf">fonts/Inter-BoldItalic.otf</file>
         <file alias="Inter-LICENSE.txt">fonts/LICENSE.txt</file>
     </qresource>
     <qresource prefix="/logo">
