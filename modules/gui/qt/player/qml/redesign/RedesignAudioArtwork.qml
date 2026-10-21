@@ -28,7 +28,7 @@ Item {
     }
     Item {
         anchors.horizontalCenter: parent.horizontalCenter
-        y: parent.height * .0742
+        y: parent.height * (220 / 3) / 986
         width: root.coverSize; height: width
         Image {
             anchors.centerIn: parent
@@ -56,14 +56,16 @@ Item {
     Text {
         objectName: "audioArtworkTitle"
         anchors.horizontalCenter: parent.horizontalCenter
-        y: parent.height * .9
+        // The reference baseline is 906 2/3 pixels into its 986-pixel viewport.
+        y: parent.height * 906.6667 / 986 - baselineOffset
         width: Math.max(0, parent.width - 40 * root.scaleFactor)
         text: root.title + (root.artist.length ? " - " + root.artist : "")
         textFormat: Text.PlainText
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
-        color: "#8f8f8f"
+        color: "#969696"
         font.pixelSize: 24 * root.scaleFactor
+        font.weight: Font.Medium
         visible: root.ready && root.showTitle
     }
 }

@@ -301,6 +301,13 @@ FocusScope {
         timeForPosition: value => rootPlayer.clockText(Player.length.scale(value))
         seekPreviewImage: Player.seekPreview
         videoBackdropContent: Component { SurfaceBackdrop { } }
+        artworkToolbarBackdropContent: Component {
+            SurfaceBackdrop {
+                sourceItem: view.artworkBackdropSource
+                nativeVideo: false
+                cornerRadius: 0
+            }
+        }
         seekThumbnailContent: GraphicsInfo.shaderType === GraphicsInfo.RhiShader ? shaderSeekThumbnail : softwareSeekThumbnail
         Component {
             id: shaderSeekThumbnail

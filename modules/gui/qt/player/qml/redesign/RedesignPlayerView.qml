@@ -33,8 +33,8 @@ FocusScope {
     property bool showFullscreenControls: true
     property real fullscreenControlsOpacity: 1
     property int fullscreenControlsSensitivity: 3
-    readonly property color chromeBackground: Qt.rgba(theme.background.r, theme.background.g, theme.background.b,
-        fullscreen ? Math.max(0.1, Math.min(1, fullscreenControlsOpacity)) : 1)
+    readonly property real chromeOpacity: fullscreen ? Math.max(0.1, Math.min(1, fullscreenControlsOpacity)) : 1
+    readonly property color chromeBackground: Qt.rgba(theme.background.r, theme.background.g, theme.background.b, chromeOpacity)
     property point _lastControlMotion: Qt.point(-1, -1)
     property bool _headerRevealed: false
     property bool _toolbarRevealed: false
@@ -94,7 +94,9 @@ FocusScope {
     property Component titleBarDragContent
     property Component videoContent
     property Component videoBackdropContent
+    property Component artworkToolbarBackdropContent
     readonly property alias backdropSource: backdropScene
+    readonly property alias artworkBackdropSource: viewport
     property Component libraryContent
     property Component queueContent
     property Component settingsContent
@@ -700,9 +702,24 @@ FocusScope {
         parent: bottomEdge
         objectName: "redesignToolbar"
         anchors.bottom: parent.bottom; width: parent.width; height: root.controlsHeight
-        color: root.chromeBackground
+        readonly property bool artworkVisible: audioArtwork.visible && audioArtwork.ready
+        readonly property color artworkFill: root.lightTheme ? theme.background : "#191919"
+        color: artworkVisible ? Qt.rgba(artworkFill.r, artworkFill.g, artworkFill.b,
+            root.chromeOpacity * (theme.transparencyEnabled ? 0.95 : 1)) : root.chromeBackground
         visible: !root.minimalView && !root.libraryExpanded && (!root.fullscreen || root.showFullscreenControls || chromeLayout.editing)
             && (!root.autoHideActive || (bottomHover.hovered && (!root.fullscreen || root._toolbarRevealed)) || toolbar.activeFocus || revealTimer.running || root.controlsLocked)
+        Loader {
+            objectName: "artworkToolbarBackdropLoader"
+            anchors.fill: parent
+            z: -1
+            active: toolbar.visible && toolbar.artworkVisible && theme.transparencyEnabled
+            sourceComponent: root.artworkToolbarBackdropContent
+        }
+        Rectangle {
+            width: parent.width; height: theme.dp(1)
+            color: root.lightTheme ? theme.border : "#222222"
+            visible: toolbar.artworkVisible
+        }
         RowLayout {
             id: originalToolbar
             visible: !chrome.custom && !chrome.applying
