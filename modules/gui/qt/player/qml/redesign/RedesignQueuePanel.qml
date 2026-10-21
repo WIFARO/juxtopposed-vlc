@@ -75,6 +75,7 @@ Item {
                         iconSize: theme.dp(20)
                         captionFontSize: 12
                         captionSpacing: 8
+                        captionVerticalOffset: 0.875
                         topPadding: 0; bottomPadding: theme.dp(2)
                         selectedForeground: theme.foreground
                         selectedIconForeground: theme.playerLabel

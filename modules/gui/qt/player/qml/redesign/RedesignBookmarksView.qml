@@ -72,6 +72,7 @@ FocusScope {
                 objectName: "bookmarkSummary"; Layout.fillWidth: true
                 text: qsTr("%n bookmark", "%n bookmarks", list.count)
                 font.capitalization: Font.Capitalize
+                bottomPadding: theme.dp(2)
                 color: theme.playerLabel; font.pixelSize: theme.dp(14); elide: Text.ElideRight
             }
             RedesignButton {

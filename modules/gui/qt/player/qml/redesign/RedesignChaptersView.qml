@@ -47,7 +47,7 @@ FocusScope {
         function onModelReset() { root.currentIndex = -1; root.keyboardNavigation = false }
         function onRowsRemoved() { root.currentIndex = -1; root.keyboardNavigation = false }
     }
-    TextMetrics { id: numberMetrics; text: String(list.count); font.pixelSize: theme.dp(14) }
+    TextMetrics { id: numberMetrics; text: String(list.count); font.pixelSize: theme.dp(14); font.weight: Font.Medium }
     ListView {
         id: list
         objectName: "chapterList"
@@ -61,12 +61,13 @@ FocusScope {
             id: row
             required property int index
             required property var model
-            readonly property string title: model.display
+            readonly property string title: model.display.trim()
             readonly property bool currentChapter: model.checked
             readonly property var chapterTime: model.time
             objectName: "chapterRow" + index
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             width: list.width; height: theme.dp(44); padding: 0
+            bottomPadding: theme.dp(2)
             text: (index + 1) + " " + row.title + " " + root.clockText(row.chapterTime)
             selected: currentChapter
             Keys.forwardTo: [root]
@@ -89,9 +90,10 @@ FocusScope {
                 spacing: theme.dp(32)
                 Text {
                     objectName: "chapterNumber" + row.index
-                    Layout.preferredWidth: Math.max(theme.dp(16), numberMetrics.width)
-                    text: row.index + 1; horizontalAlignment: Text.AlignHCenter
-                    color: theme.accent; font.pixelSize: theme.dp(14)
+                    Layout.preferredWidth: Math.max(theme.dp(16), numberMetrics.width + theme.dp(4))
+                    leftPadding: theme.dp(4)
+                    text: row.index + 1
+                    color: theme.accent; font.pixelSize: theme.dp(14); font.weight: Font.Medium
                 }
                 Text {
                     objectName: "chapterTitle" + row.index
