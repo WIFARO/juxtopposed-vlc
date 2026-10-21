@@ -326,8 +326,8 @@ vlc_player_UpdateTimerSeekState(vlc_player_t *player, vlc_tick_t time,
     if (time == VLC_TICK_INVALID)
     {
         assert(position >= 0);
-        if (source->point.length != VLC_TICK_INVALID)
-            player->timer.seek_ts = position * source->point.length;
+        if (player->timer.input_length != VLC_TICK_INVALID)
+            player->timer.seek_ts = position * player->timer.input_length;
         else
             player->timer.seek_ts = VLC_TICK_INVALID;
     }
@@ -337,8 +337,8 @@ vlc_player_UpdateTimerSeekState(vlc_player_t *player, vlc_tick_t time,
     if (position < 0)
     {
         assert(time != VLC_TICK_INVALID);
-        if (source->point.length != VLC_TICK_INVALID && !source->point.live)
-            player->timer.seek_position = time / (double) source->point.length;
+        if (player->timer.input_length > 0 && !player->timer.input_live)
+            player->timer.seek_position = time / (double) player->timer.input_length;
     }
     else
         player->timer.seek_position = position;
@@ -348,8 +348,9 @@ vlc_player_UpdateTimerSeekState(vlc_player_t *player, vlc_tick_t time,
         .position = player->timer.seek_position,
         .rate = source->point.rate,
         .ts = player->timer.seek_ts,
-        .length = source->point.length,
-        .live = source->point.live,
+        // The input can report a new duration before its first output clock.
+        .length = player->timer.input_length,
+        .live = player->timer.input_live,
         .system_date = VLC_TICK_MAX,
     };
 

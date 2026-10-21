@@ -27,6 +27,7 @@ player_programs = \
 	test_src_player_seeks \
 	test_src_player_teletext \
 	test_src_player_timers \
+	test_src_player_timer_seek_length \
 	test_src_player_titles \
 	test_src_player_tracks \
 	test_src_player_tracks_ids
@@ -840,3 +841,7 @@ test_src_misc_log_observer_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 test_src_misc_file_logger_SOURCES = src/misc/file_logger.c
 test_src_misc_file_logger_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
+test_src_player_timer_seek_length_SOURCES = src/player/timer_seek_length.c ../src/player/timer.c
+test_src_player_timer_seek_length_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
+test_src_player_timer_seek_length_LDADD = $(LIBVLCCORE) $(LIBM)
