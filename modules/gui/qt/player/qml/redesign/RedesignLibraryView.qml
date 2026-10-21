@@ -468,6 +468,8 @@ Item {
                 if (currentItem) currentItem.focusMediaItem()
                 return true
             }
+            // Navigation can replace the model while focus stays on the view.
+            Keys.onPressed: event => { event.accepted = moveFocus(event.key) }
             C.ScrollBar.vertical: C.ScrollBar { policy: C.ScrollBar.AsNeeded }
             delegate: Item {
                 id: delegate
@@ -521,7 +523,8 @@ Item {
                     anchors.leftMargin: root.playlistEditing && !root.grid ? theme.dp(28) : 0
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     text: delegate.displayTitle
-                    selected: mediaView.currentIndex === delegate.index && (root.playlistEditing || mediaView.activeFocus)
+                    // Mouse focus left after navigation is not a keyboard selection.
+                    selected: mediaView.currentIndex === delegate.index && (root.playlistEditing || mediaButton.visualFocus)
                     onActiveFocusChanged: if (activeFocus) mediaView.currentIndex = delegate.index
                     onClicked: { mediaView.currentIndex = delegate.index; if (root.playlistEditing) forceActiveFocus(); else root.activated(delegate.index) }
                     Keys.onMenuPressed: root.openItemMenu(this, delegate.index, Qt.point(0, height), "")

@@ -620,6 +620,37 @@ TestCase {
         findChild(library, "libraryAddRow").forceActiveFocus(Qt.TabFocusReason)
         verify(!second.selected, "Browse selection must clear when focus leaves the items.")
     }
+    function test_pointerNavigationDoesNotSelectTheFirstChild_data() {
+        return [{tag: "list", grid: false}, {tag: "grid", grid: true}]
+    }
+    function test_pointerNavigationDoesNotSelectTheFirstChild(data) {
+        library.mediaModel = homeItems
+        library.grid = data.grid
+        const view = findChild(library, "libraryMediaView")
+        tryCompare(view, "count", 4)
+        findChild(library, "libraryAddRow").forceActiveFocus(Qt.MouseFocusReason)
+        const open = index => {
+            if (library.mediaModel === homeItems) library.mediaModel = folderItems
+        }
+        library.activated.connect(open)
+        try {
+            mouseClick(findChild(view.itemAtIndex(0), "libraryMediaItem0"))
+            tryCompare(view, "count", 3)
+            tryVerify(() => view.itemAtIndex(0) !== null)
+            mouseMove(testCase, 426, 985)
+            const child = findChild(view.itemAtIndex(0), "libraryMediaItem0")
+            verify(!child.visualFocus)
+            verify(!child.selected, "Pointer navigation must not highlight an automatic current row.")
+            keyClick(data.grid ? Qt.Key_Right : Qt.Key_Down)
+            const focused = findChild(view.currentItem, "libraryMediaItem" + view.currentIndex)
+            tryCompare(focused, "visualFocus", true)
+            verify(focused.selected)
+            keyClick(Qt.Key_Return)
+            compare(activateSpy.count, 2)
+        } finally {
+            library.activated.disconnect(open)
+        }
+    }
     function test_libraryKeyboardScrollsAndOpensTheFocusedItemMenu() {
         for (let i = playlistItems.count; i < 35; ++i)
             playlistItems.append({id: "item-" + i, title: "Item " + i})

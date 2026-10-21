@@ -10,6 +10,7 @@ C.Control {
     property Component videoBackdropContent
     property bool boldCurrent: false
     property var entries: []
+    readonly property color separatorColor: lightTheme ? theme.foreground : "#404040"
     signal activated(int index)
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     readonly property real separatorWidth: theme.dp(20)
@@ -103,9 +104,12 @@ C.Control {
                     width: visible ? root.separatorWidth : 0
                     height: root.theme.dp(36)
                     RedesignSvg {
+                        objectName: "libraryPathSeparator" + index
                         anchors.centerIn: parent
-                        width: root.theme.dp(6); height: root.theme.dp(8)
-                        svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6 8"><path d="M0 0 6 4 0 8Z" fill="' + root.theme.foreground + '"/></svg>'
+                        anchors.alignWhenCentered: false
+                        anchors.verticalCenterOffset: root.theme.dp(-0.4091)
+                        width: root.theme.dp(6.182); height: root.theme.dp(7.2728)
+                        svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 6.182 7.2728"><path d="M0 7.2728V0L6.182 3.6364Z" fill="' + root.separatorColor + '"/></svg>'
                     }
                 }
                 PathButton {
