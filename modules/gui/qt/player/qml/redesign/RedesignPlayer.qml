@@ -423,6 +423,7 @@ FocusScope {
         onQueueOpenChanged: if (MainCtx.playqueuePanel.docked) MainCtx.playqueuePanel.visible = queueOpen
         libraryContent: Component {
             Loader {
+                asynchronous: true
                 source: MainCtx.mediaLibraryAvailable ? "qrc:///qt/qml/VLC/Player/RedesignLibrary.qml" : ""
                 onLoaded: {
                     item.scaleFactor = Qt.binding(() => view.scaleFactor)
@@ -433,15 +434,19 @@ FocusScope {
                     item.fullLibraryRequested.connect(() => { view.libraryExpanded = !view.libraryExpanded })
                     rootPlayer.applyLibraryCategory()
                 }
-                RedesignLibraryView {
-                    videoBackdropContent: rootPlayer.menuBackdropContent
+                Loader {
                     anchors.fill: parent
-                    visible: !MainCtx.mediaLibraryAvailable
-                    expanded: view.libraryExpanded
-                    scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
-                    emptyText: qsTr("The media library is not available. Open files or a folder to add them to the queue.")
-                    onAddRequested: DialogsProvider.simpleOpenDialog()
-                    onCategoryRequested: category => category === 3 ? DialogsProvider.openNetDialog() : DialogsProvider.simpleOpenDialog()
+                    active: !MainCtx.mediaLibraryAvailable
+                    asynchronous: true
+                    sourceComponent: RedesignLibraryView {
+                        videoBackdropContent: rootPlayer.menuBackdropContent
+                        anchors.fill: parent
+                        expanded: view.libraryExpanded
+                        scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
+                        emptyText: qsTr("The media library is not available. Open files or a folder to add them to the queue.")
+                        onAddRequested: DialogsProvider.simpleOpenDialog()
+                        onCategoryRequested: category => category === 3 ? DialogsProvider.openNetDialog() : DialogsProvider.simpleOpenDialog()
+                    }
                 }
                 property string heading: item ? item.heading : qsTr("Videos")
                 property string locationTitle: item && item.breadcrumbs.length ? item.breadcrumbs[item.breadcrumbs.length - 1].label : qsTr("Videos")
