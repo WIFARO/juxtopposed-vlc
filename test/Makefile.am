@@ -845,3 +845,7 @@ test_src_misc_file_logger_LDADD = $(LIBVLC) $(LIBVLCCORE)
 test_src_player_timer_seek_length_SOURCES = src/player/timer_seek_length.c ../src/player/timer.c
 test_src_player_timer_seek_length_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_player_timer_seek_length_LDADD = $(LIBVLCCORE) $(LIBM)
+
+check_PROGRAMS += test_src_network_http_rate
+test_src_network_http_rate_SOURCES = src/network/http_rate.c
+test_src_network_http_rate_LDADD = $(LIBVLCCORE)

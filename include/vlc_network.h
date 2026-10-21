@@ -376,6 +376,11 @@ static inline int net_GetPeerAddress( int fd, char *address, int *port )
  */
 VLC_API char *vlc_getProxyUrl(const char *);
 
+/** Wait for a service request slot. Returns EINTR if the VLC interrupt fires.
+ * Other HTTP authorities pass immediately. MusicBrainz and its VideoLAN mirror
+ * share one request per second across HTTP versions and access modules. */
+VLC_API int vlc_http_request_wait(const char *authority);
+
 # ifdef __cplusplus
 }
 # endif

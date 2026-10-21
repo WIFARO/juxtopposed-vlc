@@ -245,6 +245,7 @@ libvlccore_sources_base = files(
     'video_output/window.c',
     'network/getaddrinfo.c',
     'network/http_auth.c',
+    'network/http_rate.c',
     'network/httpd.c',
     'network/io.c',
     'network/udp.c',

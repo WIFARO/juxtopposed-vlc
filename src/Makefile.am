@@ -379,6 +379,7 @@ libvlccore_la_SOURCES = \
 	video_output/vout_wrapper.c \
 	network/getaddrinfo.c \
 	network/http_auth.c \
+	network/http_rate.c \
 	network/httpd.c \
 	network/io.c \
 	network/proxy.h \

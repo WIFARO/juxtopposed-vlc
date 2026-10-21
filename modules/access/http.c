@@ -715,6 +715,12 @@ static int Connect( stream_t *p_access )
         return -1;
     }
 
+    if( vlc_http_request_wait( p_sys->url.psz_host ) )
+    {
+        free( stream.ptr );
+        Disconnect( p_access );
+        return -1;
+    }
     msg_Dbg( p_access, "sending request:\n%s", stream.ptr );
     val = vlc_tls_Write(p_sys->stream, stream.ptr, stream.length);
     free( stream.ptr );

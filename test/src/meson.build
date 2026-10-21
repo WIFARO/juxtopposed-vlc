@@ -705,3 +705,10 @@ vlc_tests += {
     'suite': ['src', 'test_src'],
     'link_with': [libvlccore],
 }
+
+vlc_tests += {
+    'name': 'test_src_network_http_rate',
+    'sources': files('network/http_rate.c'),
+    'suite': ['src', 'test_src'],
+    'link_with': [libvlccore],
+}

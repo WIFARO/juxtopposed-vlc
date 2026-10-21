@@ -25,10 +25,13 @@
  * @{
  */
 
+#include <vlc_network.h>
+
 struct vlc_tls;
 struct vlc_http_conn;
 struct vlc_http_msg;
 struct vlc_http_stream;
+const char *vlc_http_msg_get_authority(const struct vlc_http_msg *);
 
 struct vlc_http_conn_cbs
 {
@@ -48,6 +51,8 @@ static inline struct vlc_http_stream *
 vlc_http_stream_open(struct vlc_http_conn *conn, const struct vlc_http_msg *m,
                      bool has_data)
 {
+    if (vlc_http_request_wait(vlc_http_msg_get_authority(m)))
+        return NULL;
     return conn->cbs->stream_open(conn, m, has_data);
 }
 
