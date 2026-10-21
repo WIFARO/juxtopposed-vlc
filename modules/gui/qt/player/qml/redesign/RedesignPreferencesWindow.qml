@@ -254,7 +254,7 @@ RedesignSettingsDialog {
                     visible: root.category === "general" && !root.search.length
                     width: parent.width
                     Text {
-                        topPadding: theme.dp(8); bottomPadding: theme.dp(9)
+                        topPadding: theme.dp(7.5); bottomPadding: theme.dp(9.5)
                         text: qsTr("Appearance"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
                     }
                     RedesignPreferenceRow { width: parent.width; backend: preferenceStore; optionName: "language"; label: qsTr("Interface language"); scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
@@ -341,7 +341,7 @@ RedesignSettingsDialog {
                         bottomPadding: root.category === "extensions" ? theme.dp(12) : 0
                         visible: modelData.rows.some(row => preferenceStore.describe(row[0]).kind !== undefined) || root.category === "controls" && modelData.title === qsTr("Keyboard Shortcuts")
                         Text {
-                            topPadding: theme.dp(index === 0 && root.category !== "general" ? root.usesReferenceSpacing ? 9 : 8 : 24); bottomPadding: theme.dp(10)
+                            topPadding: theme.dp((index === 0 && root.category !== "general" ? root.usesReferenceSpacing ? 9 : 8 : 24) + 0.5); bottomPadding: theme.dp(9.5)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
                             visible: text.length > 0
                         }
@@ -423,7 +423,7 @@ RedesignSettingsDialog {
                         width: parent.width
                         topPadding: (root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles" || root.category === "network" || root.category === "performance" || root.category === "recording") && !modelData.title.length ? theme.dp(15) : 0
                         Text {
-                            visible: text.length > 0; topPadding: theme.dp(root.category === "general" || root.category === "performance" ? 24 : 20); bottomPadding: theme.dp(10)
+                            visible: text.length > 0; topPadding: theme.dp((root.category === "general" || root.category === "performance" ? 24 : 20) + 0.5); bottomPadding: theme.dp(9.5)
                             text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
                         }
                         Repeater {
