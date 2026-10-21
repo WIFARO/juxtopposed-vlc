@@ -140,6 +140,7 @@ TestCase {
         library.homeSections = []
         homeSpy.clear(); homeQueueSpy.clear(); sectionSpy.clear()
         library.category = 1
+        library.showAddRow = Qt.binding(() => library.category > 0 && library.category < 5)
         library.lightTheme = false
         library.accentColor = "#d37918"
         library.playlistOpen = false; library.playlistEditing = false; library.playlistBusy = false
@@ -846,6 +847,33 @@ TestCase {
         testCase.Window.window.width = 1920; testCase.Window.window.height = 1040
         library.expanded = true
         wait(20)
+    }
+    function test_expandedFolderAddOpensFilesAndPreservesOtherActions() {
+        expandLibrary()
+        library.showAddRow = false
+        library.locationPinTarget = {kind: "folder", uri: "file:///Videos/Shows"}
+        const button = findChild(library, "libraryToolbarAddButton")
+        tryCompare(button, "visible", true)
+        compare(button.text, "Add File")
+        mouseClick(button)
+        compare(filesSpy.count, 1)
+        compare(addSpy.count, 0)
+
+        library.locationPinTarget = undefined
+        tryCompare(button, "visible", false)
+        library.showAddRow = true
+        mouseClick(button)
+        compare(addSpy.count, 1)
+        library.category = 4
+        mouseClick(button)
+        compare(playlistSpy.count, 1)
+        library.playlistOpen = true
+        library.playlistBusy = true
+        tryCompare(button, "enabled", false)
+        mouseClick(button)
+        compare(filesSpy.count, 1)
+        compare(addSpy.count, 1)
+        compare(playlistSpy.count, 1)
     }
     function test_expandedNavigationAndToolbarKeepSearchOnCollapse() {
         expandLibrary()

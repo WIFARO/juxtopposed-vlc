@@ -277,6 +277,7 @@ Item {
         onClicked: root.backRequested()
     }
     component ForwardButton: LibraryButton {
+        objectName: "libraryForwardButton"
         iconName: "forward"; text: qsTr("Forward"); enabled: root.canGoForward
         onClicked: root.forwardRequested()
     }
@@ -284,7 +285,7 @@ Item {
         id: button
         objectName: "libraryMoreButton"
         iconName: "more"; text: qsTr("More library actions")
-        foreground: root.wideToolbar ? root.theme.foreground : root.theme.playerLabel
+        foreground: root.theme.playerLabel
         onClicked: moreMenu.toggleFrom(button)
     }
     component SortButton: LibraryButton {
@@ -293,7 +294,7 @@ Item {
         enabled: sorting.options.length > 0
         iconName: enabled && (root.sortPopup || !["title-asc", "original"].includes(sorting.selection.id)) ? "sort-active" : "sort"
         iconDetailColor: root.theme.accent
-        foreground: root.wideToolbar ? root.theme.foreground : root.theme.playerLabel
+        foreground: root.theme.playerLabel
         text: qsTr("Sort options")
         onClicked: root.openSortMenu(button)
     }
@@ -301,12 +302,12 @@ Item {
         id: button
         objectName: "libraryViewButton"
         iconName: root.grid ? "grid" : "list-view"; text: qsTr("View options")
-        foreground: root.wideToolbar ? root.theme.foreground : root.theme.playerLabel
+        foreground: root.theme.playerLabel
         onClicked: viewMenu.toggleFrom(button)
     }
     component ItemCount: Text {
         text: root.loading ? qsTr("Loading…") : qsTr("%n item", "%n items", root.itemCount)
-        color: root.wideToolbar ? root.theme.foreground : root.theme.playerLabel
+        color: root.theme.playerLabel
         font.pixelSize: root.theme.dp(14)
     }
     component Location: RedesignBreadcrumbs {
@@ -320,14 +321,15 @@ Item {
     component SearchField: C.TextField {
         objectName: "librarySearchField"
         placeholderText: qsTr("Search")
+        placeholderTextColor: root.wideToolbar && !root.lightTheme ? "#404040" : root.theme.foreground
         text: root.searchText
         onTextEdited: root.searchText = text
         color: root.theme.bright
         font.pixelSize: root.theme.dp(14)
         implicitHeight: root.theme.dp(34)
         leftPadding: root.expanded ? root.theme.dp(42) : root.theme.dp(10)
-        background: Rectangle { color: root.theme.field; radius: root.theme.dp(6); border.width: parent.activeFocus ? 1 : 0; border.color: root.theme.accent }
-        RedesignIcon { visible: root.expanded; x: root.theme.dp(12); anchors.verticalCenter: parent.verticalCenter; width: root.theme.dp(24); height: width; name: "search"; color: root.theme.foreground }
+        background: Rectangle { color: root.wideToolbar && !root.lightTheme ? "#151515" : root.theme.field; radius: root.theme.dp(6); border.width: parent.activeFocus ? 1 : 0; border.color: root.theme.accent }
+        RedesignIcon { visible: root.expanded; x: root.theme.dp(12); anchors.verticalCenter: parent.verticalCenter; width: root.theme.dp(24); height: width; name: "search"; color: root.theme.playerLabel }
     }
     Component {
         id: compactToolbar
@@ -369,17 +371,31 @@ Item {
     }
     Component {
         id: expandedToolbar
-        RowLayout {
-            spacing: root.theme.dp(4)
-            BackButton {}
-            ForwardButton {}
-            Location { Layout.fillWidth: true }
-            ItemCount { Layout.rightMargin: root.theme.dp(12) }
-            SortButton {}
-            ViewButton {}
-            SearchField { Layout.preferredWidth: Math.min(root.theme.dp(325), root.width * 0.24); Layout.leftMargin: root.theme.dp(12); Layout.rightMargin: root.theme.dp(12) }
-            LibraryButton { visible: root.showAddRow; enabled: !root.playlistOpen || !root.playlistBusy; iconName: "add"; text: root.addLabel; onClicked: root.addMedia() }
-            MoreButton {}
+        Item {
+            implicitHeight: root.theme.dp(34)
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: -root.theme.dp(6); anchors.rightMargin: -root.theme.dp(6)
+                anchors.topMargin: -root.theme.dp(1); anchors.bottomMargin: root.theme.dp(1)
+                spacing: 0
+                BackButton {}
+                ForwardButton {}
+                Location { Layout.fillWidth: true; Layout.leftMargin: root.theme.dp(4) }
+                ItemCount { Layout.rightMargin: root.theme.dp(16) }
+                SortButton { Layout.rightMargin: root.theme.dp(8) }
+                ViewButton {}
+                SearchField { Layout.preferredWidth: Math.min(root.theme.dp(325), root.width * 0.24); Layout.leftMargin: root.theme.dp(14); Layout.rightMargin: root.theme.dp(14) }
+                LibraryButton {
+                    objectName: "libraryToolbarAddButton"
+                    readonly property bool folderLocation: root.locationPinTarget?.kind === "folder"
+                    visible: root.showAddRow || folderLocation
+                    enabled: !root.playlistOpen || !root.playlistBusy
+                    iconName: "add"; text: folderLocation ? qsTr("Add File") : root.addLabel
+                    foreground: root.theme.playerLabel
+                    onClicked: folderLocation ? root.filesRequested() : root.addMedia()
+                }
+                MoreButton {}
+            }
         }
     }
     ColumnLayout {
@@ -456,7 +472,7 @@ Item {
             model: root.mediaModel
             visible: !root.homeSectionsVisible && root.itemCount > 0
             cellWidth: root.expanded ? Math.min(width, theme.dp(root.grid ? root.squareCards ? 220 : 336 : 416)) : root.grid ? width / Math.max(1, Math.floor(width / theme.dp(130))) : width
-            cellHeight: root.grid ? root.expanded ? (cellWidth - theme.dp(20)) * (root.squareCards ? 1 : 9 / 16) + theme.dp(root.category === 2 ? 88 : 78) : theme.dp(142) : theme.dp(42)
+            cellHeight: root.grid ? root.expanded ? (cellWidth - theme.dp(20)) * (root.squareCards ? 1 : 9 / 16) + theme.dp(root.category === 2 ? 88 : 79) : theme.dp(142) : theme.dp(42)
             keyNavigationEnabled: true
             currentIndex: -1
             function moveFocus(key) {
