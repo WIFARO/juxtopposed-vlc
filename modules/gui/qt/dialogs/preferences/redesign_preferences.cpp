@@ -483,25 +483,29 @@ void applyFullscreenControlPreferences(qt_intf_t* intf, bool opacity, bool sensi
     }
 }
 
-void applyOsdPreferences(qt_intf_t* intf)
+void applyOsdPreferences(qt_intf_t* intf, const QVariantMap& changed)
 {
     auto* instance = vlc_object_instance(intf);
-    const bool enabled = config_GetInt("osd");
-    const auto duration = config_GetInt("osd-duration");
-    if (var_Type(instance, "osd") == 0) var_Create(instance, "osd", VLC_VAR_BOOL);
-    if (var_Type(instance, "osd-duration") == 0) var_Create(instance, "osd-duration", VLC_VAR_INTEGER);
-    var_SetBool(instance, "osd", enabled);
-    var_SetInteger(instance, "osd-duration", duration);
+    const auto apply = [&changed](auto* object) {
+        for (const auto* name : {"osd", "video-title-show"}) {
+            if (!changed.contains(QLatin1String(name))) continue;
+            if (var_Type(object, name) == 0) var_Create(object, name, VLC_VAR_BOOL);
+            var_SetBool(object, name, bool(config_GetInt(name)));
+        }
+        for (const auto* name : {"osd-duration", "video-title-timeout", "video-title-position"}) {
+            if (!changed.contains(QLatin1String(name))) continue;
+            if (var_Type(object, name) == 0) var_Create(object, name, VLC_VAR_INTEGER);
+            var_SetInteger(object, name, config_GetInt(name));
+        }
+    };
+    apply(instance);
 
     size_t count = 0;
     vlc_player_Lock(intf->p_player);
     auto** outputs = vlc_player_vout_HoldAll(intf->p_player, &count);
     vlc_player_Unlock(intf->p_player);
     for (size_t i = 0; i < count; ++i) {
-        if (var_Type(outputs[i], "osd") == 0) var_Create(outputs[i], "osd", VLC_VAR_BOOL);
-        if (var_Type(outputs[i], "osd-duration") == 0) var_Create(outputs[i], "osd-duration", VLC_VAR_INTEGER);
-        var_SetBool(outputs[i], "osd", enabled);
-        var_SetInteger(outputs[i], "osd-duration", duration);
+        apply(outputs[i]);
         vout_Release(outputs[i]);
     }
     free(outputs);
@@ -2843,8 +2847,10 @@ bool RedesignPreferences::save()
     if (std::any_of(previous.keyBegin(), previous.keyEnd(), [](const QString& name) {
             return name.startsWith(QLatin1String("key-")) || name.startsWith(QLatin1String("global-key-"));
         })) vlc_actions_update(VLC_OBJECT(instance));
-    if (previous.contains(QStringLiteral("osd")) || previous.contains(QStringLiteral("osd-duration")))
-        applyOsdPreferences(m_ctx->getIntf());
+    if (previous.contains(QStringLiteral("osd")) || previous.contains(QStringLiteral("osd-duration"))
+        || previous.contains(QStringLiteral("video-title-show")) || previous.contains(QStringLiteral("video-title-timeout"))
+        || previous.contains(QStringLiteral("video-title-position")))
+        applyOsdPreferences(m_ctx->getIntf(), previous);
     for (const auto* option : {"qt-backdrop-blur", "qt-compact-menus", "qt-error-dialogs", "qt-minor-warnings", "qt-verbose", "qt-system-tray", "qt-video-autoresize", "playlist-tree", "qt-embedded-open"}) {
         if (!previous.contains(QLatin1String(option))) continue;
         // An explicit UI choice replaces a startup override for this interface.
@@ -3186,7 +3192,7 @@ bool RedesignPreferences::resetAll()
     vlc_playlist_Lock(intf->p_playlist);
     vlc_playlist_SetPreparseDepth(intf->p_playlist, directoryDepth(read("recursive").toString()));
     vlc_playlist_Unlock(intf->p_playlist);
-    applyOsdPreferences(intf);
+    applyOsdPreferences(intf, previous);
     vlc_subpicture_InvalidateTextStyle();
     vlc_player_Lock(intf->p_player);
     for (const auto* option : {"audio", "video", "spu"})

@@ -127,13 +127,6 @@ typedef struct vout_thread_sys_t
         vlc_tick_t  date;
     } pause;
 
-    /* OSD title configuration */
-    struct {
-        bool        show;
-        int         timeout;
-        int         position;
-    } title;
-
     /* */
     bool            is_late_dropped;
 
@@ -294,15 +287,17 @@ bool vout_IsEmpty(vout_thread_t *vout)
 
 void vout_DisplayTitle(vout_thread_t *vout, const char *title)
 {
-    vout_thread_sys_t *sys = VOUT_THREAD_TO_SYS(vout);
-    assert(!sys->dummy);
+    assert(!VOUT_THREAD_TO_SYS(vout)->dummy);
     assert(title);
 
-    if (!sys->title.show)
+    /* The output can be reused after preferences change. Read the current
+     * values when a new media title is shown, rather than caching them. */
+    if (!var_InheritBool(vout, "video-title-show"))
         return;
 
-    vout_OSDText(vout, VOUT_SPU_CHANNEL_OSD, sys->title.position,
-                 VLC_TICK_FROM_MS(sys->title.timeout), title);
+    vout_OSDText(vout, VOUT_SPU_CHANNEL_OSD,
+                 var_InheritInteger(vout, "video-title-position"),
+                 VLC_TICK_FROM_MS(var_InheritInteger(vout, "video-title-timeout")), title);
 }
 
 bool vout_FilterMouse(vout_thread_t *vout, vlc_mouse_t *mouse)
@@ -2295,10 +2290,6 @@ vout_thread_t *vout_Create(vlc_object_t *object)
 
     vout_control_Init(&sys->control);
     atomic_init(&sys->control_is_terminated, false);
-
-    sys->title.show     = var_InheritBool(vout, "video-title-show");
-    sys->title.timeout  = var_InheritInteger(vout, "video-title-timeout");
-    sys->title.position = var_InheritInteger(vout, "video-title-position");
 
     sys->private_pool = NULL;
 
