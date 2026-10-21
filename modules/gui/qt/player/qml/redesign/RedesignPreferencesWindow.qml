@@ -20,14 +20,56 @@ RedesignSettingsDialog {
     property bool advanced: false
     property bool expert: false
     property string search: ""
-    onSearchChanged: scroll.contentItem.contentY = 0
+    onSearchChanged: {
+        scroll.contentItem.contentY = 0
+        if (!search.length) Qt.callLater(root.revealCurrentCategory)
+    }
     property string actionMessage: ""
     property bool actionMessageIsError: true
     property bool resetFailed: false
     RedesignPreferences { id: preferenceStore; ctx: MainCtx; autoSave: true }
     RedesignPreferencesCatalog { id: specification }
     property bool addonsVisited: false
-    onCategoryChanged: if (category === "extensions") addonsVisited = true
+    onCategoryChanged: {
+        if (category === "extensions") addonsVisited = true
+        Qt.callLater(root.revealCurrentCategory)
+    }
+    onOpened: Qt.callLater(root.revealCurrentCategory)
+    function revealNavigationItem(item) {
+        const flick = categoryNavigation.contentItem
+        if (!visible || !item || !flick || !flick.contentItem || flick.height <= 0) return
+        const point = item.mapToItem(flick.contentItem, 0, 0)
+        let position = flick.contentY
+        if (point.y < position) position = point.y
+        else if (point.y + item.height > position + flick.height)
+            position = point.y + item.height - flick.height
+        position = Math.max(0, Math.min(position, flick.contentHeight - flick.height))
+        if (Math.abs(position - flick.contentY) > 0.01) {
+            flick.cancelFlick()
+            flick.contentY = position
+        }
+    }
+    function revealCurrentCategory() {
+        if (!visible || search.length) return
+        for (let i = 0; i < categoryItems.count; ++i) {
+            const entry = categoryItems.itemAt(i)
+            if (entry && entry.modelData.key === category) {
+                revealNavigationItem(entry.button)
+                return
+            }
+        }
+    }
+    function revealNavigationAfterLayout() {
+        if (!visible) return
+        for (let i = 0; i < categoryItems.count; ++i) {
+            const entry = categoryItems.itemAt(i)
+            if (entry && entry.button && entry.button.visualFocus) {
+                revealNavigationItem(entry.button)
+                return
+            }
+        }
+        revealCurrentCategory()
+    }
     Binding {
         target: MainCtx; property: "useGlobalShortcuts"; value: false
         when: root.visible
@@ -122,6 +164,7 @@ RedesignSettingsDialog {
             root.advanced = false
             root.expert = false
             scroll.contentItem.contentY = 0
+            Qt.callLater(root.revealCurrentCategory)
         }
     }
     contentItem: Item {
@@ -164,12 +207,17 @@ RedesignSettingsDialog {
                 }
             }
             C.ScrollView {
+                id: categoryNavigation
+                objectName: "settingsNavigation"
                 anchors.top: searchField.bottom; anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
                 anchors.topMargin: theme.dp(16); anchors.bottomMargin: theme.dp(8)
                 clip: true
+                onHeightChanged: Qt.callLater(root.revealNavigationAfterLayout)
+                onContentHeightChanged: Qt.callLater(root.revealNavigationAfterLayout)
                 Column {
                     width: navigation.width
                     Repeater {
+                        id: categoryItems
                         model: [
                             {group: qsTr("App"), key: "general", title: qsTr("General"), icon: "nav-preferences"},
                             {key: "interface", title: qsTr("Interface"), icon: "nav-interface"},
@@ -186,6 +234,7 @@ RedesignSettingsDialog {
                             {key: "extensions", title: qsTr("Extensions"), icon: "nav-plugins"} ]
                         delegate: Column {
                             required property var modelData
+                            property alias button: categoryButton
                             width: navigation.width
                             Text {
                                 visible: !!modelData.group
@@ -196,6 +245,7 @@ RedesignSettingsDialog {
                             Item {
                                 width: parent.width; height: theme.dp(48)
                                 RedesignButton {
+                                    id: categoryButton
                                     objectName: "settingsCategory_" + modelData.key
                                     width: parent.width - theme.dp(20); x: theme.dp(14); height: theme.dp(40)
                                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
@@ -204,6 +254,7 @@ RedesignSettingsDialog {
                                     selectedForeground: theme.bright
                                     background: Rectangle { radius: theme.dp(2); color: parent.selected ? root.lightTheme ? theme.selected : "#222222" : parent.hovered ? theme.hover : "transparent"; border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent }
                                     selected: root.category === modelData.key && !root.search.length
+                                    onActiveFocusChanged: if (activeFocus) root.revealNavigationItem(categoryButton)
                                     onClicked: {
                                         root.category = modelData.key
                                         root.search = ""; searchField.clear(); root.advanced = false; root.expert = false
