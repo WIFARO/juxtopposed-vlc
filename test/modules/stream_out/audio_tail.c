@@ -104,7 +104,8 @@ int main(void)
     const char *args[] = { "--ignore-config", "--no-plugins-cache", "--audio-resampler=soxr" };
     libvlc_instance_t *vlc = libvlc_new(ARRAY_SIZE(args), args);
     assert(vlc);
-    if (!module_exists("soxr") || !module_exists("araw") || !module_exists("stream_out_transcode"))
+    if (!module_exists("soxr") || !module_exists("araw") ||
+        (!module_exists("stream_out_transcode") && !module_exists("transcode")))
     {
         libvlc_release(vlc);
         return 77;

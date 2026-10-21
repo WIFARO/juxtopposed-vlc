@@ -25,7 +25,7 @@ static void Check(libvlc_instance_t *vlc, int category, vlc_fourcc_t codec)
     es_format_Init(&decoder->fmt_out, category, 0);
     module_t *module = module_need(decoder,
         category == AUDIO_ES ? "audio packetizer" : "video packetizer",
-        "packetizer_copy", true);
+        "packetizer_copy,copy", true);
     assert(module);
     assert(decoder->pf_packetize(decoder, NULL) == NULL);
     const vlc_tick_t start = VLC_TICK_0;
@@ -71,7 +71,11 @@ int main(void)
     const char *args[] = { "--ignore-config", "--no-plugins-cache" };
     libvlc_instance_t *vlc = libvlc_new(ARRAY_SIZE(args), args);
     assert(vlc);
-    if (!module_exists("packetizer_copy")) { libvlc_release(vlc); return 77; }
+    if (!module_exists("packetizer_copy") && !module_exists("copy"))
+    {
+        libvlc_release(vlc);
+        return 77;
+    }
     Check(vlc, AUDIO_ES, VLC_CODEC_S16L);
     Check(vlc, AUDIO_ES, VLC_CODEC_OPUS);
     Check(vlc, VIDEO_ES, VLC_CODEC_I420);
