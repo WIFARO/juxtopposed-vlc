@@ -174,16 +174,16 @@ QtObject {
         performance: [
             { title: qsTr("Decoding"), rows: [ ["redesign-hardware-decoding", qsTr("Hardware-accelerated decoding"), {dynamicChoices: true}], ["redesign-postprocessing", qsTr("Video post-processing"), {dynamicChoices: true}],
                 ["avcodec-skiploopfilter", qsTr("Skip the H.264 loop filter"), {choiceLabels: {0: qsTr("Never")}}], ["avcodec-threads", qsTr("Decoding threads")] ] },
-            { title: qsTr("Smooth Playback"), rows: [ ["drop-late-frames", qsTr("Skip late video frames")], ["high-priority", qsTr("Give VLC higher priority")],
-                ["redesign-rescan-plugins", qsTr("Rescan plugins"), {fullWidthAction: true}] ] } ],
+            { title: qsTr("Smooth Playback"), rows: [ ["drop-late-frames", qsTr("Skip late video frames"), {hideHelp: true}], ["high-priority", qsTr("Give VLC higher priority")],
+                ["redesign-rescan-plugins", qsTr("Rescan plugins"), {fullWidthAction: true, rowHeight: 42, hideHelp: true}] ] } ],
         recording: [
-            { title: qsTranslate("Settings", "Recording"), rows: [ ["input-record-path", qsTr("Save recordings to")], ["input-record-native", qsTr("Record without re-encoding when possible")] ] },
-            { title: qsTr("Casting"), rows: [ ["qt-discover-cast-devices", qsTr("Discover cast devices")],
+            { title: qsTranslate("Settings", "Recording"), rows: [ ["input-record-path", qsTr("Save recordings to")], ["input-record-native", qsTr("Record without re-encoding when possible"), {hideHelp: true}] ] },
+            { title: qsTr("Casting"), rows: [ ["qt-discover-cast-devices", qsTr("Discover cast devices"), {hideHelp: true}],
                 ["sout-chromecast-conversion-quality", qsTr("Cast quality"), {choiceLabels: {
                     "-1": qsTr("Automatic"), 0: qsTr("High"), 1: qsTr("Medium"), 2: qsTr("Low"), 3: qsTr("Low CPU use")},
                     help: qsTr("Automatic uses the default quality for this device. High can use more network data. Low CPU use can make conversion faster.")}] ] },
-            { title: qsTr("Streaming"), rows: [ ["sout-display", qsTr("Play locally while streaming")], ["sout-audio", qsTr("Include audio")],
-                ["sout-video", qsTr("Include video")], ["sout-spu", qsTr("Include subtitles")],
+            { title: qsTr("Streaming"), rows: [ ["sout-display", qsTr("Play locally while streaming"), {hideHelp: true}], ["sout-audio", qsTr("Include audio"), {hideHelp: true}],
+                ["sout-video", qsTr("Include video"), {hideHelp: true}], ["sout-spu", qsTr("Include subtitles"), {hideHelp: true}],
                 ["sout-x264-preset", qsTr("Encoding preset"), {emptyChoiceValue: "medium", choiceLabels: {
                     ultrafast: qsTr("Ultra fast"), superfast: qsTr("Super fast"), veryfast: qsTr("Very fast"),
                     faster: qsTr("Faster"), fast: qsTr("Fast"), medium: qsTr("Medium"), slow: qsTr("Slow"),

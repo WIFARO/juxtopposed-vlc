@@ -322,6 +322,7 @@ ColumnLayout {
                 width: root.presentation.fullWidthAction ? parent.width : theme.dp(100); height: parent.height
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 caption: root.description.buttonLabel || ""; text: caption
+                captionFontWeight: root.presentation.fullWidthAction ? Font.DemiBold : Font.Normal
                 foreground: root.description.destructive ? theme.danger : theme.foreground
                 background: Rectangle { radius: theme.dp(6); color: parent.hovered ? theme.hover : root.description.destructive ? theme.dangerBackground : root.lightTheme ? theme.background : "#191919"; border.color: parent.visualFocus ? parent.foreground : "transparent" }
                 onClicked: root.actionRequested(root.optionName)
