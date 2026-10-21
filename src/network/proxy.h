@@ -3,20 +3,23 @@
 #define VLC_NETWORK_CONFIGURED_PROXY_H
 
 #include <stdlib.h>
+#include <assert.h>
 #include <vlc_common.h>
 #include <vlc_configuration.h>
 #include <vlc_url.h>
 
 /* A configured proxy takes precedence over platform discovery. Keep that
  * distinction even if its URL cannot be composed; do not try another proxy. */
-static inline char *vlc_proxy_GetConfigured(bool *configured)
+static inline char *vlc_proxy_GetConfigured(vlc_object_t *obj, bool *configured)
 {
-    char *proxy = config_GetPsz("http-proxy");
+    char *proxy = obj ? var_InheritString(obj, "http-proxy")
+                      : config_GetPsz("http-proxy");
     *configured = proxy != NULL;
     if (proxy == NULL)
         return NULL;
 
-    char *password = config_GetPsz("http-proxy-pwd");
+    char *password = obj ? var_InheritString(obj, "http-proxy-pwd")
+                         : config_GetPsz("http-proxy-pwd");
     if (password == NULL)
         return proxy;
 

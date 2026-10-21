@@ -90,7 +90,7 @@ int MMSHOpen( stream_t *p_access )
     p_sys->b_proxy = false;
 
     /* Check proxy */
-    char *psz_proxy = vlc_getProxyUrl( p_access->psz_url );
+    char *psz_proxy = vlc_getProxyUrlForObject( VLC_OBJECT(p_access), p_access->psz_url );
     if( psz_proxy != NULL )
     {
         p_sys->b_proxy = true;

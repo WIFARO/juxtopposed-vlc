@@ -15,6 +15,15 @@
 static const char *explicit_proxy, *explicit_password;
 static const wchar_t *system_proxy, *system_bypass, *system_pac;
 static unsigned system_queries;
+static const char *inherited_proxy, *inherited_password;
+
+static char *test_inherit(vlc_object_t *obj, const char *name)
+{
+    (void)obj;
+    const char *value = !strcmp(name, "http-proxy") ? inherited_proxy
+                                                  : inherited_password;
+    return value && *value ? strdup(value) : NULL;
+}
 
 static char *test_config(const char *name)
 {
@@ -48,13 +57,19 @@ static BOOL test_system_config(WINHTTP_CURRENT_USER_IE_PROXY_CONFIG *config)
 /* Read settings from fixtures, without changing the user's registry. URL
  * parsing, WinHTTP PAC execution, callbacks and cancellation are real. */
 char *test_get_proxy(const char *);
+char *test_get_proxy_for_object(vlc_object_t *, const char *);
+#undef var_InheritString
+#define var_InheritString test_inherit
 #define config_GetPsz test_config
 #define WinHttpGetIEProxyConfigForCurrentUser test_system_config
 #define vlc_getProxyUrl test_get_proxy
+#define vlc_getProxyUrlForObject test_get_proxy_for_object
 #include "../../../src/win32/netconf.c"
 #undef vlc_getProxyUrl
+#undef vlc_getProxyUrlForObject
 #undef WinHttpGetIEProxyConfigForCurrentUser
 #undef config_GetPsz
+#undef var_InheritString
 
 static unsigned cases;
 static void check(const char *target, const char *expected)
@@ -273,6 +288,30 @@ int main(void)
     }
     else
         puts("PAC tests unavailable on this Windows version");
+
+    /* An item/instance override must not use the saved proxy. An empty one
+     * selects the real system path, with only its registry inputs substituted. */
+    explicit_proxy = "http://saved.invalid:8080/";
+    explicit_password = NULL;
+    system_proxy = L"system.invalid:8127";
+    inherited_proxy = "http://user@item.invalid:8128/";
+    inherited_password = "p@ss:word";
+    unsigned before_queries = system_queries;
+    vlc_object_t object = {0}; /* Only test_inherit sees this fixture object. */
+    char *actual = test_get_proxy_for_object(&object, "http://outside.invalid");
+    assert(actual && !strcmp(actual, "http://user:p%40ss%3Aword@item.invalid:8128/"));
+    assert(system_queries == before_queries);
+    free(actual); cases++;
+    inherited_proxy = "";
+    actual = test_get_proxy_for_object(&object, "http://outside.invalid");
+    assert(actual && !strcmp(actual, "http://system.invalid:8127"));
+    assert(system_queries > before_queries);
+    free(actual); cases++;
+    before_queries = system_queries;
+    inherited_proxy = "http://[invalid";
+    actual = test_get_proxy_for_object(&object, "http://outside.invalid");
+    assert(!actual && system_queries == before_queries); cases++;
+    check("http://outside.invalid", "http://saved.invalid:8080/");
 
     WSACleanup();
     printf("Windows proxy: %u explicit, system, bypass, PAC and cancellation cases passed\n", cases);

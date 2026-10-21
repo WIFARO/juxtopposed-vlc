@@ -96,7 +96,6 @@ typedef struct
     bool b_proxy;
     vlc_url_t  proxy;
     vlc_http_auth_t proxy_auth;
-    char       *psz_proxy_passbuf;
 
     /* */
     int        i_code;
@@ -148,7 +147,6 @@ static int Open( vlc_object_t *p_this )
 
     p_sys->stream = NULL;
     p_sys->b_proxy = false;
-    p_sys->psz_proxy_passbuf = NULL;
     p_sys->psz_mime = NULL;
     p_sys->b_icecast = false;
     p_sys->psz_location = NULL;
@@ -219,17 +217,13 @@ static int Open( vlc_object_t *p_this )
 
     /* Check proxy */
     msg_Dbg(p_access, "querying proxy for %s", psz_url);
-    psz = vlc_getProxyUrl(psz_url);
+    psz = vlc_getProxyUrlForObject(VLC_OBJECT(p_access), psz_url);
     if( psz != NULL )
     {
         msg_Dbg(p_access, "proxy: %s", psz);
         p_sys->b_proxy = true;
         vlc_UrlParse( &p_sys->proxy, psz );
         free( psz );
-
-        psz = var_InheritString( p_access, "http-proxy-pwd" );
-        if( psz )
-            p_sys->proxy.psz_password = p_sys->psz_proxy_passbuf = psz;
 
         if( p_sys->proxy.psz_host == NULL || *p_sys->proxy.psz_host == '\0' )
         {
@@ -349,7 +343,6 @@ error:
     vlc_UrlClean( &p_sys->url );
     if( p_sys->b_proxy )
         vlc_UrlClean( &p_sys->proxy );
-    free( p_sys->psz_proxy_passbuf );
     free( p_sys->psz_mime );
     free( p_sys->psz_location );
     free( p_sys->psz_user_agent );

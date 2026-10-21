@@ -376,6 +376,16 @@ static inline int net_GetPeerAddress( int fd, char *address, int *port )
  */
 VLC_API char *vlc_getProxyUrl(const char *);
 
+/**
+ * Determine a proxy using the object's inherited settings before discovery.
+ * Command-line and item variables take precedence over saved settings. An
+ * empty inherited proxy selects the platform's automatic proxy discovery.
+ * @param obj object that owns the request
+ * @param url absolute target URL
+ * @return allocated proxy URL, or NULL for direct access or an error
+ */
+VLC_API char *vlc_getProxyUrlForObject(vlc_object_t *obj, const char *url);
+
 /** Wait for a service request slot. Returns EINTR if the VLC interrupt fires.
  * Other HTTP authorities pass immediately. MusicBrainz and its VideoLAN mirror
  * share one request per second across HTTP versions and access modules. */

@@ -216,7 +216,7 @@ LIBVLCCORE = -L../src/ -lvlccore
 LIBVLC = -L../lib -lvlc
 
 test_src_misc_configured_proxy_SOURCES = src/misc/configured_proxy.c
-test_src_misc_configured_proxy_LDADD = $(LIBVLCCORE)
+test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
 
 if HAVE_WIN32
 check_PROGRAMS += test_src_config_dirs_win32

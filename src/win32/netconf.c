@@ -254,10 +254,10 @@ clean_url:
 }
 #endif
 
-char *vlc_getProxyUrl(const char *psz_url)
+static char *proxy_find(vlc_object_t *obj, const char *psz_url)
 {
     bool configured;
-    char *proxy = vlc_proxy_GetConfigured(&configured);
+    char *proxy = vlc_proxy_GetConfigured(obj, &configured);
     if (!configured)
     {
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
@@ -269,4 +269,15 @@ char *vlc_getProxyUrl(const char *psz_url)
     }
 
     return proxy;
+}
+
+char *vlc_getProxyUrl(const char *url)
+{
+    return proxy_find(NULL, url);
+}
+
+char *vlc_getProxyUrlForObject(vlc_object_t *obj, const char *url)
+{
+    assert(obj != NULL);
+    return proxy_find(obj, url);
 }

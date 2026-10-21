@@ -25,13 +25,24 @@
 #include <vlc_network.h>
 #include "../network/proxy.h"
 
-char *vlc_getProxyUrl(const char *url)
+static char *proxy_find(vlc_object_t *obj, const char *url)
 {
     bool configured;
-    char *proxy = vlc_proxy_GetConfigured(&configured);
+    char *proxy = vlc_proxy_GetConfigured(obj, &configured);
     if (configured)
         return proxy;
 
     VLC_UNUSED(url);
     return NULL;
+}
+
+char *vlc_getProxyUrl(const char *url)
+{
+    return proxy_find(NULL, url);
+}
+
+char *vlc_getProxyUrlForObject(vlc_object_t *obj, const char *url)
+{
+    assert(obj != NULL);
+    return proxy_find(obj, url);
 }
