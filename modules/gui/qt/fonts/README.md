@@ -8,8 +8,9 @@ settings headings. Inter 4 has different outlines and spacing.
 
 Inter is designed by Rasmus Andersson and contributors. The included
 LICENSE.txt contains the SIL Open Font License 1.1 and copyright notice.
-VLC embeds regular, medium, semibold and bold styles, with their italic styles,
-and loads them before creating its interface. Static styles allow Qt font
+VLC embeds light, regular, medium, semibold and bold styles. Regular, medium,
+semibold and bold also have italic styles. VLC loads the fonts before it
+creates the interface. Static styles allow Qt font
 backends without named variable-font instances to select the intended weight.
 An operating-system font installation is not required. Other system fonts
 remain available for characters that Inter does not contain.

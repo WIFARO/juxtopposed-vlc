@@ -852,6 +852,7 @@ libqt_plugin_la_RES = \
 	fonts/DMMono-Regular.ttf \
 	fonts/DMMono-LICENSE.txt \
 	fonts/Inter-Regular.otf \
+	fonts/Inter-Light.otf \
 	fonts/Inter-Medium.otf \
 	fonts/Inter-SemiBold.otf \
 	fonts/Inter-Bold.otf \

@@ -955,7 +955,7 @@ static void *Thread( void *obj )
     // Static styles let older Qt/font backends select the medium and semibold
     // weights as well, instead of treating every non-bold weight as regular.
     const int interfaceFont = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Inter-Regular.otf"));
-    for (const auto &style : {"Medium", "SemiBold", "Bold", "Italic", "MediumItalic",
+    for (const auto &style : {"Light", "Medium", "SemiBold", "Bold", "Italic", "MediumItalic",
                               "SemiBoldItalic", "BoldItalic"})
     {
         if (QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Inter-%1.otf").arg(QLatin1String(style))) < 0)

@@ -58,7 +58,7 @@ FocusScope {
         width: 1090; height: 759; scale: root.contentScale
         anchors.centerIn: parent
         component Label: Text {
-            color: "#8f8f8f"; font.pixelSize: 16; wrapMode: Text.WordWrap
+            color: "#8f8f8f"; font.pixelSize: 16; font.weight: Font.Light; wrapMode: Text.WordWrap
         }
         component Action: RedesignButton {
             width: 100; height: 32; captionFontSize: 16
@@ -81,18 +81,18 @@ FocusScope {
             objectName: "onboardingWelcome"
             anchors.fill: parent; visible: root.page === 0
             RedesignIcon { objectName: "onboardingWelcomeCone"; x: 475; y: 116; width: 140; height: 140; name: "cone"; color: root.accentColor }
-            Label { x: 248; y: 286; width: 594; height: 50; text: qsTr("Welcome to VLC!"); color: "#e5e5e5"; font.pixelSize: 32; horizontalAlignment: Text.AlignHCenter }
+            Label { x: 248; y: 286; width: 594; height: 50; text: qsTr("Welcome to VLC!"); color: "#eaeaea"; font.pixelSize: 32; horizontalAlignment: Text.AlignHCenter; leftPadding: -0.5; rightPadding: -leftPadding }
             Label {
-                x: 248; y: 366; width: 594; height: 84; lineHeight: 1.4
+                x: 248; y: 366; width: 594; height: 84; lineHeight: 1.4; color: "#969696"
                 text: qsTr("VLC is a free and open source media player.\nPlay videos and music from files, discs, and network streams.\nYou can change all settings later.")
             }
-            Label { x: 248; y: 500; width: 594; text: qsTr("Choose a media folder to start with"); font.pixelSize: 14 }
+            Label { x: 248; y: 500; width: 594; text: qsTr("Choose a media folder to start with"); font.pixelSize: 14; font.weight: Font.Normal }
             C.TextField {
                 id: folderField; objectName: "onboardingFolder"
                 x: 248; y: 534; width: 469; height: 34
                 enabled: root.backend.hasMediaLibrary
                 text: root.folder; placeholderText: qsTr("No folder selected")
-                color: "#afafaf"; placeholderTextColor: "#8f8f8f"; font.pixelSize: 16
+                color: "#c6c6c6"; placeholderTextColor: "#8f8f8f"; font.pixelSize: 16
                 leftPadding: 12; selectByMouse: true
                 Accessible.name: qsTr("Media folder")
                 onTextEdited: root.folder = text
@@ -101,7 +101,7 @@ FocusScope {
             Action {
                 objectName: "onboardingBrowse"
                 x: 729; y: 533.5; width: 114; height: 35
-                captionFontWeight: Font.Normal
+                captionFontWeight: Font.Normal; captionVerticalOffset: -0.5
                 caption: qsTr("Browse"); text: caption; enabled: root.backend.hasMediaLibrary
                 onClicked: { const chosen = root.backend.browseFolder(root.folder); if (chosen.length) root.folder = chosen }
             }
@@ -151,8 +151,10 @@ FocusScope {
             anchors.fill: parent; visible: root.page === 1
             RedesignPlayerView {
                 id: preview; objectName: "onboardingPlayerPreview"
-                x: 17; y: 20; width: 1056; height: 594
-                scaleFactor: width / 1920; presentationOnly: true
+                x: 17; y: 19; width: 1920; height: 1080
+                // Scale the complete scene so fractional text sizes survive.
+                transformOrigin: Item.TopLeft; scale: 1056 / width
+                scaleFactor: 1; timeLabelFontSize: 15; presentationOnly: true
                 accentColor: root.accentColor; lightTheme: root.previewLight
                 hasVideo: true; started: true; seekable: true; hasPrevious: true; hasNext: true
                 videoContent: Component { Rectangle { color: root.previewLight ? "#dedede" : "#090909" } }
@@ -160,9 +162,17 @@ FocusScope {
                 timeText: "00:02:10"; lengthText: "00:25:40"
                 onCloseRequested: root.dismiss()
             }
-            Label { x: 100; y: 180; width: 890; text: qsTr("Select your preferred theme and color."); horizontalAlignment: Text.AlignHCenter; font.pixelSize: 24 }
+            Label {
+                x: 100; y: 180; width: 890
+                text: qsTr("Select your preferred theme and color.")
+                horizontalAlignment: Text.AlignHCenter; font.pixelSize: 24; color: "#969696"
+                // The white-accent reference uses a regular heading.
+                font.weight: root.accentColor.toString() === "#afafaf" ? Font.Normal : Font.Light
+                leftPadding: root.accentColor.toString() === "#afafaf" ? 0 : -0.5; rightPadding: -leftPadding
+                topPadding: -0.25; bottomPadding: -topPadding
+            }
             Row {
-                x: 326; y: 282; spacing: 32
+                x: 327; y: 282; spacing: 32
                 Repeater {
                     model: [{label: qsTr("Light"), scheme: 1}, {label: qsTr("Dark"), scheme: 2}, {label: qsTr("System"), scheme: 0}]
                     C.AbstractButton {
@@ -186,7 +196,7 @@ FocusScope {
                                 x: 12; y: 12; width: 100; height: 100; visible: schemeButton.modelData.scheme === 0
                                 svg: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><path d="M15 0H88Q100 0 100 12V88Q100 100 88 100H76Z" fill="#afafaf"/></svg>'
                             }
-                            Label { y: 142; width: parent.width; text: schemeButton.modelData.label; horizontalAlignment: Text.AlignHCenter }
+                            Label { y: 141.5; width: parent.width; text: schemeButton.modelData.label; horizontalAlignment: Text.AlignHCenter }
                         }
                     }
                 }
@@ -220,7 +230,7 @@ FocusScope {
         Item {
             objectName: "onboardingShortcuts"
             anchors.fill: parent; visible: root.page === 2
-            Label { x: 100; y: 68; width: 890; text: qsTr("Learn the basic keyboard shortcuts."); horizontalAlignment: Text.AlignHCenter; font.pixelSize: 24 }
+            Label { x: 100; y: 66.75; width: 890; text: qsTr("Learn the basic keyboard shortcuts."); horizontalAlignment: Text.AlignHCenter; font.pixelSize: 24; font.weight: Font.Normal; color: "#969696" }
             Repeater {
                 model: root.backend.shortcuts
                 Row {
@@ -232,7 +242,7 @@ FocusScope {
                     objectName: "onboardingShortcutRow_" + index
                     x: index < 6 ? 62 : 605; y: 154 + (index % 6) * 82
                     width: 475; height: 42
-                    Label { width: 240; anchors.verticalCenter: parent.verticalCenter; text: parent.modelData.title; font.pixelSize: 16 }
+                    Label { width: 240; anchors.verticalCenter: parent.verticalCenter; text: parent.modelData.title; font.pixelSize: 16; color: "#969696"; topPadding: 0.5; bottomPadding: -topPadding }
                     Row {
                         width: 235; spacing: 6
                         scale: Math.min(1, width / implicitWidth)
@@ -244,7 +254,7 @@ FocusScope {
                                 required property string modelData
                                 required property int index
                                 spacing: 6
-                                Label { visible: parent.index > 0; text: "/"; anchors.verticalCenter: parent.verticalCenter }
+                                Label { visible: parent.index > 0; text: "/"; color: "#969696"; anchors.verticalCenter: parent.verticalCenter }
                                 Row {
                                     spacing: 4
                                     Repeater {
@@ -259,9 +269,11 @@ FocusScope {
                                             Rectangle { anchors.fill: parent; radius: 12; color: "#1b1b1b"; border.color: "#373737"; border.width: 3 }
                                             Label {
                                                 id: keyLabel; anchors.centerIn: parent; font.pixelSize: 16
+                                                anchors.horizontalCenterOffset: keycap.modelData === "Space" ? -1 : 0
+                                                topPadding: 0.5; bottomPadding: -topPadding
                                                 text: ({Left: "←", Right: "→", Up: "↑", Down: "↓"})[keycap.modelData]
                                                     || (["Shift", "Ctrl", "Alt", "Meta"].includes(keycap.modelData) ? keycap.modelData.toUpperCase() : keycap.modelData)
-                                                color: "#afafaf"
+                                                color: "#eaeaea"
                                             }
                                         }
                                     }
@@ -271,7 +283,7 @@ FocusScope {
                     }
                 }
             }
-            Label { x: 62; y: 676; text: qsTr("Find the full list in the menu."); font.pixelSize: 16; color: "#666666" }
+            Label { x: 62; y: 675.5; text: qsTr("Find the full list in the menu."); font.pixelSize: 16; font.weight: Font.Normal; color: "#6b6b6b" }
         }
         Label {
             id: error; objectName: "onboardingError"

@@ -79,6 +79,7 @@ FocusScope {
     property string mediaTitle: qsTr("VLC Media Player")
     property string locationTitle: qsTr("Videos")
     property string timeText: "00:00:00"
+    property real timeLabelFontSize: 14
     property string lengthText: "00:00:00"
     property string artist: ""
     property url artwork
@@ -745,7 +746,7 @@ FocusScope {
                     leftPadding: chrome.hasTimeline("above") ? 0 : theme.dp(8)
                     horizontalAlignment: Text.AlignHCenter
                     text: root.timeText
-                    color: theme.foreground; font.pixelSize: theme.dp(14)
+                    color: theme.foreground; font.pixelSize: theme.dp(root.timeLabelFontSize)
                 }
                 RedesignPlayerSeekBar {
                     focusPolicy: root.presentationOnly ? Qt.NoFocus : Qt.StrongFocus
@@ -784,7 +785,7 @@ FocusScope {
                     rightPadding: chrome.hasTimeline("above") ? 0 : theme.dp(6)
                     horizontalAlignment: Text.AlignHCenter
                     text: root.lengthText
-                    color: theme.foreground; font.pixelSize: theme.dp(14)
+                    color: theme.foreground; font.pixelSize: theme.dp(root.timeLabelFontSize)
                 }
             }
             ChromeButton {
