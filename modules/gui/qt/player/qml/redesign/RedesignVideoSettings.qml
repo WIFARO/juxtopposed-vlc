@@ -220,7 +220,7 @@ ColumnLayout {
         onToggled: checked => root.effect(sourceName, checked, "sub-source")
     }
 
-    Text { Layout.topMargin: theme.dp(12); Layout.bottomMargin: theme.dp(26); text: qsTr("Defaults"); color: theme.playerHeading; font.pixelSize: theme.dp(16) }
+    Text { Layout.topMargin: theme.dp(12); Layout.bottomMargin: theme.dp(26); text: qsTr("Defaults"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium }
     Text { Layout.bottomMargin: theme.dp(18); text: qsTr("Flip"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
     RowLayout {
         Layout.fillWidth: true; Layout.leftMargin: -theme.dp(4); Layout.preferredHeight: theme.dp(44); spacing: theme.dp(2)
@@ -314,7 +314,7 @@ ColumnLayout {
         }
     }
     Rectangle { Layout.fillWidth: true; Layout.leftMargin: -theme.dp(24); Layout.rightMargin: -theme.dp(20); Layout.topMargin: theme.dp(10); height: theme.dp(1); color: theme.border }
-    Text { Layout.topMargin: theme.dp(20); text: qsTr("Filters"); color: theme.playerHeading; font.pixelSize: theme.dp(16) }
+    Text { Layout.topMargin: theme.dp(20); text: qsTr("Filters"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium }
     RedesignFilterSection {
         objectName: "videoEssentialSection"
         contentTopMargin: 9; contentBottomMargin: 20

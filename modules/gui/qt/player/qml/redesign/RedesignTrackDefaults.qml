@@ -14,7 +14,7 @@ ColumnLayout {
     spacing: 0
     Text {
         Layout.fillWidth: true; Layout.bottomMargin: theme.dp(6); Layout.leftMargin: theme.dp(root.textInset)
-        text: qsTr("Defaults"); color: theme.playerHeading; font.pixelSize: theme.dp(16)
+        text: qsTr("Defaults"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
     }
     RedesignPreferenceRow {
         objectName: "defaultTrackSetting"
