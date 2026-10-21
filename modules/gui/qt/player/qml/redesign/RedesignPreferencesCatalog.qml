@@ -175,6 +175,7 @@ QtObject {
             { title: qsTr("Decoding"), rows: [ ["redesign-hardware-decoding", qsTr("Hardware-accelerated decoding"), {dynamicChoices: true}], ["redesign-postprocessing", qsTr("Video post-processing"), {dynamicChoices: true}],
                 ["avcodec-skiploopfilter", qsTr("Skip the H.264 loop filter"), {choiceLabels: {0: qsTr("Never")}}], ["avcodec-threads", qsTr("Decoding threads")] ] },
             { title: qsTr("Smooth Playback"), rows: [ ["drop-late-frames", qsTr("Skip late video frames"), {hideHelp: true}], ["high-priority", qsTr("Give VLC higher priority")],
+                ["redesign-process-priority", qsTr("Process priority")],
                 ["redesign-rescan-plugins", qsTr("Rescan plugins"), {fullWidthAction: true, rowHeight: 42, hideHelp: true}] ] } ],
         recording: [
             { title: qsTranslate("Settings", "Recording"), rows: [ ["input-record-path", qsTr("Save recordings to")], ["input-record-native", qsTr("Record without re-encoding when possible"), {hideHelp: true}] ] },

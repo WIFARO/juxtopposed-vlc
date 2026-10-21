@@ -48010,3 +48010,12 @@ msgstr "Cole um link direto para um arquivo de legenda e selecione Adicionar."
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
 msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
 msgstr "Use uma única janela do VLC ao iniciar o aplicativo. A opção do gerenciador de arquivos também inclui arquivos abertos por ele. Feche todas as janelas do VLC e inicie-o novamente após ativar esta opção. Opções de linha de comando podem substituir estas configurações."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:178
+msgid "Process priority"
+msgstr "Prioridade do processo"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+msgid "This setting is not available in VLC 4."
+msgstr "Esta configuração não está disponível no VLC 4."

@@ -47969,3 +47969,12 @@ msgstr "粘贴字幕文件的直接链接，然后选择“添加”。"
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
 msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
 msgstr "再次启动应用时使用同一个 VLC 窗口。文件管理器选项还包括从文件管理器打开的文件。启用后请关闭所有 VLC 窗口，再重新启动。命令行选项可能覆盖这些设置。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:178
+msgid "Process priority"
+msgstr "进程优先级"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+msgid "This setting is not available in VLC 4."
+msgstr "VLC 4 中不提供此设置。"

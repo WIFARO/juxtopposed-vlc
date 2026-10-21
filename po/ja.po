@@ -47125,3 +47125,12 @@ msgstr "字幕ファイルへの直接リンクを貼り付けてから、「追
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
 msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
 msgstr "起動時に同じ VLC ウィンドウを使用します。ファイルマネージャーのオプションは、そこから開いたファイルにも適用されます。有効にした後は、すべての VLC ウィンドウを閉じて再起動してください。コマンドラインの指定が優先される場合があります。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:178
+msgid "Process priority"
+msgstr "プロセスの優先度"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+msgid "This setting is not available in VLC 4."
+msgstr "この設定は VLC 4 では利用できません。"

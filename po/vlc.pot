@@ -39103,3 +39103,12 @@ msgstr ""
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
 msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
 msgstr ""
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:178
+msgid "Process priority"
+msgstr ""
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+msgid "This setting is not available in VLC 4."
+msgstr ""

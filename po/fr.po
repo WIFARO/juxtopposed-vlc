@@ -44249,3 +44249,12 @@ msgstr "Collez un lien direct vers un fichier de sous-titres, puis sélectionnez
 #: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
 msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
 msgstr "Utilisez une seule fenêtre VLC pour les lancements de l’application. L’option du gestionnaire de fichiers inclut aussi les fichiers ouverts depuis celui-ci. Fermez toutes les fenêtres VLC et relancez VLC après activation. Les options de ligne de commande peuvent remplacer ces paramètres."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:178
+msgid "Process priority"
+msgstr "Priorité du processus"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1677
+msgid "This setting is not available in VLC 4."
+msgstr "Ce paramètre n’est pas disponible dans VLC 4."
