@@ -333,6 +333,10 @@ test_src_preparser_fetcher_shutdown_SOURCES = src/preparser/fetcher_shutdown.c \
 test_src_preparser_fetcher_shutdown_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_preparser_fetcher_shutdown_LDADD = $(LIBVLCCORE) $(LIBVLC) ../compat/libcompat.la $(SOCKET_LIBS)
 test_src_preparser_artwork_fallback_SOURCES = src/preparser/artwork_fallback.c
+test_src_preparser_artwork_fallback_CPPFLAGS = $(AM_CPPFLAGS)
+if HAVE_DYNAMIC_PLUGINS
+test_src_preparser_artwork_fallback_CPPFLAGS += -DHAVE_DYNAMIC_PLUGINS
+endif
 test_src_preparser_artwork_fallback_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_preparser_thumbnail_SOURCES = src/preparser/thumbnail.c
 test_src_preparser_thumbnail_LDADD = $(LIBVLCCORE) $(LIBVLC)
