@@ -142,7 +142,11 @@ C.Dialog {
                     id: nameHeading
                     x: root.theme.dp(20); width: parent.width - root.theme.dp(40)
                     y: root.theme.dp(39) - baselineOffset
-                    text: qsTr("Playlist Name <font color='%1'>(optional)</font>").arg(root.theme.playerLabel)
+                    readonly property string headingText: qsTr("Playlist Name (optional)")
+                    text: {
+                        const label = headingText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                        return label.replace(/(\([^)]*\)|（[^）]*）)(\s*)$/, "<font color='" + root.theme.playerLabel + "'>$1</font>$2")
+                    }
                     textFormat: Text.RichText
                     color: root.theme.settingsHeading; font.pixelSize: root.theme.dp(16)
                     wrapMode: Text.WordWrap
