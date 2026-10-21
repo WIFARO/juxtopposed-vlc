@@ -127,6 +127,13 @@ static void Check(vlc_object_t *owner, unsigned tags, bool allow_network,
 
 int main(void)
 {
+#if defined(HAVE_DYNAMIC_PLUGINS) && !defined(__ELF__) \
+    && !(defined(__MACH__) && defined(HAVE_DYLIB_DYNAMIC_LOOKUP))
+    // Match module_InitStaticModules(): these shared-library builds cannot
+    // discover the providers exported by this standalone test executable.
+    fputs("Test requires executable-provided built-in modules.\n", stderr);
+    return 77;
+#endif
     test_init();
     char path[] = "artwork-fallback-XXXXXX";
     int fd = vlc_mkstemp(path);
