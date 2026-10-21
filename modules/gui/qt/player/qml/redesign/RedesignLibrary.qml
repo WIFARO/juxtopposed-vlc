@@ -181,7 +181,8 @@ RedesignLibraryView {
         : selectedPlaylist ? "playlist-media" : selectedCollection ? "audio-tracks"
         : category === 2 ? "music/" + musicSection : "category/" + category
     sortFields: {
-        if (linkedChannels) return ["title", "uri"]
+        // Edit mode itself depends on the selected sort option.
+        if (selectedPlaylist && linkedPlaylist.expanded) return ["title", "uri"]
         if (homeSectionsVisible || category === 2 && !musicSection && !currentFolder) return []
         if (currentFolder) return folderHasOnlyDirectories ? ["title", "uri"]
             : category === 1 ? ["played", "title", "insertion", "uri"] : ["title", "main_artist", "insertion", "uri"]
