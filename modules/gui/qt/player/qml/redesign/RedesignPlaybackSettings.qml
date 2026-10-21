@@ -105,7 +105,7 @@ ColumnLayout {
     readonly property var visualizerOptions: {
         visualizationRevision
         const options = []
-        const labels = {"": qsTr("Disabled"), scope: qsTr("Scope"), spectrum: qsTr("Spectrum"), spectrometer: qsTr("Spectrometer"), vuMeter: qsTr("VU meter")}
+        const labels = {"": qsTr("Disabled"), scope: qsTr("Scope"), spectrum: qsTr("Spectrum"), spectrometer: qsTr("Spectrometer"), vuMeter: qsTr("VU meter"), glspectrum: qsTr("3D spectrum"), projectm: "projectM"}
         const icons = {scope: "visual-scope", spectrum: "visual-spectrum", spectrometer: "visual-spectrometer"}
         for (let i = 0; i < visualizations.count; ++i) {
             const entry = visualizations.objectAt(i)
