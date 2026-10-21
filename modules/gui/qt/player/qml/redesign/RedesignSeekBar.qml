@@ -323,9 +323,10 @@ T.Slider {
             }
             Text {
                 objectName: "seekThumbnailTime"
-                anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: parent.height - baselineOffset - root.theme.dp(3)
                 text: root.timeForPosition(root.previewImagePosition)
-                font.pixelSize: root.theme.dp(14); color: root.theme.foreground
+                font.pixelSize: root.theme.dp(15); color: root.theme.foreground
             }
         }
     }
