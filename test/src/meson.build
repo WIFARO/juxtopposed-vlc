@@ -235,6 +235,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name' : 'test_src_preparser_artwork_fallback',
+    'sources' : files('preparser/artwork_fallback.c'),
+    'suite' : ['src', 'test_src'],
+    'link_with' : [libvlc, libvlccore],
+}
+
+vlc_tests += {
     'name' : 'test_src_preparser_thumbnail',
     'sources' : files('preparser/thumbnail.c'),
     'suite' : ['src', 'test_src'],

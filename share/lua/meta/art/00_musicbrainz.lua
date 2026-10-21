@@ -68,11 +68,13 @@ function fetch_art()
     or meta["Listing Type"] == "tv"
     then return nil end
 
-    local releaseid = nil
-
-    if meta["MB_ALBUMID"] then
-        releaseid = meta["MB_ALBUMID"]
+    -- TagLib normalizes the identifier, while Vorbis/FLAC demuxers can
+    -- expose the original comment name during playback.
+    local releaseid = meta["MB_ALBUMID"]
+    if not releaseid or releaseid == "" then
+        releaseid = meta["MUSICBRAINZ_ALBUMID"]
     end
+    if releaseid == "" then releaseid = nil end
 
     if not releaseid and meta["artist"] and meta["album"] then
         query = "artist:\"" .. meta["artist"] .. "\" AND release:\"" .. meta["album"] .. "\""

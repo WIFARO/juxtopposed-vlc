@@ -85,6 +85,14 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name' : 'test_modules_lua_musicbrainz',
+    'sources' : files('lua/musicbrainz.c'),
+    'suite' : ['modules', 'test_modules'],
+    'dependencies' : [lua_dep],
+    'enabled' : lua_dep.found(),
+}
+
+vlc_tests += {
     'name': 'test_modules_misc_media_tracks',
     'sources': files('misc/media_tracks.c'),
     'suite': ['modules', 'test_modules'],

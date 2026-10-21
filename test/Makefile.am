@@ -72,6 +72,7 @@ check_PROGRAMS = \
 	test_src_preparser_folder_options \
 	test_src_playlist_preparse_depth \
 	test_src_preparser_fetcher_shutdown \
+	test_src_preparser_artwork_fallback \
 	test_src_preparser_thumbnail \
 	test_src_preparser_thumbnail_to_files \
 	test_src_input_decoder \
@@ -160,7 +161,7 @@ check_PROGRAMS += test_src_misc_image_cvpx
 endif
 
 if BUILD_LUA
-check_PROGRAMS += test_modules_lua_playlist_parser
+check_PROGRAMS += test_modules_lua_playlist_parser test_modules_lua_musicbrainz
 endif
 
 
@@ -184,6 +185,7 @@ EXTRA_DIST = \
 	bin/cachegen.py \
 	modules/lua/extensions/extensions.lua \
 	modules/lua/playlist/playlist.lua \
+	modules/lua/musicbrainz.lua \
 	samples/certs/certkey.pem \
 	samples/empty.voc \
 	samples/image.jpg \
@@ -330,6 +332,8 @@ test_src_preparser_fetcher_shutdown_SOURCES = src/preparser/fetcher_shutdown.c \
     ../src/misc/variables.c ../src/input/item.c ../src/text/strings.c
 test_src_preparser_fetcher_shutdown_CPPFLAGS = $(AM_CPPFLAGS) -I$(top_srcdir)/src
 test_src_preparser_fetcher_shutdown_LDADD = $(LIBVLCCORE) $(LIBVLC) ../compat/libcompat.la $(SOCKET_LIBS)
+test_src_preparser_artwork_fallback_SOURCES = src/preparser/artwork_fallback.c
+test_src_preparser_artwork_fallback_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_preparser_thumbnail_SOURCES = src/preparser/thumbnail.c
 test_src_preparser_thumbnail_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_preparser_thumbnail_to_files_SOURCES = src/preparser/thumbnail_to_files.c
@@ -492,6 +496,9 @@ test_modules_lua_extension_CPPFLAGS = $(AM_CPPFLAGS)
 test_modules_lua_playlist_parser_SOURCES = modules/lua/playlist_parser.c
 test_modules_lua_playlist_parser_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_modules_lua_playlist_parser_CPPFLAGS = $(AM_CPPFLAGS)
+test_modules_lua_musicbrainz_SOURCES = modules/lua/musicbrainz.c
+test_modules_lua_musicbrainz_CPPFLAGS = $(AM_CPPFLAGS) $(LUA_CFLAGS)
+test_modules_lua_musicbrainz_LDADD = $(LUA_LIBS)
 
 test_modules_misc_medialibrary_SOURCES = modules/misc/medialibrary.c
 test_modules_misc_medialibrary_LDADD = $(LIBVLCCORE) $(LIBVLC)
