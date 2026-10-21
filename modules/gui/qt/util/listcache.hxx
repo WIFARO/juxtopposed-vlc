@@ -525,6 +525,12 @@ void ListCache<T>::partialUpdate()
             emit localSizeChanged(m_cachedData->queryCount, m_cachedData->maximumCount);
         }
     }
+
+    // The diff compares item identity. Retained rows can still have new data,
+    // so notify their bindings after all rows use the completed new cache.
+    const auto loaded = std::min(m_cachedData->loadedCount, m_cachedData->queryCount);
+    if (loaded > 0)
+        emit localDataChanged(0, loaded - 1);
 }
 
 template<typename T>

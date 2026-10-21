@@ -31,12 +31,14 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QDebug>
+#include <QPersistentModelIndex>
 
 
 struct Item
 {
     int id;
-    Item(int i) : id {i} {}
+    QString label;
+    Item(int i, QString text = {}) : id {i}, label {text} {}
 };
 
 using ItemPtr = std::shared_ptr<Item>;
@@ -45,8 +47,8 @@ using ItemLoader = LocalListCacheLoader<ItemPtr>;
 template<>
 bool ListCache<ItemPtr>::compareItems(const ItemPtr& a, const ItemPtr& b)
 {
-    //just compare the pointers here
-    return a == b;
+    // As in media-library models, identity is independent of the payload.
+    return a->id == b->id;
 }
 
 class ModelPrivate;
@@ -61,6 +63,7 @@ public:
     QVariant data(const QModelIndex & index, int role) const override;
 
     void append(int id);
+    void setLabel(int id, const QString& label);
 
 private:
 };
@@ -118,12 +121,11 @@ Model::Model(QObject *parent)
 QVariant Model::data(const QModelIndex &index, int role) const
 {
     Q_D(const Model);
-    Q_UNUSED(role);
-
     const ItemPtr *item = d->item(index.row());
     if (!item)
         return {};
 
+    if (role == Qt::UserRole) return (*item)->label;
     return (*item)->id;
 }
 
@@ -132,6 +134,15 @@ void Model::append(int id)
     Q_D(Model);
 
     d->m_items.push_back(std::make_shared<Item>(id));
+    d->rev++;
+    d->invalidateCache();
+}
+
+void Model::setLabel(int id, const QString& label)
+{
+    Q_D(Model);
+    for (auto& item : d->m_items)
+        if (item->id == id) item = std::make_shared<Item>(id, label);
     d->rev++;
     d->invalidateCache();
 }
@@ -191,6 +202,38 @@ void test_sanity()
     }
 }
 
+void test_retained_rows_notify_payload_changes()
+{
+    Model m;
+    m.invalidateCache();
+    m.append(1);
+    m.append(2);
+    await(10);
+    QPersistentModelIndex selected(m.index(1));
+    int changes = 0, resets = 0;
+    QObject::connect(&m, &Model::dataChanged, &m,
+        [&](const QModelIndex& first, const QModelIndex& last, const QList<int>& roles) {
+            assert(first.isValid() && last.isValid());
+            assert(first.row() <= last.row() && last.row() < m.rowCount());
+            if (first.row() <= selected.row() && last.row() >= selected.row()) {
+                assert(roles.isEmpty() || roles.contains(Qt::UserRole));
+                assert(m.data(selected, Qt::UserRole).toString() == "Updated");
+                ++changes;
+            }
+        });
+    QObject::connect(&m, &Model::modelReset, &m, [&] { ++resets; });
+    m.setLabel(2, QStringLiteral("Updated"));
+    await(10);
+    assert(m.data(selected, Qt::UserRole).toString() == "Updated");
+    assert(changes > 0);
+    assert(resets == 0 && selected.isValid() && selected.row() == 1);
+    changes = 0;
+    m.append(0);
+    await(10);
+    assert(changes > 0);
+    assert(resets == 0 && selected.isValid() && selected.row() == 2);
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication a(argc, argv);
@@ -199,6 +242,7 @@ int main(int argc, char **argv)
         test_null_reset();
         test_invalidate_on_invalidate();
         test_sanity();
+        test_retained_rows_notify_payload_changes();
 
         a.quit();
     }, Qt::QueuedConnection);
