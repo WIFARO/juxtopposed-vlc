@@ -30,7 +30,7 @@ ColumnLayout {
         sortDescending = sortColumn === column ? !sortDescending : false
         sortColumn = column
     }
-    Text { text: qsTr("Plugins"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(2) }
+    Text { text: qsTr("Plugins"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(2) }
     Rectangle {
         Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredHeight: theme.dp(228)
         color: theme.field; radius: theme.dp(6); border.width: theme.dp(2)
@@ -101,7 +101,7 @@ ColumnLayout {
             objectName: "pluginsSearch"
             Layout.fillWidth: true; Layout.preferredWidth: theme.dp(210); Layout.maximumWidth: theme.dp(210); Layout.minimumWidth: 0
             implicitHeight: theme.dp(36)
-            placeholderText: qsTr("Search"); placeholderTextColor: theme.playerLabel
+            placeholderText: qsTr("Search"); placeholderTextColor: root.lightTheme ? theme.foreground : "#404040"
             color: theme.foreground; font.pixelSize: theme.dp(14); selectByMouse: true
             Accessible.name: qsTr("Search plugins")
             background: Rectangle { color: theme.field; radius: theme.dp(6); border.width: theme.dp(2); border.color: search.activeFocus ? theme.accent : root.lightTheme ? theme.border : "#191919" }

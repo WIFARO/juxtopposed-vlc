@@ -189,7 +189,7 @@ QtObject {
                     faster: qsTr("Faster"), fast: qsTr("Fast"), medium: qsTr("Medium"), slow: qsTr("Slow"),
                     slower: qsTr("Slower"), veryslow: qsTr("Very slow"), placebo: qsTr("Placebo")}}],
                 ["sout-x264-tune", qsTr("Tuning")] ] } ],
-        extensions: [ { title: "", rows: [ ["qt-autoload-extensions", qsTr("Load add-ons on startup")] ] } ]
+        extensions: [ { title: "", rows: [ ["qt-autoload-extensions", qsTr("Load add-ons on startup"), {hideHelp: true}] ] } ]
     })
     readonly property var advancedSections: ({
         general: [ {title: "", rows: [ ["qt-minor-warnings", qsTr("Show minor warnings")], ["startup-options", qsTr("Additional command line options"), {rowHeight: 46}], ["logmode", qsTr("Log format"), {choiceLabels: {text: qsTr("Plain text"), html: "HTML"}}], ["stats", qsTr("Collect playback statistics")], ["redesign-config-folder", qsTr("Open configurations folder"), {rowHeight: 42}], ["redesign-reset-all", qsTr("Reset all settings"), {rowHeight: 42}] ] },

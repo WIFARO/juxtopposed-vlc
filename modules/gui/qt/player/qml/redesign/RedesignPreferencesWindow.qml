@@ -337,7 +337,7 @@ RedesignSettingsDialog {
                         required property var modelData
                         required property int index
                         width: parent.width
-                        topPadding: root.category === "extensions" ? theme.dp(6) : 0
+                        topPadding: root.category === "extensions" ? theme.dp(5) : 0
                         bottomPadding: root.category === "extensions" ? theme.dp(12) : 0
                         visible: modelData.rows.some(row => preferenceStore.describe(row[0]).kind !== undefined) || root.category === "controls" && modelData.title === qsTr("Keyboard Shortcuts")
                         Text {
@@ -397,7 +397,7 @@ RedesignSettingsDialog {
 
                 Item {
                     visible: !root.search.length
-                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles" || root.category === "network" || root.category === "performance" || root.category === "recording" ? 53 : 50)
+                    width: parent.width; height: theme.dp(root.category === "extensions" ? 40 : root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles" || root.category === "network" || root.category === "performance" || root.category === "recording" ? 53 : 50)
                     RedesignButton {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                         height: theme.dp(38)

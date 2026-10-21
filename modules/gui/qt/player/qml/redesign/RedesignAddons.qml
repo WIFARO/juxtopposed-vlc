@@ -19,15 +19,16 @@ ColumnLayout {
     readonly property bool canRemove: !backend.loading && selectedAddon.state === 2 && selectedAddon.manageable && !selectedAddon.pending
     readonly property string website: String(selectedAddon.website || "").trim()
     readonly property bool canOpenWebsite: /^https?:\/\/[^/\s]+(?:[/?#]|$)/i.test(website)
-    spacing: theme.dp(8)
+    spacing: theme.dp(6)
     function addSelected() {
         if (canAdd) actionMessage = backend.installAddon(selectedId) ? "" : qsTr("VLC cannot add this add-on.")
     }
     function removeSelected() {
         if (canRemove) actionMessage = backend.removeAddon(selectedId) ? "" : qsTr("VLC cannot remove this add-on.")
     }
-    Text { text: qsTr("Add-ons"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); Layout.topMargin: theme.dp(8); Layout.bottomMargin: theme.dp(2) }
+    Text { text: qsTr("Add-ons"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; Layout.topMargin: theme.dp(8); Layout.bottomMargin: theme.dp(3) }
     Rectangle {
+        objectName: "addonsFrame"
         Layout.fillWidth: true; Layout.preferredHeight: theme.dp(194)
         color: theme.field; radius: theme.dp(6); border.width: theme.dp(2)
         border.color: list.activeFocus ? theme.accent : root.lightTheme ? theme.border : "#191919"
@@ -95,7 +96,7 @@ ColumnLayout {
             Layout.columnSpan: parent.wide ? 1 : 2
             Layout.preferredWidth: theme.dp(210); Layout.minimumWidth: theme.dp(90); Layout.fillWidth: !parent.wide
             implicitHeight: theme.dp(36)
-            placeholderText: qsTr("Search"); placeholderTextColor: theme.playerLabel
+            placeholderText: qsTr("Search"); placeholderTextColor: root.lightTheme ? theme.foreground : "#404040"
             color: theme.foreground; font.pixelSize: theme.dp(14); selectByMouse: true
             Accessible.name: qsTr("Search add-ons")
             background: Rectangle { color: theme.field; radius: theme.dp(6); border.width: theme.dp(2); border.color: search.activeFocus ? theme.accent : root.lightTheme ? theme.border : "#191919" }
@@ -134,7 +135,7 @@ ColumnLayout {
                     objectName: "addonDetailsName"
                     Layout.fillWidth: true; Layout.minimumWidth: 0
                     text: root.selectedAddon.name || ""; textFormat: Text.PlainText
-                    color: theme.settingsHeading; font.pixelSize: theme.dp(16); wrapMode: Text.WrapAnywhere
+                    color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; wrapMode: Text.WrapAnywhere
                 }
                 RedesignButton {
                     objectName: "addonDetailsClose"
@@ -199,7 +200,7 @@ ColumnLayout {
     component ActionButton: RedesignButton {
         Layout.preferredWidth: theme.dp(100); implicitHeight: theme.dp(32)
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-        text: caption
+        text: caption; captionFontWeight: Font.DemiBold
         background: Rectangle { radius: theme.dp(6); color: parent.hovered ? theme.hover : root.lightTheme ? theme.background : "#191919"; border.color: parent.visualFocus ? theme.accent : "transparent" }
     }
 }
