@@ -69,6 +69,7 @@ public: // Interface
 
     void setDefaultThumbnail(const QString & fileName);
     void setSingleDefault(bool single) { m_singleDefault = single; }
+    void setEmptyFallbackSize(const QSize& size) { m_emptyFallbackSize = size; }
 
     int requiredNoOfThumbnails() const;
 
@@ -87,6 +88,7 @@ private: // Functions
 
 private:
     QSize m_size;
+    QSize m_emptyFallbackSize;
 
     int m_countX;
     int m_countY;

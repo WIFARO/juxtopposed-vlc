@@ -24,6 +24,21 @@ private slots:
             }
         }
     }
+    void optionalEmptyMarkerDoesNotChangeRealImageDimensions() {
+        QTemporaryDir directory;
+        QImage pixel(1,1,QImage::Format_ARGB32_Premultiplied); pixel.fill(Qt::red);
+        const auto path=directory.filePath("pixel.png"); QVERIFY(pixel.save(path));
+        CoverGenerator generator; generator.setSize({91,53});
+        generator.setDefaultThumbnail({}); generator.setEmptyFallbackSize({1,1});
+        for (const QStringList& files : {QStringList{},QStringList{QStringLiteral("/missing/cover.png")}}) {
+            const auto image=generator.execute(files);
+            QCOMPARE(image.size(),QSize(1,1));
+            QCOMPARE(image.pixelColor(0,0).alpha(),0);
+        }
+        const auto real=generator.execute({path});
+        QCOMPARE(real.size(),QSize(91,53));
+        QCOMPARE(real.pixelColor(45,26),QColor(Qt::red));
+    }
     void missingAndInvalidImagesDoNotLeaveGapsBesideRealArtwork() {
         QTemporaryDir directory;
         QImage source(30,30,QImage::Format_RGB32); source.fill(QColor("#428b69"));

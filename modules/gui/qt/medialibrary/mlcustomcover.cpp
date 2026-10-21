@@ -288,9 +288,11 @@ private:
                 generator.setBlur(data.blur);
                 generator.setSingleDefault(data.singleDefault);
 
-                // The redesign draws its own theme-aware playlist placeholder
-                // below this image. Leave it visible until real covers exist.
-                if (!data.defaultCover.isEmpty() || data.id.type == VLC_ML_PARENT_PLAYLIST)
+                // A one-pixel transparent result identifies an empty generated
+                // cover to the redesign, which draws its own theme-aware icon.
+                // Real covers always retain the requested output dimensions.
+                generator.setEmptyFallbackSize(QSize(1, 1));
+                if (!data.defaultCover.isEmpty() || data.singleDefault || data.id.type == VLC_ML_PARENT_PLAYLIST)
                     generator.setDefaultThumbnail(data.defaultCover);
 
                 ctx.img = generator.execute(thumbnails);

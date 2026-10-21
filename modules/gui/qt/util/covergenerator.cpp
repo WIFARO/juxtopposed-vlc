@@ -118,7 +118,8 @@ QImage CoverGenerator::execute(QStringList thumbnails) const
         });
         if (thumbnails.isEmpty() && m_default.isEmpty())
         {
-            QImage image(m_size, QImage::Format_ARGB32_Premultiplied);
+            QImage image(m_emptyFallbackSize.isValid() ? m_emptyFallbackSize : m_size,
+                         QImage::Format_ARGB32_Premultiplied);
             image.fill(Qt::transparent);
             return image;
         }

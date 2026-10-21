@@ -611,7 +611,7 @@ RedesignLibraryView {
     }
     MLAlbumModel { id: albums; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
     MLArtistModel { id: artists; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
-    MLGenreModel { id: genres; ml: MediaLib; coverDefaultSingle: true; coverDefault: root.lightTheme ? ":/redesign/music-light.svg" : ":/redesign/music-dark.svg"; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
+    MLGenreModel { id: genres; ml: MediaLib; coverDefaultSingle: true; coverDefault: ""; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
     MLAudioModel { id: collectionTracks; ml: MediaLib; parentId: root.selectedCollection || root.emptyParentId; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
     MLRecentMediaModel { id: recent; ml: MediaLib; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder; searchPattern: root.searchText }
     MLPlaylistListModel { id: playlists; ml: MediaLib; searchPattern: root.searchText; sortCriteria: root.mediaSortField; sortOrder: root.mediaSortOrder }
