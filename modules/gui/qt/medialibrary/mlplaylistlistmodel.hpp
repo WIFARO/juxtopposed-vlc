@@ -21,6 +21,7 @@
 
 // MediaLibrary includes
 #include "mlbasemodel.hpp"
+#include <QTimer>
 
 // Forward declarations
 struct vlc_medialibrary_t;
@@ -105,6 +106,8 @@ protected: // MLBaseModel implementation
 private: // Functions
     QString getCover(const MLPlaylist* playlist) const;
 
+    void refreshCovers();
+
     void endTransaction();
 
     bool setTransactionPending(bool);
@@ -135,6 +138,8 @@ public: // Properties
     void setPlaylistType(PlaylistType type);
 
 private: // Variables
+    QTimer m_coverRefreshTimer;
+    quint64 m_coverRevision = 0;
     QSize   m_coverSize;
     QString m_coverDefault;
     QString m_coverPrefix;

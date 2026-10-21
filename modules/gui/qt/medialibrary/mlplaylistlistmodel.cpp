@@ -41,6 +41,7 @@
 #include <QFileInfo>
 #include <QScopeGuard>
 #include <QSettings>
+#include <QUrlQuery>
 
 //-------------------------------------------------------------------------------------------------
 // Static variables
@@ -111,6 +112,11 @@ void appendMediaIntoPlaylist(vlc_medialibrary_t* ml, int64_t playlistId, const s
     : MLBaseModel(parent)
     , m_coverSize(MLPLAYLISTMODEL_COVER_WIDTH, MLPLAYLISTMODEL_COVER_HEIGHT)
 {
+    m_coverRefreshTimer.setSingleShot(true);
+    m_coverRefreshTimer.setInterval(100);
+    connect(&m_coverRefreshTimer, &QTimer::timeout, this, &MLPlaylistListModel::refreshCovers);
+    connect(this, &MLPlaylistListModel::coverSizeChanged, this, &MLPlaylistListModel::refreshCovers);
+    connect(this, &MLPlaylistListModel::coverDefaultChanged, this, &MLPlaylistListModel::refreshCovers);
     connect(this, &MLBaseModel::mlChanged, this, [this] {
         disconnect(m_detailsConnection);
         m_detailsConnection = connect(m_mediaLib, &MediaLib::playlistDetailsChanged, this,
@@ -544,18 +550,34 @@ QString MLPlaylistListModel::getCover(const MLPlaylist * playlist) const
     if (!cover.isEmpty()) return cover.toString(QUrl::FullyEncoded);
     if (!playlist->artwork().isEmpty()) return playlist->artwork();
     if (playlist->getCount() == 0) return {};
-    return MLCustomCover::url(playlist->getId()
+    QUrl url(MLCustomCover::url(playlist->getId()
                             , m_coverSize
                             , m_coverDefault
-                            , PLAYLIST_COVERX, PLAYLIST_COVERY);
+                            , PLAYLIST_COVERX, PLAYLIST_COVERY));
+    QUrlQuery query(url);
+    query.addQueryItem(QStringLiteral("revision"), QString::number(m_coverRevision));
+    url.setQuery(query);
+    return url.toString();
 }
 
 //-------------------------------------------------------------------------------------------------
 // Private MLBaseModel reimplementation
 //-------------------------------------------------------------------------------------------------
 
+void MLPlaylistListModel::refreshCovers()
+{
+    // Update only artwork bindings; keep playlist selection and cached rows.
+    ++m_coverRevision;
+    const int rows = rowCount();
+    if (rows > 0)
+        emit dataChanged(index(0), index(rows - 1), {PLAYLIST_THUMBNAIL});
+}
+
 void MLPlaylistListModel::onVlcMlEvent(const MLEvent & event) /* override */
 {
+    if (event.i_type == VLC_ML_EVENT_PLAYLIST_UPDATED)
+        ++m_coverRevision;
+
     if (m_transactionPending
         && (event.i_type == VLC_ML_EVENT_PLAYLIST_UPDATED
             || event.i_type == VLC_ML_EVENT_PLAYLIST_DELETED
@@ -567,6 +589,11 @@ void MLPlaylistListModel::onVlcMlEvent(const MLEvent & event) /* override */
 
     switch (event.i_type)
     {
+    case VLC_ML_EVENT_MEDIA_THUMBNAIL_GENERATED:
+        if (event.media_thumbnail_generated.b_success
+            && event.media_thumbnail_generated.i_size == VLC_ML_THUMBNAIL_SMALL)
+            m_coverRefreshTimer.start();
+        break;
     case VLC_ML_EVENT_FAVORITES_CHANGED:
         if (event.favorites_changed.i_entity_type == VLC_ML_PARENT_PLAYLIST)
             updateItemInCache(MLItemId(event.favorites_changed.i_entity_id, VLC_ML_PARENT_PLAYLIST));
