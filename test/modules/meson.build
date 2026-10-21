@@ -1,4 +1,13 @@
 vlc_tests += {
+    'name': 'test_modules_demux_mkv_subtitle_cluster',
+    'sources': files('demux/mkv_subtitle_cluster.cpp', '../src/input/demux-run.c',
+                     '../src/input/common.c', '../../src/input/var.c'),
+    'suite': ['modules', 'test_modules'],
+    'module_depends': ['mkv'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_modules_demux_mkv_subtitle_seek',
     'sources': files('demux/mkv_subtitle_seek.cpp'),
     'suite': ['modules', 'test_modules'],

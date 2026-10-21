@@ -1305,6 +1305,7 @@ int matroska_segment_c::BlockGet( KaxBlock * & pp_block, KaxSimpleBlock * & pp_s
 
     uint64_t duration = 0;
     int64_t duration_padding = 0;
+    SegmentSeeker::SubtitleSeekpoint subtitle_seekpoint{};
 
     struct BlockPayload {
         matroska_segment_c * const obj;
@@ -1316,13 +1317,15 @@ int matroska_segment_c::BlockGet( KaxBlock * & pp_block, KaxSimpleBlock * & pp_s
 
         uint64_t           & i_duration;
         int64_t            & duration_padding;
+        SegmentSeeker::SubtitleSeekpoint & subtitle_seekpoint;
         bool               & b_key_picture;
         bool               & b_discardable_picture;
         bool                 b_cluster_timecode;
 
     } payload = {
         this, &ep, &sys.demuxer, pp_block, pp_simpleblock, pp_additions,
-        duration, duration_padding, *pb_key_picture, *pb_discardable_picture, true
+        duration, duration_padding, subtitle_seekpoint,
+        *pb_key_picture, *pb_discardable_picture, true
     };
 
     MKV_SWITCH_CREATE( EbmlTypeDispatcher, BlockGetHandler_l1, BlockPayload )
@@ -1425,10 +1428,18 @@ int matroska_segment_c::BlockGet( KaxBlock * & pp_block, KaxSimpleBlock * & pp_s
             vars.block->SetParent( *vars.obj->cluster );
 
             const mkv_track_t *p_track = vars.obj->FindTrackByBlock( &kblock, NULL );
+            vars.subtitle_seekpoint.track = 0;
             if( p_track != NULL && p_track->fmt.i_cat == SPU_ES )
             {
                 vars.obj->_seeker.add_seekpoint( kblock.TrackNum(),
                     SegmentSeeker::Seekpoint( kblock.GetElementPosition(), VLC_TICK_FROM_NS(kblock.GlobalTimestamp()) ) );
+                const auto *cluster = vars.obj->cluster;
+                const auto data_start = cluster->GetDataStart();
+                if( vars.obj->i_block_pos >= data_start )
+                    vars.subtitle_seekpoint = { p_track->i_number, cluster->GetElementPosition(),
+                        vars.obj->i_block_pos - data_start,
+                        vlc_tick_t(VLC_TICK_FROM_NS(kblock.GlobalTimestamp()))
+                            + vars.obj->pcr_shift - p_track->i_codec_delay, 0 };
             }
 
             vars.ep->Keep ();
@@ -1538,14 +1549,15 @@ int matroska_segment_c::BlockGet( KaxBlock * & pp_block, KaxSimpleBlock * & pp_s
             else
                 *pi_duration = duration - duration_padding;
 
-            if( pp_block != nullptr && cluster != nullptr && p_track->fmt.i_cat == SPU_ES
-                && i_block_pos >= cluster->GetDataStart() )
+            // Get() can release the cluster at the end of a BlockGroup.
+            // Use the position and timestamp copied while reading the block.
+            if( pp_block != nullptr && subtitle_seekpoint.track != 0 )
             {
-                _seeker.add_subtitle_seekpoint( { p_track->i_number, cluster->GetElementPosition(),
-                    i_block_pos - cluster->GetDataStart(),
-                    vlc_tick_t(VLC_TICK_FROM_NS(pp_block->GlobalTimestamp())) + pcr_shift - p_track->i_codec_delay,
-                    SubtitleBlockDuration( *pi_duration, i_timescale, *p_track ) } );
+                subtitle_seekpoint.duration = SubtitleBlockDuration( *pi_duration, i_timescale, *p_track );
+                _seeker.add_subtitle_seekpoint( subtitle_seekpoint );
             }
+            if( cluster && !ep.IsTopPresent( cluster ) )
+                cluster = nullptr;
 
             return VLC_SUCCESS;
         }
