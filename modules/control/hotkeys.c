@@ -686,13 +686,20 @@ struct snapshot_task
 {
     struct vlc_runnable runnable;
     vout_thread_t *vout;
+    uint_fast32_t keycode;
 };
+
+static void TriggerSnapshot(void *userdata)
+{
+    var_TriggerCallback((vout_thread_t *)userdata, "video-snapshot");
+}
 
 static void RunSnapshot(void *userdata)
 {
     struct snapshot_task *task = userdata;
 
-    var_TriggerCallback(task->vout, "video-snapshot");
+    vlc_actions_run_with_keycode(VLC_OBJECT(task->vout), task->keycode,
+                                 TriggerSnapshot, task->vout);
 
     vout_Release(task->vout);
     free(task);
@@ -713,6 +720,12 @@ static void TakeSnapshotAsync(struct intf_sys_t *sys, vlc_player_t *player)
         return;
 
     task->vout = vlc_player_vout_Hold(player);
+    if (!task->vout)
+    {
+        free(task);
+        return;
+    }
+    task->keycode = vlc_actions_get_current_keycode(VLC_OBJECT(task->vout));
     task->runnable.run = RunSnapshot;
     task->runnable.userdata = task;
     vlc_executor_Submit(sys->executor, &task->runnable);

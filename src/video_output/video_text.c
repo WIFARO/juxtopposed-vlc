@@ -31,11 +31,13 @@
 #include <vlc_vout.h>
 #include <vlc_vout_osd.h>
 #include <vlc_subpicture.h>
+#include <vlc_actions.h>
 #include "vout_internal.h"
 
 typedef struct {
     int  position;
     char *text;
+    bool left_aligned;
 } osd_spu_updater_sys_t;
 
 static void OSDTextUpdate(subpicture_t *subpic,
@@ -68,6 +70,11 @@ static void OSDTextUpdate(subpicture_t *subpic,
     const int   margin_v     = margin_ratio * fmt_dst->i_visible_height;
 
     r->text_flags |= sys->position;
+    if (sys->left_aligned)
+    {
+        r->text_flags &= ~(SUBPICTURE_ALIGN_LEFT | SUBPICTURE_ALIGN_RIGHT);
+        r->text_flags |= SUBPICTURE_ALIGN_LEFT;
+    }
     r->b_absolute = false; r->b_in_window = true;
     r->i_align = sys->position;
     if (r->i_align & SUBPICTURE_ALIGN_LEFT)
@@ -94,7 +101,8 @@ static void OSDTextDestroy(subpicture_t *subpic)
 }
 
 static void OSDText(vout_thread_t *vout, int channel,
-                    int position, vlc_tick_t duration, const char *text)
+                    int position, vlc_tick_t duration, const char *text,
+                    bool left_aligned)
 {
     assert( (position & ~SUBPICTURE_ALIGN_MASK) == 0);
     if (duration <= 0)
@@ -105,6 +113,7 @@ static void OSDText(vout_thread_t *vout, int channel,
         return;
     sys->position = position;
     sys->text     = strdup(text);
+    sys->left_aligned = left_aligned;
 
     static const struct vlc_spu_updater_ops spu_ops =
     {
@@ -136,13 +145,13 @@ void vout_OSDText(vout_thread_t *vout, int channel,
                    int position, vlc_tick_t duration, const char *text)
 {
     if (var_InheritBool(vout, "osd"))
-        OSDText(vout, channel, position, duration, text);
+        OSDText(vout, channel, position, duration, text, false);
 }
 
 void vout_OSDTitle(vout_thread_t *vout, int position, vlc_tick_t duration,
                     const char *text)
 {
-    OSDText(vout, VOUT_SPU_CHANNEL_OSD_TITLE, position, duration, text);
+    OSDText(vout, VOUT_SPU_CHANNEL_OSD_TITLE, position, duration, text, false);
 }
 
 void vout_OSDMessageVa(vout_thread_t *vout, int channel,
@@ -150,6 +159,31 @@ void vout_OSDMessageVa(vout_thread_t *vout, int channel,
 {
     char *string;
     if (vasprintf(&string, format, args) != -1) {
+        const uint_fast32_t key = vlc_actions_get_current_keycode(VLC_OBJECT(vout));
+        if (channel == VOUT_SPU_CHANNEL_OSD && key != KEY_UNSET
+         && var_InheritBool(vout, "osd"))
+        {
+            /* Show the keyboard label without changing the dispatched code.
+             * Keep modifiers and special/localized key names intact. */
+            uint_fast32_t display = key;
+            const uint_fast32_t base = key & ~KEY_MODIFIER;
+            if (base >= 'a' && base <= 'z')
+                display = (key & KEY_MODIFIER) | (base - 'a' + 'A');
+            char *name = vlc_keycode2str(display, true);
+            char *message;
+            if (name && asprintf(&message, _("%s\nShortcut: %s"), string, name) >= 0)
+            {
+                OSDText(vout, channel,
+                        SUBPICTURE_ALIGN_TOP | SUBPICTURE_ALIGN_RIGHT,
+                        VLC_TICK_FROM_MS(var_InheritInteger(vout, "osd-duration")),
+                        message, true);
+                free(message);
+                free(name);
+                free(string);
+                return;
+            }
+            free(name);
+        }
         vout_OSDText(vout, channel,
                      SUBPICTURE_ALIGN_TOP|SUBPICTURE_ALIGN_RIGHT,
                      VLC_TICK_FROM_MS(var_InheritInteger(vout, "osd-duration")),

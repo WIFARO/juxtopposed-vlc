@@ -43,6 +43,28 @@
 #include <vlc_charset.h>
 #include "../libvlc.h"
 
+struct action_key_context
+{
+    libvlc_int_t *instance;
+    uint_fast32_t keycode;
+};
+static thread_local struct action_key_context current_key;
+
+uint_fast32_t vlc_actions_get_current_keycode(vlc_object_t *obj)
+{
+    return current_key.instance == vlc_object_instance(obj)
+         ? current_key.keycode : KEY_UNSET;
+}
+
+void vlc_actions_run_with_keycode(vlc_object_t *obj, uint_fast32_t keycode,
+                                  void (*callback)(void *), void *data)
+{
+    const struct action_key_context previous = current_key;
+    current_key = (struct action_key_context){vlc_object_instance(obj), keycode};
+    callback(data);
+    current_key = previous;
+}
+
 static const struct key_descriptor
 {
     const char psz[20];
@@ -254,7 +276,7 @@ char *vlc_keycode2str (uint_fast32_t code, bool locale)
     for (size_t i = 0; i < ARRAY_SIZE(s_keys); i++)
         if (s_keys[i].i_code == key)
         {
-            name = s_keys[i].psz;
+            name = tr(s_keys[i].psz);
             goto found;
         }
 
@@ -269,7 +291,7 @@ found:
                   (code & KEY_MODIFIER_SHIFT) ? tr(N_("Shift+")) : "",
                   (code & KEY_MODIFIER_META) ? tr(N_("Meta+")) : "",
                   (code & KEY_MODIFIER_COMMAND) ? tr(N_("Command+")) : "",
-                  tr(name)) == -1)
+                  name) == -1)
         return NULL;
     return str;
 }
@@ -464,7 +486,13 @@ static int vlc_key_to_action (vlc_object_t *obj, const char *varname,
         : strcmp(varname, "key-pressed") == 0 ? wheel_action(obj, keycode) : ACTIONID_NONE;
     vlc_mutex_unlock(&map->lock);
     (void) prevkey;
-    return action == ACTIONID_NONE ? VLC_SUCCESS : var_SetInteger(obj, "key-action", action);
+    if (action == ACTIONID_NONE)
+        return VLC_SUCCESS;
+    const struct action_key_context previous = current_key;
+    current_key = (struct action_key_context){vlc_object_instance(obj), keycode};
+    int ret = var_SetInteger(obj, "key-action", action);
+    current_key = previous;
+    return ret;
 }
 
 /**

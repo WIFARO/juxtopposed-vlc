@@ -282,6 +282,25 @@ vlc_actions_get_id(const char *psz_key_name);
 VLC_API int vlc_actions_update(vlc_object_t *obj);
 
 /**
+ * Get the key that caused the current shortcut feedback.
+ *
+ * The value is scoped to the calling thread and the object's libVLC instance.
+ * Returns KEY_UNSET outside key dispatch or an explicitly propagated scope.
+ */
+VLC_API uint_fast32_t vlc_actions_get_current_keycode(vlc_object_t *obj);
+
+/**
+ * Run a callback synchronously with a captured key code for feedback.
+ *
+ * This does not dispatch an action. Deferred work can preserve its originating
+ * key without sharing a last-key value with other threads or UI operations.
+ * The previous scope is restored after the callback, including nested calls.
+ * The caller must keep obj alive for the duration of the callback.
+ */
+VLC_API void vlc_actions_run_with_keycode(vlc_object_t *obj, uint_fast32_t keycode,
+                                         void (*callback)(void *), void *data);
+
+/**
  * Get keycodes from a action key name and vlc configuration
  * \return The number of keycodes for this action, or 0 in case of an error.
  * The list needs to be released with free()

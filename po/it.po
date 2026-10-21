@@ -53780,3 +53780,9 @@ msgstr "VLC non può salvare le impostazioni dell’interfaccia. Riprova."
 #. Application profiles in the redesigned interface
 msgid "VLC cannot save these profiles. Remove unused profiles."
 msgstr "VLC non può salvare questi profili. Rimuovi i profili inutilizzati."
+
+#. The first argument is the action feedback; the second is the actual key.
+#: src/video_output/video_text.c:174
+#, c-format
+msgid "%s\nShortcut: %s"
+msgstr "%s\nScorciatoia: %s"
