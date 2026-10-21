@@ -485,6 +485,17 @@ test_src_misc_image_SOURCES = src/misc/image.c
 test_src_misc_image_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_misc_addons_SOURCES = src/misc/addons.c
 test_src_misc_addons_LDADD = $(LIBVLCCORE) $(LIBVLC)
+if HAVE_WIN32
+if HAVE_DYNAMIC_PLUGINS
+check_LTLIBRARIES = libtest_addons_plugin.la
+libtest_addons_plugin_la_SOURCES = src/misc/addons_plugin.c
+libtest_addons_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) -DVLC_DYNAMIC_PLUGIN -DMODULE_STRING=\"test_misc_addons\"
+libtest_addons_plugin_la_LDFLAGS = -module -avoid-version -no-undefined -rpath /not-installed
+libtest_addons_plugin_la_LIBADD = $(LIBVLCCORE)
+test_src_misc_addons_CPPFLAGS = $(AM_CPPFLAGS) -DADDONS_TEST_DYNAMIC_FIXTURE
+test_src_misc_addons_DEPENDENCIES = libtest_addons_plugin.la
+endif
+endif
 test_src_misc_instance_policy_SOURCES = src/misc/instance_policy.c
 test_src_misc_instance_policy_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_misc_instance_policy_CPPFLAGS = $(AM_CPPFLAGS)

@@ -136,9 +136,29 @@ vlc_tests += {
     'module_depends' : dbus_dep.found() ? ['dbus'] : [],
 }
 
+addons_test_depends = []
+addons_test_args = []
+addons_test_env = environment()
+if host_system == 'windows'
+    addons_test_plugin = shared_module('test_addons_plugin',
+        files('misc/addons_plugin.c'),
+        name_prefix: 'lib',
+        c_args: ['-DVLC_DYNAMIC_PLUGIN', '-DMODULE_STRING="test_misc_addons"'],
+        include_directories: [vlc_include_dirs],
+        dependencies: [libvlccore_dep],
+        build_by_default: false,
+        install: false)
+    addons_test_depends += addons_test_plugin
+    addons_test_args += '-DADDONS_TEST_DYNAMIC_FIXTURE'
+    addons_test_env.set('VLC_TEST_PLUGIN_PATH', meson.current_build_dir())
+endif
+
 vlc_tests += {
     'name' : 'test_src_misc_addons',
     'sources' : files('misc/addons.c'),
+    'depends' : addons_test_depends,
+    'c_args' : addons_test_args,
+    'env' : addons_test_env,
     'suite' : ['src', 'test_src'],
     'link_with' : [libvlc, libvlccore],
 }

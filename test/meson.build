@@ -20,6 +20,7 @@ foreach vlc_test: vlc_tests
         'link_with',
         'link_args',
         'module_depends',
+        'depends',
         'dependencies',
         'c_args',
         'cpp_args',
@@ -49,7 +50,7 @@ foreach vlc_test: vlc_tests
     ]
 
     disabled_dependencies = []
-    test_modules_deps = []
+    test_modules_deps = vlc_test.get('depends', [])
     foreach module_name : vlc_test.get('module_depends', [])
         if module_name not in vlc_plugins_manifest.keys()
             error('Test entry \'@0@\' cannot depend on non-existant VLC plugin \'@1@\''

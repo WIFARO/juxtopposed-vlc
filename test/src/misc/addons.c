@@ -9,9 +9,9 @@
 #include <vlc_addons.h>
 #include <vlc_interrupt.h>
 #include <vlc_plugin.h>
-#include <limits.h>
-
-const char vlc_module_name[] = MODULE_STRING;
+#ifdef ADDONS_TEST_DYNAMIC_FIXTURE
+# include <vlc_charset.h>
+#endif
 
 struct test_state {
     addon_entry_t *entries[2];
@@ -21,71 +21,11 @@ struct test_state {
     unsigned discoveries;
 };
 
-static int Find(addons_finder_t *finder)
-{
-    for (unsigned i = 0; i < 2; ++i) {
-        addon_entry_t *entry = addon_entry_New();
-        assert(entry != NULL);
-        entry->e_type = ADDON_EXTENSION;
-        entry->e_state = ADDON_INSTALLED;
-        entry->e_flags = ADDON_MANAGEABLE;
-        entry->uuid[0] = i + 1;
-        entry->psz_name = strdup(i ? "Second fixture" : "First fixture");
-        ARRAY_APPEND(finder->entries, entry);
-    }
-    return VLC_SUCCESS;
-}
-
 static vlc_sem_t finder_started;
-static int FindRepository(addons_finder_t *finder)
-{
-    if (!strcmp(finder->psz_uri, "fixture://empty")) return VLC_SUCCESS;
-    if (!strcmp(finder->psz_uri, "fixture://failed")) return VLC_EGENERIC;
-    if (!strcmp(finder->psz_uri, "fixture://memory")) return VLC_ENOMEM;
-    vlc_sem_post(&finder_started);
-    vlc_poll_i11e(NULL, 0, -1);
-    return VLC_EGENERIC;
-}
-
-static int OpenFinder(vlc_object_t *object)
-{
-    addons_finder_t *finder = (addons_finder_t *)object;
-    finder->pf_find = finder->psz_uri ? FindRepository : Find;
-    return VLC_SUCCESS;
-}
-
-static int StoreAction(addons_storage_t *storage, addon_entry_t *entry)
-{
-    (void)storage; (void)entry;
-    return VLC_SUCCESS;
-}
-
-static int StoreCatalog(addons_storage_t *storage, addon_entry_t **entries, int count)
-{
-    (void)storage; (void)entries; (void)count;
-    return VLC_SUCCESS;
-}
-
-static int OpenStorage(vlc_object_t *object)
-{
-    addons_storage_t *storage = (addons_storage_t *)object;
-    storage->pf_install = StoreAction;
-    storage->pf_remove = StoreAction;
-    storage->pf_catalog = StoreCatalog;
-    return VLC_SUCCESS;
-}
-
-vlc_module_begin()
-    set_capability("addons finder", INT_MAX)
-    add_shortcut("addons.store.list")
-    set_callback(OpenFinder)
-    add_submodule()
-        set_capability("addons storage", INT_MAX)
-        add_shortcut("addons.store.install")
-        set_callback(OpenStorage)
-vlc_module_end()
-
+#ifndef ADDONS_TEST_DYNAMIC_FIXTURE
+# include "addons_plugin.c"
 VLC_EXPORT const vlc_plugin_cb vlc_static_modules[] = {VLC_SYMBOL(vlc_entry), NULL};
+#endif
 
 static void Found(addons_manager_t *manager, addon_entry_t *entry)
 {
@@ -116,10 +56,28 @@ static void Changed(addons_manager_t *manager, addon_entry_t *entry)
 
 int main(void)
 {
+#ifdef ADDONS_TEST_DYNAMIC_FIXTURE
+    /* PE DLLs cannot import a weak plugin array from the test executable.
+     * The private fixture DLL is next to the real executable for make check;
+     * Meson and standalone package tests can select its directory explicitly. */
+    if (getenv("VLC_TEST_PLUGIN_PATH") == NULL) {
+        wchar_t path[32768];
+        DWORD length = GetModuleFileNameW(NULL, path, ARRAY_SIZE(path));
+        assert(length && length < ARRAY_SIZE(path));
+        wchar_t *separator = wcsrchr(path, L'\\');
+        assert(separator); *separator = L'\0';
+        char *directory = FromWide(path);
+        assert(directory && _putenv_s("VLC_TEST_PLUGIN_PATH", directory) == 0);
+        free(directory);
+    }
+#endif
     test_init();
     const char *args[] = {"--ignore-config", "--no-media-library", "--no-metadata-network-access"};
     libvlc_instance_t *instance = libvlc_new(ARRAY_SIZE(args), args);
     assert(instance != NULL);
+    vlc_object_t *core = VLC_OBJECT(instance->p_libvlc_int);
+    assert(var_Create(core, "test-addon-finder-started", VLC_VAR_ADDRESS) == VLC_SUCCESS);
+    var_SetAddress(core, "test-addon-finder-started", &finder_started);
     struct test_state state = {0};
     vlc_sem_init(&state.started, 0);
     vlc_sem_init(&state.ended, 0);
@@ -162,6 +120,7 @@ int main(void)
     addons_manager_Gather(manager, "fixture://repository");
     vlc_sem_wait(&finder_started);
     addons_manager_Delete(manager);
+    var_Destroy(core, "test-addon-finder-started");
     libvlc_release(instance);
     printf("Add-on discovery: %zu queued results passed.\n", ARRAY_SIZE(uris));
     return 0;
