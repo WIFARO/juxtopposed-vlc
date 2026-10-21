@@ -50,6 +50,7 @@ public:
     // Reuse roots already read by the library/settings model without probing devices.
     QStringList folderRoots() const { return m_folderRoots; }
     void setFolderRoots(QStringList roots);
+    void recordNetworkPlaylistAccess(const QUrl& url);
 
     Q_INVOKABLE static MLItemId deserializeMlItemIdFromString(const QString& serialized_id);
 

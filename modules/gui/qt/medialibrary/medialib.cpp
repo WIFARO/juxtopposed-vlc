@@ -875,6 +875,26 @@ void MediaLib::savePlaylistDetails(const MLItemId& id, const QString& name, cons
         }, "redesign-playlist-details");
 }
 
+void MediaLib::recordNetworkPlaylistAccess(const QUrl& url)
+{
+    if (url.scheme() != QLatin1String("http") && url.scheme() != QLatin1String("https")) return;
+    if (!var_InheritBool(m_intf, "save-recentplay")) return;
+    const auto expression = vlc::wrap_cptr(var_InheritString(m_intf, "recentplay-filter"));
+    const auto pattern = QString::fromUtf8(expression.get() ? expression.get() : "");
+    runOnMLThread(this, [uri = url.toEncoded(), intf = m_intf, pattern](vlc_medialibrary_t* ml) {
+        if (!var_InheritBool(intf, "save-recentplay")) return;
+        const auto current = vlc::wrap_cptr(var_InheritString(intf, "recentplay-filter"));
+        if (QString::fromUtf8(current.get() ? current.get() : "") != pattern) return;
+        ml_unique_ptr<vlc_ml_media_t> media(vlc_ml_get_media_by_mrl(ml, uri.constData()));
+        // Containers are expanded before playback can record their access.
+        // Bump the source's history date, without marking a channel as played
+        // or resetting a playable media item's saved position. The ML control
+        // also applies recentplay-filter, including invalid-pattern rejection.
+        if (media && media->i_type == VLC_ML_MEDIA_TYPE_UNKNOWN)
+            vlc_ml_media_update_progress(ml, media->i_id, 0.);
+    });
+}
+
 void MediaLib::shuffleAndPlay(const MLItemId& id)
 {
     if (id.type != VLC_ML_PARENT_PLAYLIST || id.id <= 0) return;

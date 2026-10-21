@@ -82,6 +82,7 @@
 #include "network/networkmediamodel.hpp"
 #include "network/networkdevicemodel.hpp"
 #include "network/networksourcesmodel.hpp"
+#include "network/networkplaylistmodel.hpp"
 #include "network/addonsmodel.hpp"
 #include "network/standardpathmodel.hpp"
 
@@ -514,6 +515,7 @@ void MainUI::registerQMLTypes()
         qmlRegisterType<NetworkMediaModel>( uri, versionMajor, versionMinor, "NetworkMediaModel");
         qmlRegisterType<NetworkDeviceModel>( uri, versionMajor, versionMinor, "NetworkDeviceModel");
         qmlRegisterType<NetworkSourcesModel>( uri, versionMajor, versionMinor, "NetworkSourcesModel");
+        qmlRegisterType<NetworkPlaylistModel>( uri, versionMajor, versionMinor, "NetworkPlaylistModel");
         qmlRegisterType<AddonsModel>( uri, versionMajor, versionMinor, "ServicesDiscoveryModel");
         qmlRegisterType<MLFoldersModel>( uri, versionMajor, versionMinor, "MLFolderModel");
         qmlRegisterType<MLRecentMediaModel>( uri, versionMajor, versionMinor, "MLRecentMediaModel" );

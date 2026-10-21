@@ -293,6 +293,7 @@ libqt_plugin_la_SOURCES = \
 	network/networkdevicemodel.cpp \
 	network/networkdevicemodel.hpp \
 	network/networksourcesmodel.cpp \
+	network/networkplaylistmodel.cpp network/networkplaylistmodel.hpp \
 	network/networksourcesmodel.hpp \
 	network/networkmediamodel.cpp \
 	network/networkmediamodel.hpp \
@@ -534,6 +535,7 @@ nodist_libqt_plugin_la_SOURCES = \
 	network/networkdevicemodel.moc.cpp \
 	network/networkbasemodel.moc.cpp \
 	network/networksourcesmodel.moc.cpp \
+	network/networkplaylistmodel.moc.cpp \
 	network/networkmediamodel.moc.cpp \
 	network/standardpathmodel.moc.cpp \
 	style/colorcontext.moc.cpp \

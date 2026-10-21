@@ -44,6 +44,8 @@ QVariant MLUrlModel::itemRoleData(const MLItem *item, int role) const
         return QVariant::fromValue( ml_url->getLastPlayedDate() );
     case URL_IS_DELETABLE:
         return QVariant::fromValue( true );
+    case URL_CAN_BROWSE:
+        return ml_url->canBrowse();
     default :
         return QVariant();
     }
@@ -56,6 +58,7 @@ QHash<int, QByteArray> MLUrlModel::roleNames() const
         { URL_URL, QByteArrayLiteral("url") },
         { URL_LAST_PLAYED_DATE, QByteArrayLiteral("last_played_date") },
         { URL_IS_DELETABLE, QByteArrayLiteral("isDeletable") },
+        { URL_CAN_BROWSE, QByteArrayLiteral("canBrowse") },
     };
 }
 
@@ -171,6 +174,8 @@ MLUrl::MLUrl(const vlc_ml_media_t *_data)
     , m_lastPlayedDate(
           QDateTime::fromSecsSinceEpoch( _data->i_last_played_date, QTimeZone::systemTimeZone() ).toString( QLocale::system().dateFormat( QLocale::ShortFormat ) )
           )
+    , m_canBrowse(_data->i_type == VLC_ML_MEDIA_TYPE_UNKNOWN
+        && (QUrl(m_url).scheme() == QLatin1String("http") || QUrl(m_url).scheme() == QLatin1String("https")))
 {
 }
 
@@ -178,6 +183,7 @@ MLUrl::MLUrl(const MLUrl &url)
     : MLItem( url.getId() )
     , m_url( url.m_url )
     , m_lastPlayedDate( url.m_lastPlayedDate )
+    , m_canBrowse( url.m_canBrowse )
 {
 }
 

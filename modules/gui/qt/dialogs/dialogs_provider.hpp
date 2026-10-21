@@ -330,6 +330,7 @@ signals:
     void showRedesignBookmarks();
     void showRedesignPreferencesPage(const QString& page);
     void showRedesignNetworkStreams();
+    void showRedesignNetworkPlaylist(const QStringList& urls, const QString& name);
     void showRedesignAddToPlaylist(const QVariantList& media, int type);
     void showRedesignTrackAssignments(const QVariantMap& target, bool subtitles);
 #ifdef UPDATE_CHECK

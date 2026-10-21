@@ -3,6 +3,7 @@ import QtQuick
 import VLC.MainInterface
 import VLC.Playlist
 import VLC.Style
+import VLC.Dialogs
 
 RedesignNetworkDialog {
     id: root
@@ -32,6 +33,11 @@ RedesignNetworkDialog {
     }
     Connections {
         target: library.item ? library.item.streams : null
-        function onStreamsOpened(success) { root.finish(success) }
+        function onStreamsOpened(success) {
+            const urls = root.urls
+            const name = root.playlistName.trim()
+            root.finish(success)
+            if (success) DialogsProvider.showRedesignNetworkPlaylist(urls, name)
+        }
     }
 }

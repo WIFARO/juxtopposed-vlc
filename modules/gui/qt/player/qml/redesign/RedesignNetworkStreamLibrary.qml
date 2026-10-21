@@ -15,9 +15,10 @@ Item {
     property bool descending: false
     readonly property bool atRoot: !location.source
     readonly property bool saved: location.source === "saved"
-    readonly property var model: atRoot ? roots : saved ? streams : browser.item
+    readonly property bool linked: location.source === "linked"
+    readonly property var model: atRoot ? roots : linked ? linkedModel : saved ? streams : browser.item
     readonly property int count: model ? model.count : 0
-    readonly property bool loading: !!model && !atRoot && !saved && model.loading
+    readonly property bool loading: linked ? linkedModel.loading : !!model && !atRoot && !saved && model.loading
     readonly property bool podcast: location.source.startsWith("podcast")
     readonly property var sourceTitles: [qsTr("Podcasts"), qsTr("Radio"), qsTr("Saved streams")]
 
@@ -42,18 +43,30 @@ Item {
         if (!model || index < 0 || index >= count) return null
         return atRoot ? roots.get(index) : model.getDataAt(index)
     }
+    function linkName(url) {
+        let name = String(url || "").split(/[?#]/)[0].replace(/\/+$/, "").split("/").pop()
+        try { name = decodeURIComponent(name) } catch (error) {}
+        return name.replace(/\.(m3u8?|pls|xspf|asx|wpl|b4s|vlc)$/i, "") || qsTr("Streams")
+    }
+    function playlistLink(url) { return /\.(m3u8?|pls|xspf|asx|wpl|b4s|vlc)(?:[?#]|$)/i.test(String(url || "")) }
+    function loadLinkedSources() {
+        linkedModel.setSources(linked ? (location.urls || []).map(url => ({mrl: String(url), title: linkName(url), remember: true})) : [])
+    }
+    onLocationChanged: loadLinkedSources()
     function branch(data) {
-        return !!data && (atRoot || !saved && [NetworkDeviceModel.TYPE_NODE,
+        return !!data && (atRoot || saved && (data.canBrowse === true || data.canBrowse === undefined && playlistLink(data.url)) || !saved && !linked && [NetworkDeviceModel.TYPE_NODE,
             NetworkDeviceModel.TYPE_DIRECTORY, NetworkDeviceModel.TYPE_PLAYLIST].includes(data.type))
     }
     function locationAt(index) {
         const data = dataAt(index)
         if (!branch(data)) return null
+        if (saved) return {source: "linked", title: linkName(data.url), urls: [String(data.url)], nodes: []}
         return atRoot ? {source: data.sourceName, title: data.title, nodes: []}
             : {source: location.source, title: location.title,
                 nodes: [...location.nodes, {title: data.name, tree: data.tree}]}
     }
-    function indexForUrl(url) {
+    function indexForUrl(url, key) {
+        if (linked && key) return linkedModel.indexForKey(key)
         for (let i = 0; i < count; ++i) {
             const data = dataAt(i)
             if (String(data.mrl || data.url || "") === url) return i
@@ -63,13 +76,15 @@ Item {
     function play(index) {
         const data = dataAt(index)
         if (!data || atRoot) return
-        if (saved) MediaLib.addAndPlay(data.id)
+        if (linked) linkedModel.play(index)
+        else if (saved) MediaLib.addAndPlay(data.id)
         else model.addAndPlay(index)
     }
     function enqueue(index) {
         const data = dataAt(index)
         if (!data || atRoot) return
-        if (saved) MediaLib.addToPlaylist(data.id)
+        if (linked) linkedModel.play(index, true)
+        else if (saved) MediaLib.addToPlaylist(data.id)
         else model.addToPlaylist(index)
     }
     onSearchTextChanged: rebuild()
@@ -94,9 +109,18 @@ Item {
         sortOrder: root.descending ? Qt.DescendingOrder : Qt.AscendingOrder
         onCountChanged: root.rebuild()
     }
+    NetworkPlaylistModel {
+        id: linkedModel
+        ctx: MainCtx
+        active: root.active && root.enabled && root.visible && root.linked
+        searchPattern: root.searchText
+        sortCriteria: root.sortField
+        sortOrder: root.descending ? Qt.DescendingOrder : Qt.AscendingOrder
+        onActiveChanged: if (active) { setSources([]); Qt.callLater(root.loadLinkedSources) }
+    }
     Loader {
         id: browser
-        active: root.active && !root.atRoot && !root.saved
+        active: root.active && !root.atRoot && !root.saved && !root.linked
         sourceComponent: root.location.nodes.length ? treeComponent : sourceBrowserComponent
     }
     Component {

@@ -19,6 +19,14 @@ FocusScope {
     // The projection retains folder state while its lazy source is unloaded.
     PlaylistTreeModel { id: queueTreeModel; treeEnabled: MainCtx.playlistTree }
     property int requestedLibraryCategory: -1
+    property var requestedNetworkPlaylist: null
+    Connections {
+        target: DialogsProvider
+        function onShowRedesignNetworkPlaylist(urls, name) {
+            rootPlayer.requestedNetworkPlaylist = {urls: Array.from(urls), name: name}
+            rootPlayer.openLibraryCategory(3)
+        }
+    }
     function beginCustomization() {
         if (MainCtx.minimalView) MainCtx.minimalView = false
         mediaMenu.dismiss(); tracksPopup.close(); customChoice.close()
@@ -28,6 +36,7 @@ FocusScope {
         customizationEditor.begin()
     }
     function openLibraryCategory(category) {
+        if (category !== 3) requestedNetworkPlaylist = null
         requestedLibraryCategory = category
         view.libraryOpen = true
         Qt.callLater(applyLibraryCategory)
@@ -35,7 +44,10 @@ FocusScope {
     function applyLibraryCategory() {
         const library = view.libraryItem ? view.libraryItem.item : null
         if (requestedLibraryCategory < 0 || !library) return
-        library.resetLocation(requestedLibraryCategory)
+        if (requestedLibraryCategory === 3 && requestedNetworkPlaylist) {
+            library.openNetworkPlaylist(requestedNetworkPlaylist.urls, requestedNetworkPlaylist.name)
+            requestedNetworkPlaylist = null
+        } else library.resetLocation(requestedLibraryCategory)
         requestedLibraryCategory = -1
     }
     function showCustomChoice(action, anchor) {

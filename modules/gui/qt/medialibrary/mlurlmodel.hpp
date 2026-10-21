@@ -36,10 +36,12 @@ public:
 
     QString getUrl() const;
     QString getLastPlayedDate() const;
+    bool canBrowse() const { return m_canBrowse; }
 
 private:
     QString m_url;
     QString m_lastPlayedDate;
+    bool m_canBrowse;
 };
 
 class MLUrlModel : public MLBaseModel
@@ -51,7 +53,8 @@ public:
         URL_ID = Qt::UserRole + 1,
         URL_URL,
         URL_LAST_PLAYED_DATE,
-        URL_IS_DELETABLE
+        URL_IS_DELETABLE,
+        URL_CAN_BROWSE
     };
     Q_ENUM(Roles)
 
