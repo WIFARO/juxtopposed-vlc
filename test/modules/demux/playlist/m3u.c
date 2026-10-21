@@ -203,6 +203,49 @@ static int check2(const char *run, const input_item_node_t *p_node)
     return 0;
 }
 
+static int reject_hls(libvlc_instance_t *vlc, const char *manifest)
+{
+    stream_t *s = vlc_stream_MemoryNew(vlc->p_libvlc_int,
+        (uint8_t *)manifest, strlen(manifest), true);
+    if (!s) return 1;
+    demux_t *pl = demux_New(VLC_OBJECT(vlc->p_libvlc_int), "m3u",
+                            INPUT_ITEM_URI_NOP, s, NULL);
+    if (pl)
+    {
+        demux_Delete(pl);
+        fprintf(stderr, "HLS was accepted as an ordinary M3U playlist\n");
+        return 1;
+    }
+    vlc_stream_Delete(s);
+    return 0;
+}
+
+static int check_hls(libvlc_instance_t *vlc)
+{
+    static const char *const manifests[] = {
+        "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2,\nsegment.ts\n#EXT-X-ENDLIST\n",
+        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1280000\nvariant.m3u8\n",
+        "#EXTM3U\n#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=86000,URI=\"iframe.m3u8\"\n",
+    };
+    for (size_t i = 0; i < ARRAY_SIZE(manifests); ++i)
+        if (reject_hls(vlc, manifests[i])) return 1;
+
+    /* Tags can follow comments beyond the old 1024-byte probe. */
+    char padded[4096];
+    memcpy(padded, "#EXTM3U\n#", 9);
+    memset(padded + 9, 'x', 2048);
+    strcpy(padded + 2057, "\n#EXT-X-TARGETDURATION:2\nsegment.ts\n");
+    return reject_hls(vlc, padded);
+}
+
+static int check_hls_title(const char *run, const input_item_node_t *node)
+{
+    EXPECT(node->i_children == 1);
+    EXPECT(!strcmp(node->pp_children[0]->p_item->psz_name,
+                   "Channel #EXT-X-VERSION:3"));
+    return 0;
+}
+
 
 int main(void)
 {
@@ -217,6 +260,13 @@ int main(void)
         ret = runtest("run1", vlc, m3uplaylist1, sizeof(m3uplaylist1), check1);
     if(!ret)
         ret = runtest("run2", vlc, m3uplaylist2, sizeof(m3uplaylist2), check2);
+    if(!ret)
+        ret = check_hls(vlc);
+    if(!ret)
+    {
+        const char ordinary[] = "#EXTM3U\n#EXTINF:-1,Channel #EXT-X-VERSION:3\n" NOPURI(0) "\n";
+        ret = runtest("hls-like-title", vlc, ordinary, sizeof(ordinary), check_hls_title);
+    }
 
     libvlc_release(vlc);
     return ret;

@@ -1,4 +1,13 @@
 vlc_tests += {
+    'name': 'test_modules_playlist_m3u',
+    'sources': files('demux/playlist/m3u.c'),
+    'suite': ['modules', 'test_modules'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['playlist'],
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+}
+
+vlc_tests += {
     'name': 'test_modules_demux_mkv_subtitle_cluster',
     'sources': files('demux/mkv_subtitle_cluster.cpp', '../src/input/demux-run.c',
                      '../src/input/common.c', '../../src/input/var.c'),

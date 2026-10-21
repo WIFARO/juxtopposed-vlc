@@ -43,6 +43,22 @@
 static int ReadDir( stream_t *, input_item_node_t * );
 static bool ContainsURL(const uint8_t *, size_t);
 
+static bool ContainsHLSTags(const uint8_t *data, size_t size)
+{
+    /* HLS uses M3U syntax, but its segments and variants are not independent
+     * playlist entries. Leave these manifests to the adaptive demuxer. */
+    for (size_t start = 0; start < size; )
+    {
+        size_t pos = start;
+        while (pos < size && (data[pos] == ' ' || data[pos] == '\t'))
+            ++pos;
+        if (size - pos >= 7 && !memcmp(data + pos, "#EXT-X-", 7))
+            return true;
+        while (start < size && data[start++] != '\n');
+    }
+    return false;
+}
+
 static char *GuessEncoding (const char *str)
 {
     return IsUTF8 (str) ? strdup (str) : FromLatin1 (str);
@@ -63,7 +79,8 @@ int Import_M3U( vlc_object_t *p_this )
     ssize_t i_peek;
     unsigned int offset = 0;
 
-    i_peek = vlc_stream_Peek( p_stream->s, &p_peek, 1024 );
+    /* Use the same bounded probe as the adaptive HLS detector. */
+    i_peek = vlc_stream_Peek( p_stream->s, &p_peek, 8192 );
     if( i_peek < 8 )
         return VLC_EGENERIC;
 
@@ -108,6 +125,9 @@ int Import_M3U( vlc_object_t *p_this )
     free(type);
 
     if (!match)
+        return VLC_EGENERIC;
+
+    if (ContainsHLSTags(p_peek, i_peek))
         return VLC_EGENERIC;
 
     if (offset && vlc_stream_Read(p_stream->s, NULL, offset) != offset)
