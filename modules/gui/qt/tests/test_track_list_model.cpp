@@ -4,6 +4,7 @@
 #include <QAbstractItemModelTester>
 #include <QUrl>
 #include "player/input_models.hpp"
+#include "util/vlctick.hpp"
 
 struct TestTrackId { QByteArray uri; int references = 0; };
 static int references;
@@ -31,6 +32,36 @@ class TestTrackListModel : public QObject {
 private slots:
     void init() { references = 0; selected = nullptr; }
     void cleanup() { QCOMPARE(references, 0); }
+    void chapterOffsets_data() {
+        QTest::addColumn<qint64>("offset");
+        QTest::newRow("beginning") << qint64(0);
+        QTest::newRow("subsecond") << qint64(999999);
+        QTest::newRow("one-second") << qint64(1000000);
+        QTest::newRow("six-seconds") << qint64(6000000);
+        QTest::newRow("over-one-hour") << qint64(3601250000);
+    }
+    void chapterOffsets() {
+        QFETCH(qint64, offset);
+        vlc_player_chapter chapter{};
+        chapter.name = "Chapter";
+        chapter.time = offset;
+        vlc_player_title title{};
+        title.length = VLC_TICK_FROM_SEC(7200);
+        title.chapter_count = 1;
+        title.chapters = &chapter;
+        ChapterListModel model(nullptr);
+        model.resetTitle(&title);
+        const auto index = model.index(0);
+        const auto value = model.data(index, ChapterListModel::TimeRole);
+        QVERIFY(value.canConvert<VLCTime>());
+        const auto time = value.value<VLCTime>();
+        QVERIFY(time.valid());
+        QCOMPARE(time.toSeconds(), int(offset / 1000000));
+        QCOMPARE(time.toMilliseconds(), int(offset / 1000));
+        QCOMPARE(time.toVLCTick(), VLC_TICK_0 + offset);
+        QCOMPARE(model.data(index, ChapterListModel::StartPositionRole).toFloat(),
+                 float(offset) / float(title.length));
+    }
     void sourcesAndSelection() {
         TestTrackId embedded{}, external{"file:///C:/Movies/caps%20%26%20captions.srt"};
         TrackListModel model(nullptr);
