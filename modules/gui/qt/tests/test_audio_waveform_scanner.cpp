@@ -59,6 +59,38 @@ private slots:
         m_vlc = libvlc_new(4, args);QVERIFY(m_vlc);QVERIFY(m_directory.isValid());
     }
     void cleanupTestCase() { libvlc_release(m_vlc); }
+    void acceptsFiniteFilesIncludingShares_data() {
+        QTest::addColumn<QString>("uri");
+        QTest::addColumn<qint64>("duration");
+        QTest::addColumn<bool>("accepted");
+        QTest::newRow("local") << QStringLiteral("file:///C:/Music/song.mp3") << qint64(VLC_TICK_FROM_SEC(350)) << true;
+        QTest::newRow("mapped drive") << QStringLiteral("file:///Z:/Music/song.mp3") << qint64(VLC_TICK_FROM_SEC(350)) << true;
+        QTest::newRow("UNC share") << QStringLiteral("file://server/share/Music/song.mp3") << qint64(VLC_TICK_FROM_SEC(350)) << true;
+        QTest::newRow("UNC escaped spaces") << QStringLiteral("file://server/share/My%20Music/song.mp3") << qint64(VLC_TICK_FROM_SEC(350)) << true;
+        QTest::newRow("localhost") << QStringLiteral("file://localhost/Music/song.mp3") << qint64(VLC_TICK_FROM_SEC(350)) << true;
+        QTest::newRow("live file") << QStringLiteral("file://server/share/Music/song.mp3") << qint64(0) << false;
+        QTest::newRow("HTTP stream") << QStringLiteral("https://radio.example/song.mp3") << qint64(VLC_TICK_FROM_SEC(350)) << false;
+        QTest::newRow("capture device") << QStringLiteral("dshow://") << qint64(VLC_TICK_FROM_SEC(350)) << false;
+    }
+    void acceptsFiniteFilesIncludingShares() {
+        QFETCH(QString, uri);QFETCH(qint64, duration);QFETCH(bool, accepted);
+        QCOMPARE(canScanAudioWaveform(QUrl(uri), duration), accepted);
+    }
+    void readsOwnedUncFixture() {
+        const auto uri = qEnvironmentVariable("VLC_WAVEFORM_UNC_FIXTURE");
+        if (uri.isEmpty()) QSKIP("No owned UNC fixture was provided.");
+        const QUrl url(uri);
+        QVERIFY(url.isLocalFile());QVERIFY(!url.host().isEmpty());
+        QVERIFY(canScanAudioWaveform(url, VLC_TICK_FROM_SEC(8)));
+        auto request = source();request.uri = url.toEncoded();request.duration = VLC_TICK_FROM_SEC(8);
+        request.deadline = vlc_tick_now() + VLC_TICK_FROM_SEC(15);
+        const auto result = scan(request);
+        QCOMPARE(result.status, AudioWaveformScan::Complete);QCOMPARE(result.peaks.size(), 16);
+        for (int i = 0; i < result.peaks.size(); ++i) {
+            const float expected = i < 4 ? 0 : i < 8 ? .25 : i < 12 ? .8 : .5;
+            QVERIFY(std::abs(result.peaks[i] - expected) < .05);
+        }
+    }
     void readsAmplitudeOverTheWholeTrack_data() {
         QTest::addColumn<int>("bits");QTest::addColumn<int>("channels");QTest::addColumn<bool>("floating");
         QTest::newRow("unsigned 8-bit mono") << 8 << 1 << false;

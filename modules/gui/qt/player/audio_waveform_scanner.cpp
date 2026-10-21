@@ -18,6 +18,12 @@
 #include <mutex>
 #include <vector>
 
+bool canScanAudioWaveform(const QUrl& url, vlc_tick_t duration)
+{
+    // Qt also uses file: URLs for Windows UNC paths and mapped shares.
+    return url.isLocalFile() && duration > 0;
+}
+
 namespace {
 struct Output;
 struct AudioDecoder

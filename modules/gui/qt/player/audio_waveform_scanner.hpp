@@ -6,6 +6,9 @@
 #include <vlc_interrupt.h>
 #include <QByteArray>
 #include <QVector>
+#include <QUrl>
+
+bool canScanAudioWaveform(const QUrl& url, vlc_tick_t duration);
 
 struct AudioWaveformSource
 {

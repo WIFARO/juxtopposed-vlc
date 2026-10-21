@@ -1597,6 +1597,7 @@ void PlayerControllerPrivate::refreshAudioWaveform()
     // Audio files get a wavebar independently of the selected live visualizer.
     // Use media tracks, since a visualizer can itself create a video output.
     QUrl url;
+    vlc_tick_t duration = 0;
     {
         vlc_player_locker lock{m_player};
         if (isCurrentItemSynced() && m_currentItem
@@ -1605,9 +1606,10 @@ void PlayerControllerPrivate::refreshAudioWaveform()
             && vlc_player_GetLength(m_player) > 0) {
             vlc_mutex_locker itemLock{&m_currentItem->lock};
             url = QUrl::fromEncoded(m_currentItem->psz_uri);
+            duration = vlc_player_GetLength(m_player);
         }
     }
-    m_audioWaveformAutomatic = url.isLocalFile() && url.host().isEmpty();
+    m_audioWaveformAutomatic = canScanAudioWaveform(url, duration);
     resetAudioWaveform();
 }
 
@@ -1651,27 +1653,39 @@ void PlayerControllerPrivate::readAudioWaveform()
         source.duration = vlc_player_GetLength(m_player);
     }
     const auto url = QUrl::fromEncoded(source.uri);
-    // A waveform needs a finite local file. Do not replay a stream or device.
-    if (!url.isLocalFile() || !url.host().isEmpty() || source.duration <= 0) {
+    // Include files on shares, but do not replay streams or capture devices.
+    if (!canScanAudioWaveform(url, source.duration)) {
         m_audioWaveformState = QStringLiteral("unavailable");emit q_ptr->audioWaveformChanged();return;
-    }
-    const QFileInfo info(url.toLocalFile());
-    if (!info.isFile()) { m_audioWaveformState = QStringLiteral("unavailable");emit q_ptr->audioWaveformChanged();return; }
-    const QString key = QString::fromUtf8(source.uri) + QLatin1Char('|') + QString::number(source.audioIndex)
-        + QLatin1Char('|') + QString::number(source.duration) + QLatin1Char('|') + QString::number(info.size())
-        + QLatin1Char('|') + QString::number(info.lastModified().toMSecsSinceEpoch());
-    if (key == m_audioWaveformCacheKey && !m_audioWaveformCachePeaks.isEmpty()) {
-        m_audioWaveformPeaks = m_audioWaveformCachePeaks;m_audioWaveformState = QStringLiteral("ready");emit q_ptr->audioWaveformChanged();return;
     }
     auto request = std::make_shared<TimelineReadRequest>();
     if (!request->interrupt) { m_audioWaveformState = QStringLiteral("unavailable");emit q_ptr->audioWaveformChanged();return; }
     m_audioWaveformRequest = request;m_audioWaveformTimeout.start();
     source.deadline = vlc_tick_now() + VLC_TICK_FROM_SEC(15);
     const auto generation = m_audioWaveformGeneration;
-    m_audioWaveformWorkers.start([this, request, source, generation, media, selectedId, key] {
-        const auto result = scanAudioWaveform(VLC_OBJECT(p_intf), source, request->interrupt);
+    const auto cachedKey = m_audioWaveformCacheKey;
+    const auto cachedPeaks = m_audioWaveformCachePeaks;
+    m_audioWaveformWorkers.start([this, request, source, generation, media, selectedId, url, cachedKey, cachedPeaks] {
         QVariantList peaks;
-        if (result.status == AudioWaveformScan::Complete) { peaks.reserve(result.peaks.size());for (float peak : result.peaks) peaks.append(peak); }
+        QString key;
+        auto* previous = vlc_interrupt_set(request->interrupt);
+        // Even a file metadata check can wait on a network share.
+        const QFileInfo info(url.toLocalFile());
+        if (!vlc_killed() && info.isFile()) {
+            key = QString::fromUtf8(source.uri) + QLatin1Char('|') + QString::number(source.audioIndex)
+                + QLatin1Char('|') + QString::number(source.duration) + QLatin1Char('|') + QString::number(info.size())
+                + QLatin1Char('|') + QString::number(info.lastModified().toMSecsSinceEpoch());
+            if (!vlc_killed() && vlc_tick_now() < source.deadline) {
+                if (key == cachedKey && !cachedPeaks.isEmpty()) peaks = cachedPeaks;
+                else {
+                    const auto result = scanAudioWaveform(VLC_OBJECT(p_intf), source, request->interrupt);
+                    if (result.status == AudioWaveformScan::Complete) {
+                        peaks.reserve(result.peaks.size());
+                        for (float peak : result.peaks) peaks.append(peak);
+                    }
+                }
+            }
+        }
+        vlc_interrupt_set(previous);
         callAsync([this, generation, media, selectedId, key, peaks = std::move(peaks)] {
             if (generation != m_audioWaveformGeneration) return;
             {
