@@ -28,6 +28,11 @@ ColumnLayout {
     property string minimumValueText
     property bool trimTrailingZeros: false
     property var ticks: []
+    property color tickColor: theme.background
+    property real tickWidth: 1
+    property real tickHeight: 7
+    property real tickRadius: 0
+    property bool ticksUseFullTrack: false
     property string tickSuffix
     property bool positiveTickSign: false
     property real trackHeight: 16
@@ -161,10 +166,12 @@ ColumnLayout {
                 model: root.ticks
                 Rectangle {
                     required property real modelData
-                    width: theme.dp(1); height: theme.dp(7)
-                    x: theme.dp(root.trackInset) + sliderHandle.width / 2 + root.visualPositionFor(modelData) * (parent.width - 2 * theme.dp(root.trackInset) - sliderHandle.width)
+                    width: theme.dp(root.tickWidth); height: theme.dp(root.tickHeight); radius: theme.dp(root.tickRadius)
+                    x: root.ticksUseFullTrack
+                        ? theme.dp(root.trackInset) + root.visualPositionFor(modelData) * (parent.width - 2 * theme.dp(root.trackInset)) - width / 2
+                        : theme.dp(root.trackInset) + sliderHandle.width / 2 + root.visualPositionFor(modelData) * (parent.width - 2 * theme.dp(root.trackInset) - sliderHandle.width)
                     anchors.verticalCenter: parent.verticalCenter
-                    color: theme.background
+                    color: root.tickColor
                 }
             }
         }
