@@ -87,7 +87,7 @@ ColumnLayout {
             HoverHandler { id: rowHover }
             Text {
                 id: labelText
-                width: Math.min(implicitWidth, parent.width - theme.dp(26))
+                width: Math.min(implicitWidth, Math.max(0, parent.width - (helpButton.visible ? theme.dp(32) : 0)))
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.label || root.description.title || ""
                 color: root.compact ? theme.playerLabel : theme.foreground; font.pixelSize: theme.dp(14)
@@ -96,8 +96,8 @@ ColumnLayout {
             C.ToolButton {
                 id: helpButton
                 objectName: "preferenceHelpIcon"
-                width: theme.dp(24); height: width; padding: theme.dp(4)
-                x: labelText.width + theme.dp(4); anchors.verticalCenter: parent.verticalCenter
+                width: theme.dp(24); height: width; padding: theme.dp(3)
+                x: labelText.width + theme.dp(8); anchors.verticalCenter: parent.verticalCenter
                 visible: root.helpText.length > 0 && !root.compact && !root.presentation.hideHelp
                 focusPolicy: Qt.StrongFocus
                 hoverEnabled: true

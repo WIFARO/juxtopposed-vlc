@@ -27,6 +27,8 @@ T.Button {
     property real captionFontSize: 14
     property int captionFontWeight: primaryAction ? Font.Medium : Font.Normal
     property real captionSpacing: 6
+    property real contentLeftMargin: 12
+    property real captionVerticalOffset: 0
     property real captionMaximumWidth: Infinity
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
 
@@ -61,7 +63,7 @@ T.Button {
         spacing: theme.dp(root.captionSpacing)
         anchors.verticalCenter: parent.verticalCenter
         // Keep the row's natural width when switching between labeled and icon-only buttons.
-        x: root.leftAligned ? theme.dp(12) : (parent.width - width) / 2
+        x: root.leftAligned ? theme.dp(root.contentLeftMargin) : (parent.width - width) / 2
         RedesignIcon {
             objectName: "redesignButtonIcon"
             width: root.iconName ? root.iconSize : 0
@@ -78,6 +80,7 @@ T.Button {
             width: Math.min(implicitWidth, root.captionMaximumWidth)
             elide: Text.ElideRight
             anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: theme.dp(root.captionVerticalOffset)
             text: root.caption
             color: root.iconName === "cone" ? theme.accent : root.accent ? "#161616" : root.selected ? root.selectedForeground : root.foreground
             font.pixelSize: theme.dp(root.captionFontSize)

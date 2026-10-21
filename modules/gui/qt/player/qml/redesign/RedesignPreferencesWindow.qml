@@ -15,7 +15,7 @@ RedesignSettingsDialog {
     accentColor: MainCtx.redesignAccent
     lightTheme: !VLCStyle.palette.isDark
     property string category: "general"
-    readonly property bool usesReferenceSpacing: category === "interface" || category === "privacy" || category === "controls" || category === "library" || category === "audio" || category === "playback" || category === "video" || category === "subtitles"
+    readonly property bool usesReferenceSpacing: category === "interface" || category === "privacy" || category === "controls" || category === "library" || category === "audio" || category === "playback" || category === "video" || category === "subtitles" || category === "network"
     readonly property string categoryTitle: specification.pageTitles[category] || ""
     property bool advanced: false
     property bool expert: false
@@ -147,13 +147,13 @@ RedesignSettingsDialog {
                 id: searchField
                 objectName: "settingsSearch"
                 anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                anchors.margins: theme.dp(8); height: theme.dp(34)
+                anchors.margins: theme.dp(8); anchors.rightMargin: 0; height: theme.dp(34)
                 leftPadding: theme.dp(42)
                 placeholderText: qsTr("Search")
-                color: theme.foreground; placeholderTextColor: theme.foreground
+                color: theme.foreground; placeholderTextColor: root.lightTheme ? theme.foreground : "#404040"
                 font.pixelSize: theme.dp(14); selectByMouse: true
                 background: Rectangle { color: root.lightTheme ? theme.background : "#151515"; radius: theme.dp(6); border.width: searchField.activeFocus ? 1 : 0; border.color: theme.accent }
-                RedesignIcon { x: theme.dp(10); anchors.verticalCenter: parent.verticalCenter; width: theme.dp(20); height: width; name: "search"; color: theme.foreground }
+                RedesignIcon { x: theme.dp(8); anchors.verticalCenter: parent.verticalCenter; width: theme.dp(24); height: width; name: "search"; color: root.lightTheme ? theme.foreground : "#6b6b6b" }
                 onTextEdited: searchDelay.restart()
                 onTextChanged: if (!text.length) { searchDelay.stop(); root.search = "" }
                 onAccepted: { searchDelay.stop(); root.search = text }
@@ -191,7 +191,7 @@ RedesignSettingsDialog {
                                 visible: !!modelData.group
                                 height: visible ? theme.dp(modelData.key === "general" ? 47 : 41) : 0
                                 leftPadding: theme.dp(24); topPadding: theme.dp(modelData.key === "general" ? 16 : 10)
-                                text: modelData.group || ""; color: theme.foreground; font.pixelSize: theme.dp(14)
+                                text: modelData.group || ""; color: root.lightTheme ? theme.foreground : "#6b6b6b"; font.pixelSize: theme.dp(14)
                             }
                             Item {
                                 width: parent.width; height: theme.dp(48)
@@ -200,7 +200,7 @@ RedesignSettingsDialog {
                                     width: parent.width - theme.dp(20); x: theme.dp(14); height: theme.dp(40)
                                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                                     caption: modelData.title; text: caption; iconName: modelData.icon + (selected ? "-active" : "")
-                                    leftAligned: true
+                                    leftAligned: true; contentLeftMargin: 8; captionSpacing: 12; captionVerticalOffset: 1
                                     selectedForeground: theme.bright
                                     background: Rectangle { radius: theme.dp(2); color: parent.selected ? root.lightTheme ? theme.selected : "#222222" : parent.hovered ? theme.hover : "transparent"; border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent }
                                     selected: root.category === modelData.key && !root.search.length
@@ -225,7 +225,7 @@ RedesignSettingsDialog {
         }
         RedesignButton {
             id: closeButton
-            anchors.right: parent.right; anchors.top: parent.top; anchors.margins: theme.dp(7)
+            anchors.right: parent.right; anchors.top: parent.top; anchors.margins: theme.dp(7); anchors.rightMargin: theme.dp(12)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             iconName: "close"; text: qsTr("Close settings")
             onClicked: root.closeSettings()
@@ -255,7 +255,7 @@ RedesignSettingsDialog {
                     width: parent.width
                     Text {
                         topPadding: theme.dp(8); bottomPadding: theme.dp(9)
-                        text: qsTr("Appearance"); color: theme.settingsHeading; font.pixelSize: theme.dp(16)
+                        text: qsTr("Appearance"); color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
                     }
                     RedesignPreferenceRow { width: parent.width; backend: preferenceStore; optionName: "language"; label: qsTr("Interface language"); scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
                     Item {
@@ -342,7 +342,7 @@ RedesignSettingsDialog {
                         visible: modelData.rows.some(row => preferenceStore.describe(row[0]).kind !== undefined) || root.category === "controls" && modelData.title === qsTr("Keyboard Shortcuts")
                         Text {
                             topPadding: theme.dp(index === 0 && root.category !== "general" ? root.usesReferenceSpacing ? 9 : 8 : 24); bottomPadding: theme.dp(10)
-                            text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
+                            text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
                             visible: text.length > 0
                         }
                         ColumnLayout {
@@ -397,7 +397,7 @@ RedesignSettingsDialog {
 
                 Item {
                     visible: !root.search.length
-                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles" ? 53 : 50)
+                    width: parent.width; height: theme.dp(root.category === "extensions" ? 38 : root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles" || root.category === "network" ? 53 : 50)
                     RedesignButton {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                         height: theme.dp(38)
@@ -421,10 +421,10 @@ RedesignSettingsDialog {
                     delegate: Column {
                         required property var modelData
                         width: parent.width
-                        topPadding: (root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles") && !modelData.title.length ? theme.dp(15) : 0
+                        topPadding: (root.category === "general" || root.category === "interface" || root.category === "library" || root.category === "audio" || root.category === "playback" || root.category === "video" || root.category === "subtitles" || root.category === "network") && !modelData.title.length ? theme.dp(15) : 0
                         Text {
                             visible: text.length > 0; topPadding: theme.dp(root.category === "general" ? 24 : 20); bottomPadding: theme.dp(10)
-                            text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16)
+                            text: modelData.title; color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
                         }
                         Repeater {
                             model: modelData.rows

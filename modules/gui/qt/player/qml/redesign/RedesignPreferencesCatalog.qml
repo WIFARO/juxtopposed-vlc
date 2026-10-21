@@ -165,11 +165,11 @@ QtObject {
             { title: qsTr("Metadata & Artwork"), rows: [ ["metadata-network-access", qsTr("Fetch titles and artwork"), {choices: [{label: qsTr("From the file only"), value: false}, {label: qsTr("From the file and the internet"), value: true}]}], ["media-library-startup", qsTr("Use the media library"), {dynamicChoices: true}] ] } ],
         network: [
             { title: qsTr("Buffering"), rows: [ ["redesign-buffering", qsTr("Buffering")],
-                ["file-caching", qsTr("Local files"), {enabledWhenEquals: {name: "redesign-buffering", value: 0}, hideDisabledValue: true, hideHelp: true, suffix: " ms"}],
-                ["disc-caching", qsTr("Discs"), {enabledWhenEquals: {name: "redesign-buffering", value: 0}, hideDisabledValue: true, hideHelp: true, suffix: " ms"}],
-                ["network-caching", qsTr("Network streams"), {enabledWhenEquals: {name: "redesign-buffering", value: 0}, hideDisabledValue: true, hideHelp: true, suffix: " ms"}],
-                ["live-caching", qsTr("Live capture"), {enabledWhenEquals: {name: "redesign-buffering", value: 0}, hideDisabledValue: true, hideHelp: true, suffix: " ms"}] ] },
-            { title: qsTr("Proxy"), rows: [ ["http-proxy", qsTr("HTTP proxy")], ["http-proxy-pwd", qsTr("HTTP proxy password")] ] },
+                ["file-caching", qsTr("Local files"), {enabledWhenEquals: {name: "redesign-buffering", value: 0}, hideDisabledValue: true, disabledOpacity: 0.3, hideHelp: true, suffix: " ms"}],
+                ["disc-caching", qsTr("Discs"), {enabledWhenEquals: {name: "redesign-buffering", value: 0}, hideDisabledValue: true, disabledOpacity: 0.3, hideHelp: true, suffix: " ms"}],
+                ["network-caching", qsTr("Network streams"), {enabledWhenEquals: {name: "redesign-buffering", value: 0}, hideDisabledValue: true, disabledOpacity: 0.3, hideHelp: true, suffix: " ms"}],
+                ["live-caching", qsTr("Live capture"), {enabledWhenEquals: {name: "redesign-buffering", value: 0}, hideDisabledValue: true, disabledOpacity: 0.3, hideHelp: true, suffix: " ms"}] ] },
+            { title: qsTr("Proxy"), rows: [ ["http-proxy", qsTr("HTTP proxy"), {placeholder: qsTr("System proxy")}], ["http-proxy-pwd", qsTr("HTTP proxy password")] ] },
             { title: qsTr("Security"), rows: [ ["gnutls-system-trust", qsTr("Verify certificates against the system trust store")], ["gnutls-priorities", qsTr("Cipher preference"), {choiceLabels: {NORMAL: qsTr("Balanced")}}] ] } ],
         performance: [
             { title: qsTr("Decoding"), rows: [ ["redesign-hardware-decoding", qsTr("Hardware-accelerated decoding"), {dynamicChoices: true}], ["redesign-postprocessing", qsTr("Video post-processing"), {dynamicChoices: true}],
