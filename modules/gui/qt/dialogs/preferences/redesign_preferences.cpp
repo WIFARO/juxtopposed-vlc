@@ -1669,14 +1669,6 @@ bool RedesignPreferences::clearHistory()
 
 QVariantMap RedesignPreferences::describe(const QString& name) const
 {
-    // Keep the design's retired numeric row visible without a native option or
-    // write mapping. The supported Windows high-priority boolean is separate.
-    if (name == QLatin1String("redesign-process-priority"))
-        return {{QStringLiteral("kind"), QStringLiteral("integer")},
-            {QStringLiteral("title"), qtr("Process priority")},
-            {QStringLiteral("supported"), false},
-            {QStringLiteral("placeholder"), qtr("Unavailable")},
-            {QStringLiteral("help"), qtr("This setting is not available in VLC 4.")}};
     if (name == QLatin1String("redesign-fullscreen-sensitivity")) {
         if (!config_FindConfig("qt-fs-sensitivity")) return {};
         return {{QStringLiteral("name"), name}, {QStringLiteral("kind"), QStringLiteral("integer")},
