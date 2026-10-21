@@ -47,6 +47,8 @@ RedesignLibraryView {
     property var registeredFolders: []
     readonly property var folderTrail: folderPath.trail(currentFolder, registeredFolders)
     property string musicSection: ""
+    readonly property string collectionFallbackTitle: musicSection === "Artists" ? qsTr("Unknown artist")
+        : musicSection === "Genres" ? qsTr("Unknown genre") : qsTr("Unknown title")
     property var networkLocation: ({source: "", title: "", nodes: []})
     readonly property bool showingSongFolders: category === 2 && musicSection === "Songs" && !currentFolder && !selectedCollection && !homeSection
     onShowingSongFoldersChanged: refreshFolders()
@@ -232,7 +234,7 @@ RedesignLibraryView {
         if (musicSection) result.push({label: qsTr(musicSection), kind: "music"})
         if (currentFolder) {
             for (const url of folderTrail) result.push({label: nameFromUrl(url), kind: "folder", url: url})
-        } else if (selectedName) result.push({label: selectedName, kind: "selection"})
+        } else if (selectedCollection || selectedName) result.push({label: selectedName || collectionFallbackTitle, kind: "selection"})
         return result
     }
     heading: breadcrumbs.map(entry => entry.label).join(" › ")
@@ -240,6 +242,7 @@ RedesignLibraryView {
     canGoForward: forwardStack.length > 0
     defaultItemIcon: homeSection === "artists" ? "artist" : homeSection === "listening" ? "music" : category === 4 && !selectedPlaylist ? "playlist" : category === 2 ? "music" : category === 3 ? "network" : "video"
     showingFolders: category === 1 && !currentFolder || folderHasOnlyDirectories || showingSongFolders || homeSection === "folders"
+    unnamedItemTitle: category === 2 && !currentFolder && !selectedCollection && musicSection !== "Songs" ? collectionFallbackTitle : ""
     showAddRow: category > 0 && category < 5 && !(category === 3 && network.linked) && (category !== 1 || !currentFolder || (folderLoader.item && folderLoader.item.directoryCount > 0))
     canEnqueue: !(category === 2 && musicSection === "" || category === 3 && network.atRoot)
     artworkIconForItem: model => category === 3 && !network.atRoot && network.branch(model) ? "folder"
@@ -331,11 +334,11 @@ RedesignLibraryView {
         }
         const item = activeModel.getDataAt(index)
         if (!item || !item.id) return null
-        const name = item.title || item.name || nameFromUrl(item.url || "")
+        const name = item.title || item.name || (item.url ? nameFromUrl(item.url) : "")
         const artwork = item.thumbnail || item.small_cover || item.cover || ""
         if (category === 4 && !selectedPlaylist) return pinTarget("playlist", item.id.toString(), name, 4, "playlist", artwork, "")
         if (category === 2 && !selectedCollection && musicSection !== "Songs")
-            return pinTarget("collection", item.id.toString(), name, 2, musicSection === "Artists" ? "artist" : "music", artwork, musicSection)
+            return pinTarget("collection", item.id.toString(), name || collectionFallbackTitle, 2, musicSection === "Artists" ? "artist" : "music", artwork, musicSection)
         return mediaTarget(item, category)
     }
     function openNetworkPlaylist(urls, name) {
@@ -424,7 +427,7 @@ RedesignLibraryView {
         } else {
             const item = activeModel.getDataAt(index)
             if (category === 4 && !selectedPlaylist) { remember(); selectedPlaylist = item.id; selectedName = item.name; searchText = ""; visits.record("playlists", item.id.toString(), item.name) }
-            else if (category === 2 && musicSection !== "Songs" && !selectedCollection) { remember(); selectedCollection = item.id; selectedName = item.title || item.name; searchText = "" }
+            else if (category === 2 && musicSection !== "Songs" && !selectedCollection) { remember(); selectedCollection = item.id; selectedName = item.title || item.name || ""; searchText = "" }
             else MediaLib.addAndPlay(item.id)
         }
     }

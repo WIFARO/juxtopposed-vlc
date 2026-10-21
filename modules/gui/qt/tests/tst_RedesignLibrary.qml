@@ -140,6 +140,7 @@ TestCase {
         library.homeSections = []
         homeSpy.clear(); homeQueueSpy.clear(); sectionSpy.clear()
         library.category = 1
+        library.unnamedItemTitle = ""
         library.showAddRow = Qt.binding(() => library.category > 0 && library.category < 5)
         library.lightTheme = false
         library.accentColor = "#d37918"
@@ -1065,6 +1066,18 @@ TestCase {
             view.expanded=true; compare(view.grid,true)
         }
         compare(settings.writes,0)
+    }
+    function test_unnamedCollectionUsesFallbackWithoutChangingNamedItems() {
+        library.category = 2
+        library.unnamedItemTitle = "Unknown title"
+        playlistItems.clear()
+        playlistItems.append({title: "", fileIsDir: false})
+        playlistItems.append({title: "Album", fileIsDir: false})
+        library.mediaModel = playlistItems
+        tryVerify(() => findChild(library, "libraryTitle0")?.text === "Unknown title")
+        compare(findChild(library, "libraryTitle1").text, "Album")
+        mouseClick(findChild(library, "libraryMediaItem0"))
+        compare(activateSpy.signalArguments[0][0], 0)
     }
     function test_musicCollectionAddImportsFilesInBothLayouts() {
         library.category = 2

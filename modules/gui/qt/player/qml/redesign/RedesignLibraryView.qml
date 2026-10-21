@@ -45,6 +45,7 @@ Item {
     property bool canGoBack: false
     property bool canGoForward: false
     property bool canEnqueue: true
+    property string unnamedItemTitle: ""
     property string defaultItemIcon: category === 4 ? "queue" : category === 2 ? "music" : category === 3 ? "network" : "video"
     property var artworkIconForItem: model => model.fileIsDir || root.showingFolders ? "folder" : model.iconName || root.defaultItemIcon
     property bool showingFolders: false
@@ -495,7 +496,7 @@ Item {
                 required property var model
                 width: mediaView.cellWidth - (root.expanded ? theme.dp(20) : 0)
                 height: mediaView.cellHeight
-                readonly property string itemTitle: model.title || model.name || model.fileName || (model.url ? root.nameFromUrl(model.url) : "")
+                readonly property string itemTitle: model.title || model.name || model.fileName || (model.url ? root.nameFromUrl(model.url) : "") || root.unnamedItemTitle
                 readonly property string itemArtist: model.main_artist || ""
                 readonly property string displayTitle: itemTitle + ((!root.expanded || !root.grid) && itemArtist ? " - " + itemArtist : "")
                 readonly property string itemArtwork: model.thumbnail || model.small_cover || model.cover || ""
