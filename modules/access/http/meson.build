@@ -75,6 +75,12 @@ if (get_option('tests').allowed())
         link_with: vlc_http_lib,
         include_directories: [vlc_include_dirs])
 
+    http_connmgr_test = executable('http_connmgr_test',
+        files('connmgr_test.c'),
+        link_with: vlc_http_lib,
+        include_directories: [vlc_include_dirs])
+    test('http_connmgr_test', http_connmgr_test, suite: 'http')
+
     test('http_hpack', hpack_test, suite: 'http')
     test('http_hpackenc', hpackenc_test, suite: 'http')
     test('http_h2frame_test', h2frame_test, suite: 'http')
