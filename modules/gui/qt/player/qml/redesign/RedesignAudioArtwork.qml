@@ -12,7 +12,7 @@ Item {
     clip: !showTitle
     readonly property bool ready: cover.status === Image.Ready
     readonly property bool localArtwork: source.toString().startsWith("file:") || source.toString().startsWith("qrc:")
-    // The full player frame places a 738-pixel cover in a 986-pixel viewport.
+    // The full player frame places a 738 by 737 cover in a 986-pixel viewport.
     readonly property real coverSize: Math.max(0, Math.min(width * .8, height * 738 / 986))
 
     Image {
@@ -29,7 +29,7 @@ Item {
     Item {
         anchors.horizontalCenter: parent.horizontalCenter
         y: parent.height * (220 / 3) / 986
-        width: root.coverSize; height: width
+        width: root.coverSize; height: width * 737 / 738
         Image {
             anchors.centerIn: parent
             width: parent.width * 1047 / 738; height: width
@@ -41,16 +41,24 @@ Item {
             sourceSize: Qt.size(512, 512)
             asynchronous: true
         }
-        Image {
-            id: cover
-            objectName: "audioArtworkCover"
+        Item {
+            objectName: "audioArtworkFrame"
             anchors.fill: parent
-            source: !root.source.toString() ? "" : root.localArtwork
-                ? Effects.url(Effects.Artwork, {source: root.source, radius: 20 / 738}) : root.source
-            sourceSize: Qt.size(1024, 1024)
-            fillMode: Image.PreserveAspectFit
-            asynchronous: true
-            visible: root.ready
+            clip: true
+            Image {
+                id: cover
+                objectName: "audioArtworkCover"
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: (parent.height - height) / 2
+                // Crop half a reference pixel at each edge without stretching the image.
+                width: parent.width; height: width
+                source: !root.source.toString() ? "" : root.localArtwork
+                    ? Effects.url(Effects.Artwork, {source: root.source, radius: 20 / 738}) : root.source
+                sourceSize: Qt.size(1024, 1024)
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                visible: root.ready
+            }
         }
     }
     Text {
