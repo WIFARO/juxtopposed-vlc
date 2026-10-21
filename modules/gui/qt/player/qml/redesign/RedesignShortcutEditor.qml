@@ -50,7 +50,8 @@ C.Popup {
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: parent.height / 2; color: parent.color }
         }
         Text {
-            x: theme.dp(20); height: theme.dp(50)
+            x: theme.dp(19); height: theme.dp(50)
+            topPadding: theme.dp(0.5); bottomPadding: -topPadding
             width: parent.width - theme.dp(80)
             text: qsTr("Keyboard Shortcuts"); color: theme.foreground; font.pixelSize: theme.dp(14)
             verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
@@ -158,7 +159,7 @@ C.Popup {
             objectName: "shortcutCancel"
             x: theme.dp(20); y: parent.height - theme.dp(52); width: theme.dp(100); height: theme.dp(32)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-            caption: qsTr("Cancel"); captionFontWeight: Font.Medium; text: caption; onClicked: root.cancelRequested()
+            caption: qsTr("Cancel"); captionFontWeight: Font.DemiBold; captionVerticalOffset: 1; text: caption; onClicked: root.cancelRequested()
             background: Rectangle { radius: theme.dp(6); color: parent.hovered ? theme.hover : theme.background; border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent }
         }
         Text {
@@ -172,7 +173,7 @@ C.Popup {
             y: parent.height - theme.dp(52); width: theme.dp(100); height: theme.dp(32)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             caption: qsTr("Save"); text: caption; enabled: root.dirty; onClicked: root.saveRequested()
-            primaryAction: true
+            primaryAction: true; captionFontWeight: Font.DemiBold; captionVerticalOffset: 1
         }
     }
     Component {
@@ -193,6 +194,7 @@ C.Popup {
             contentItem: Text {
                 text: cell.recording ? qsTr("Press a shortcut…") : root.displayValue(cell.optionName)
                 color: cell.recording ? theme.accent : theme.settingsHeading; font.pixelSize: theme.dp(14)
+                font.family: "DM Mono"
                 horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight; leftPadding: theme.dp(26); rightPadding: theme.dp(26)
             }

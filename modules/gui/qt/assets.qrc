@@ -1,5 +1,7 @@
 <RCC>
     <qresource prefix="/fonts">
+        <file alias="DMMono-Regular.ttf">fonts/DMMono-Regular.ttf</file>
+        <file alias="DMMono-LICENSE.txt">fonts/DMMono-LICENSE.txt</file>
         <file alias="Inter-Regular.otf">fonts/Inter-Regular.otf</file>
         <file alias="Inter-Medium.otf">fonts/Inter-Medium.otf</file>
         <file alias="Inter-SemiBold.otf">fonts/Inter-SemiBold.otf</file>

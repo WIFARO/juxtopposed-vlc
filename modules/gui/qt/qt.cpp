@@ -961,6 +961,8 @@ static void *Thread( void *obj )
         if (QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/Inter-%1.otf").arg(QLatin1String(style))) < 0)
             msg_Warn(p_intf, "Cannot load bundled Inter font style %s", style);
     }
+    if (QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/DMMono-Regular.ttf")) < 0)
+        msg_Warn(p_intf, "Cannot load the bundled DM Mono shortcut font");
     const auto families = QFontDatabase::applicationFontFamilies(interfaceFont);
     if (!families.isEmpty()) {
         auto font = app.font();

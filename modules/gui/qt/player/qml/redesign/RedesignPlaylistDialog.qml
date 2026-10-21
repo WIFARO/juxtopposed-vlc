@@ -93,7 +93,8 @@ C.Dialog {
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: parent.height / 2; color: parent.color }
         }
         Text {
-            anchors.left: parent.left; anchors.leftMargin: root.theme.dp(20); anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left; anchors.leftMargin: root.theme.dp(19); anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: root.theme.dp(1)
             text: root.title; color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
         }
         RedesignButton {
@@ -296,7 +297,7 @@ C.Dialog {
             x: root.theme.dp(20); anchors.bottom: parent.bottom; anchors.bottomMargin: root.theme.dp(20)
             implicitWidth: root.theme.dp(100); implicitHeight: root.theme.dp(32)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-            caption: qsTr("Cancel"); captionFontWeight: Font.Medium; text: caption; enabled: !root.busy
+            caption: qsTr("Cancel"); captionFontWeight: Font.DemiBold; captionVerticalOffset: 1; text: caption; enabled: !root.busy
             background: Rectangle { color: parent.hovered ? root.theme.hover : root.theme.background; radius: root.theme.dp(6); border.color: parent.visualFocus ? root.theme.accent : "transparent" }
             onClicked: root.reject()
         }
@@ -306,7 +307,7 @@ C.Dialog {
             implicitWidth: root.theme.dp(100); implicitHeight: root.theme.dp(32)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             caption: root.busy ? qsTr("Saving…") : qsTr("Save"); text: caption
-            enabled: root.valid && !root.busy; primaryAction: true
+            enabled: root.valid && !root.busy; primaryAction: true; captionFontWeight: Font.DemiBold; captionVerticalOffset: 1
             onClicked: root.submit()
         }
     }

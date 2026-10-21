@@ -13,3 +13,13 @@ and loads them before creating its interface. Static styles allow Qt font
 backends without named variable-font instances to select the intended weight.
 An operating-system font installation is not required. Other system fonts
 remain available for characters that Inter does not contain.
+
+# DM Mono shortcut font
+
+DMMono-Regular.ttf is the unmodified regular face from Google Fonts:
+https://github.com/google/fonts/tree/main/ofl/dmmono
+
+Its 14-pixel key labels match the sampled shortcut outlines in the Figma source.
+VLC embeds it for shortcut values; interface labels continue to use Inter.
+DM Mono is designed by Colophon Foundry. DMMono-LICENSE.txt contains its
+SIL Open Font License 1.1 and copyright notice.

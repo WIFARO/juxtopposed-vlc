@@ -54,6 +54,9 @@ public:
         QFile fontLicense(QStringLiteral(":/fonts/Inter-LICENSE.txt"));
         if (fontLicense.open(QIODevice::ReadOnly))
             license += QStringLiteral("\n\nInter interface font\n\n") + QString::fromUtf8(fontLicense.readAll());
+        QFile shortcutFontLicense(QStringLiteral(":/fonts/DMMono-LICENSE.txt"));
+        if (shortcutFontLicense.open(QIODevice::ReadOnly))
+            license += QStringLiteral("\n\nDM Mono shortcut font\n\n") + QString::fromUtf8(shortcutFontLicense.readAll());
         return license;
     }
 
@@ -75,7 +78,9 @@ public:
                   "Modified for VLC's native interface, responsive layouts, controls, and settings.</p>"
                   "<p>Interface font: <a href=\"https://rsms.me/inter/\">Inter</a> by Rasmus Andersson and contributors. "
                   "Licensed under the <a href=\"https://raw.githubusercontent.com/rsms/inter/master/LICENSE.txt\">SIL Open Font License 1.1</a>. "
-                  "The full font license is in the License tab.</p>");
+                  "The full font license is in the License tab.</p>"
+                  "<p>Shortcut key font: <a href=\"https://fonts.google.com/specimen/DM+Mono\">DM Mono</a> by Colophon Foundry. "
+                  "Licensed under the SIL Open Font License 1.1. The full font license is in the License tab.</p>");
     }
 
     static QString getVersion()
