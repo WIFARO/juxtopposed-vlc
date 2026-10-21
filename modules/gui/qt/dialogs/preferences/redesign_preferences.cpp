@@ -2685,6 +2685,9 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
         applyToPlayer = normalized.toBool() != m_ctx->compactMenus();
     if (m_ctx && name == QLatin1String("qt-discover-cast-devices"))
         applyToPlayer = normalized.toBool() != value(name).toBool();
+    if (m_ctx && name == QLatin1String("metadata-network-access"))
+        applyToPlayer = normalized.toBool()
+            != var_InheritBool(m_ctx->getIntf(), "metadata-network-access");
     if (m_ctx && name == QLatin1String("recursive"))
         applyToPlayer = normalized.toString() != value(name).toString();
     if (const auto category = enabledTrackCategory(name); m_ctx && category != UNKNOWN_ES) {
@@ -2844,6 +2847,12 @@ bool RedesignPreferences::save()
     applyPlaybackPreferences(m_ctx->getIntf(), &previous);
     // These controls are inherited by the current input and action dispatcher.
     auto* instance = vlc_object_instance(m_ctx->getIntf());
+    if (previous.contains(QStringLiteral("metadata-network-access"))) {
+        if (var_Type(instance, "metadata-network-access") == 0)
+            var_Create(instance, "metadata-network-access", VLC_VAR_BOOL);
+        var_SetBool(instance, "metadata-network-access", bool(config_GetInt("metadata-network-access")));
+        m_ctx->getIntf()->p_mainPlayerController->refreshMetadataPreference();
+    }
     if (std::any_of(previous.keyBegin(), previous.keyEnd(), [](const QString& name) {
             return name.startsWith(QLatin1String("key-")) || name.startsWith(QLatin1String("global-key-"));
         })) vlc_actions_update(VLC_OBJECT(instance));

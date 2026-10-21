@@ -81,7 +81,10 @@ public:
     // UpdateMeta) into a list of TimedText entries. The cache is
     // invalidated when m_syltRaw changes.
     QList<TimedText> syltLyrics() const;
-    void onArtFetchEnded(input_item_t *, bool fetched);
+    void onArtFetchEnded(input_item_t *result, input_item_t *target,
+                        bool automatic, quint64 generation, const QStringList &before);
+    void requestAutoMetadata();
+    void requestMetadata(input_item_t *, bool automatic);
 
     // SMPTE Timer
     void addSMPTETimer();
@@ -171,6 +174,8 @@ public:
     unsigned m_smpteTimerRequestCount = 0;
 
     SharedInputItem    m_currentItem;
+    SharedInputItem m_autoMetadataItem;
+    quint64 m_metadataGeneration = 0;
     SharedInputItem m_seekDragItem;
     bool m_seekDragWasPlaying = false;
     bool            m_canRestorePlayback = false;

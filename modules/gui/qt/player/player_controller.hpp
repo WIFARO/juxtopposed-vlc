@@ -324,6 +324,7 @@ public:
     int AddAssociatedMedia(enum es_format_category_e cat, const QString& uri, bool select, bool notify, bool check_ext);
 
     void requestArtUpdate( input_item_t *p_item );
+    void refreshMetadataPreference();
     void setArt( input_item_t *p_item, QString fileUrl );
     void refreshMediaMeta( input_item_t *p_item );
     static const QString decodeArtURL( input_item_t *p_item );

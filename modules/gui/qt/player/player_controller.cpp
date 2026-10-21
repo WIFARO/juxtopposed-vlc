@@ -372,6 +372,7 @@ static  void on_player_current_media_changed(vlc_player_t *, input_item_t *new_m
     {
         that->callAsync([that] () {
             that->m_seekDragItem.reset();
+            that->m_autoMetadataItem.reset();
             {
                 vlc_player_locker lock{ that->m_player };
                 that->m_currentItem.reset(nullptr);
@@ -394,6 +395,7 @@ static  void on_player_current_media_changed(vlc_player_t *, input_item_t *new_m
     that->callAsync([that,newMediaPtr] () {
         PlayerController* q = that->q_func();
         that->m_seekDragItem.reset();
+        that->m_autoMetadataItem.reset();
 
         that->m_syltRaw.reset();
         that->m_syltLyrics.reset();
@@ -526,6 +528,8 @@ static void on_player_state_changed(vlc_player_t *, enum vlc_player_state state,
             break;
         }
         }
+        if (state == VLC_PLAYER_STATE_PLAYING || state == VLC_PLAYER_STATE_PAUSED)
+            that->requestAutoMetadata();
         emit q->playingStateChanged( that->m_playing_status );
     });
 }
@@ -906,6 +910,9 @@ static void on_player_media_meta_changed(vlc_player_t *, input_item_t *media, vo
         that->UpdateArt(mediaPtr.get());
         that->UpdateMeta(mediaPtr.get());
         that->UpdateInfo(mediaPtr.get());
+        // Consecutive inputs can keep the player in PLAYING without another
+        // state-change event. Their demux metadata still needs a lookup.
+        that->requestAutoMetadata();
     });
 }
 
@@ -1154,12 +1161,26 @@ static void on_player_timer_smpte_update(const struct vlc_player_timer_smpte_tim
 }
 
 
-static void on_preparse_ended_callback(vlc_preparser_req *req,
-                                       int, void *userdata)
+struct ArtFetchContext
 {
+    PlayerControllerPrivate *controller;
+    bool automatic;
+    quint64 generation;
+    SharedInputItem original;
+    QStringList before;
+};
+
+static void on_preparse_ended_callback(vlc_preparser_req *req,
+                                       int status, void *userdata)
+{
+    std::unique_ptr<ArtFetchContext> context(static_cast<ArtFetchContext *>(userdata));
+    // Fetch-only requests can keep the parser's default error status even
+    // after fetching metadata. Only cancellation/timeout discards the result.
+    if (status == -EINTR || status == VLC_ETIMEOUT)
+        return;
     input_item_t *p_item = vlc_preparser_req_GetItem(req);
-    PlayerControllerPrivate *me = reinterpret_cast<PlayerControllerPrivate *>(userdata);
-    me->onArtFetchEnded(p_item, input_item_IsArtFetched(p_item));
+    context->controller->onArtFetchEnded(p_item, context->original.get(),
+                                        context->automatic, context->generation, context->before);
 }
 
 
@@ -2827,14 +2848,59 @@ QString PlayerController::highResolutionTime() const
 
 /* Playlist Control functions */
 
+void PlayerControllerPrivate::requestAutoMetadata()
+{
+    if (!var_InheritBool(p_intf, "metadata-network-access")
+        || (m_playing_status != PlayerController::PLAYING_STATE_PLAYING
+            && m_playing_status != PlayerController::PLAYING_STATE_PAUSED))
+        return;
+
+    SharedInputItem item;
+    {
+        vlc_player_locker lock{m_player};
+        if (!m_currentItem || !isCurrentItemSynced()
+            || m_autoMetadataItem.get() == m_currentItem.get())
+            return;
+        item = m_currentItem;
+        m_autoMetadataItem = item;
+    }
+    // Start after demux metadata is available; pause/resume must not repeat
+    // provider requests for the same current media.
+    requestMetadata(item.get(), true);
+}
+
+void PlayerController::refreshMetadataPreference()
+{
+    Q_D(PlayerController);
+    if (!var_InheritBool(d->p_intf, "metadata-network-access"))
+    {
+        ++d->m_metadataGeneration;
+        d->m_autoMetadataItem.reset();
+        // Per-request Cancel does not cover metadata-only fetcher tasks.
+        // Deleting this dedicated preparser interrupts every fetch stage and
+        // prevents a cancelled search from starting an artwork download.
+        if (d->m_preparser)
+        {
+            vlc_preparser_Delete(d->m_preparser);
+            d->m_preparser = nullptr;
+        }
+        return;
+    }
+    d->requestAutoMetadata();
+}
+
 void PlayerController::requestArtUpdate( input_item_t *p_item )
 {
     Q_D(PlayerController);
+    d->requestMetadata(p_item, false);
+}
 
-    if (d->m_preparser == nullptr)
+void PlayerControllerPrivate::requestMetadata(input_item_t *p_item, bool automatic)
+{
+    if (m_preparser == nullptr)
     {
         vlc_tick_t default_timeout =
-            VLC_TICK_FROM_MS(var_InheritInteger(d->p_intf, "preparse-timeout"));
+            VLC_TICK_FROM_MS(var_InheritInteger(p_intf, "preparse-timeout"));
         if (default_timeout < 0)
             default_timeout = 0;
 
@@ -2846,40 +2912,81 @@ void PlayerController::requestArtUpdate( input_item_t *p_item )
             cfg.external_process = false;
             return cfg;
         }();
-        d->m_preparser = vlc_preparser_New(VLC_OBJECT(d->p_intf), &cfg);
-        if (unlikely(d->m_preparser == nullptr))
+        m_preparser = vlc_preparser_New(VLC_OBJECT(p_intf), &cfg);
+        if (unlikely(m_preparser == nullptr))
             return;
     }
 
-    int fetch_options = var_InheritBool( d->p_intf, "metadata-network-access" ) ?
+    int fetch_options = var_InheritBool( p_intf, "metadata-network-access" ) ?
             VLC_PREPARSER_TYPE_FETCHMETA_ALL :
             VLC_PREPARSER_TYPE_FETCHMETA_LOCAL;
 
+    auto context = std::make_unique<ArtFetchContext>(ArtFetchContext{
+        this, automatic, m_metadataGeneration, SharedInputItem(p_item), {}});
+    // A background provider must not mutate the live item while the user is
+    // editing it, or publish results after the network choice was disabled.
+    SharedInputItem working = automatic
+        ? SharedInputItem(input_item_Copy(p_item), false) : SharedInputItem(p_item);
+    if (!working)
+        return;
+    if (automatic)
+        for (int type = 0; type < VLC_META_TYPE_COUNT; ++type)
+            context->before.append(qfu(vlc::wrap_cptr(input_item_GetMeta(
+                working.get(), static_cast<vlc_meta_type_t>(type))).get()));
     vlc_preparser_req *req =
-        vlc_preparser_req_NewParse( d->m_preparser, p_item, fetch_options,
-                                    &art_fetcher_cbs, d );
+        vlc_preparser_req_NewParse( m_preparser, working.get(), fetch_options,
+                                    &art_fetcher_cbs, context.get() );
     if (unlikely(req == nullptr))
         return;
 
-    /* This request is never cancelled from here, so submit it and drop the
-       handle straight away: on success the running task owns it, on failure
-       this release is the one that frees it. */
-    vlc_preparser_Submit( d->m_preparser, req );
+    // A successful submission transfers the context to the completion callback.
+    // This also covers cancellation when the dedicated preparser is deleted.
+    if (vlc_preparser_Submit(m_preparser, req) == VLC_SUCCESS)
+        context.release();
     vlc_preparser_req_Release( req );
 }
 
-void PlayerControllerPrivate::onArtFetchEnded(input_item_t *p_item, bool)
+void PlayerControllerPrivate::onArtFetchEnded(input_item_t *result, input_item_t *target,
+                                             bool automatic, quint64 generation, const QStringList &before)
 {
-    Q_Q(PlayerController);
-
-    vlc_player_locker lock{ m_player };
-    bool b_current_item = (p_item == vlc_player_GetCurrentMedia( m_player ));
-    /* No input will signal the cover art to update,
-         * let's do it ourself */
-    if ( b_current_item )
-        UpdateArt( p_item );
-    else
-        emit q->artChanged( p_item );
+    // The preparser completes on a worker. Keep the item alive until the UI
+    // thread can check whether it still belongs to the current media.
+    SharedInputItem item(target), fetched(result);
+    callAsync([this, item, fetched, automatic, generation, before] {
+        Q_Q(PlayerController);
+        if (automatic && (generation != m_metadataGeneration
+            || !var_InheritBool(p_intf, "metadata-network-access")))
+            return;
+        bool current;
+        {
+            vlc_player_locker lock{m_player};
+            current = item.get() == vlc_player_GetCurrentMedia(m_player)
+                && isCurrentItemSynced();
+        }
+        if (automatic)
+        {
+            if (!current)
+                return;
+            for (int type = 0; type < before.size(); ++type)
+            {
+                const auto field = static_cast<vlc_meta_type_t>(type);
+                const auto value = vlc::wrap_cptr(input_item_GetMeta(fetched.get(), field));
+                const auto existing = vlc::wrap_cptr(input_item_GetMeta(item.get(), field));
+                // Keep any field changed since the lookup started, including
+                // a cover image or title explicitly selected by the user.
+                if (qfu(existing.get()) == before[type] && qfu(value.get()) != before[type])
+                    input_item_SetMeta(item.get(), field, value.get());
+            }
+        }
+        if (current)
+        {
+            UpdateName(item.get());
+            UpdateMeta(item.get());
+            UpdateArt(item.get());
+        }
+        else
+            emit q->artChanged(item.get());
+    });
 }
 
 const QString PlayerController::decodeArtURL( input_item_t *p_item )
