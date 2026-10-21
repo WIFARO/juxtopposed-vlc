@@ -68,6 +68,7 @@ public:
     int interpolateTime(vlc_tick_t system_now);
     bool isCurrentItemSynced();
     void resetAudioWaveform();
+    void refreshAudioWaveform();
     void readAudioWaveform();
     void resetSubtitleTimeline();
     void readSubtitleTimeline();
@@ -136,6 +137,7 @@ public:
     };
     std::shared_ptr<TimelineReadRequest> m_subtitleTimelineRequest;
     bool m_audioWaveformEnabled = false;
+    bool m_audioWaveformAutomatic = false;
     QVariantList m_audioWaveformPeaks;
     QString m_audioWaveformState = QStringLiteral("off");
     QTimer m_audioWaveformRefresh;

@@ -276,7 +276,7 @@ FocusScope {
         showSubtitleTimeline: MainCtx.redesignPlayerPreferences.subtitleTimeline
         showSeekPreview: MainCtx.redesignPlayerPreferences.seekPreview
         audioWaveformPeaks: Player.audioWaveformPeaks
-        audioWaveformEnabled: Player.audioWaveformEnabled
+        audioWaveformEnabled: Player.audioWaveformEnabled || Player.audioWaveformAutomatic
         subtitleTimelineCues: Player.subtitleTimelineCues
         subtitleTimelineState: Player.subtitleTimelineState
         subtitleDelayMS: Player.subtitleDelayMS

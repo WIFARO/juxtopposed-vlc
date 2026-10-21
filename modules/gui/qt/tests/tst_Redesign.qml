@@ -198,6 +198,8 @@ TestCase {
         player.showSeekPreview = true
         player.subtitleTimelineCues = []
         player.subtitleTimelineState = "off"
+        player.audioWaveformEnabled = false
+        player.audioWaveformPeaks = []
         player.statistics = ({})
         player.started = true
         trackPicker.close()
@@ -1083,6 +1085,19 @@ TestCase {
         wait(220)
         mouseClick(findChild(player.libraryItem, "libraryCategory2"))
         compare(compactCategorySpy.count, 1)
+    }
+    function test_audioWavebarFollowsTheMiniPlayer() {
+        player.hasVideo = false
+        player.audioWaveformEnabled = true
+        player.audioWaveformPeaks = Array(2048).fill(.8)
+        const mini = openMiniPlayer()
+        const seek = findChild(mini, "miniPlayerSeekBar")
+        verify(seek.waveformActive)
+        compare(seek.handle.width, 4)
+        verify(findChild(seek, "audioWaveform").children[0].height <= seek.availableHeight)
+        player.audioWaveformPeaks = []
+        verify(!seek.waveformActive)
+        compare(seek.handle.width, 8)
     }
     function test_miniPlayerDragMovesVideoWithoutSeekingAndStaysInBounds() {
         const mini = openMiniPlayer()

@@ -26,7 +26,7 @@ T.Slider {
     readonly property bool waveformActive: waveformEnabled && waveformPeaks.length > 0 && !timelineActive
     readonly property var waveformBars: {
         if (!waveformActive) return []
-        const count = Math.max(1, Math.min(waveformPeaks.length, Math.floor(availableWidth / theme.dp(5))))
+        const count = Math.max(0, Math.min(waveformPeaks.length, Math.floor(waveform.width / theme.dp(5))))
         const bars = []
         for (let i = 0; i < count; ++i) {
             const first = Math.floor(i * waveformPeaks.length / count)
@@ -105,8 +105,15 @@ T.Slider {
             && (playbackPosition < from || playbackPosition > to)) timelineCenter = playbackPosition
     }
     readonly property bool previewActive: enabled && visible && previewEnabled && !cueDragging && (hovered || pressed || visualFocus)
+    readonly property real hoverPosition: Math.max(0, Math.min(1,
+        (pointer.point.position.x - leftPadding - handle.width / 2) / Math.max(1, availableWidth - handle.width)))
     readonly property real previewPosition: pressed || visualFocus && !hovered ? value
-        : from + Math.max(0, Math.min(1, (pointer.point.position.x - leftPadding - handle.width / 2) / Math.max(1, availableWidth - handle.width))) * (to - from)
+        : from + (mirrored ? 1 - hoverPosition : hoverPosition) * (to - from)
+    readonly property real previewOffset: {
+        const position = (previewPosition - from) / (to - from)
+        return leftPadding + handle.width / 2
+            + (mirrored ? 1 - position : position) * (availableWidth - handle.width)
+    }
     readonly property bool previewReady: previewActive && previewImage.toString().length > 0
         && previewImagePosition >= 0 && !!thumbnail.item && thumbnail.item.status === Image.Ready
     signal previewRequested(real position)
@@ -152,9 +159,9 @@ T.Slider {
     Item {
         id: waveform
         objectName: "audioWaveform"
-        x: root.leftPadding + root.handle.width / 2
+        x: root.theme.dp(6)
         y: root.topPadding
-        width: Math.max(0, root.availableWidth - root.handle.width)
+        width: Math.max(0, root.width - root.theme.dp(12))
         height: root.availableHeight
         visible: root.waveformActive
         Repeater {
@@ -162,15 +169,15 @@ T.Slider {
             Rectangle {
                 required property int index
                 required property real modelData
-                readonly property real cell: waveform.width / Math.max(1, root.waveformBars.length)
-                readonly property bool played: root.mirrored ? x >= root.visualPosition * waveform.width : x < root.visualPosition * waveform.width
-                x: index * cell
-                width: Math.max(1, cell * .4)
-                height: Math.max(root.theme.dp(2), modelData * Math.max(0, waveform.height - root.theme.dp(6)))
+                // Keep the first samples at the playback start in both directions.
+                readonly property real cell: root.theme.dp(5)
+                readonly property bool played: index / Math.max(1, root.waveformBars.length) < root.position
+                x: root.mirrored ? waveform.width - width - index * cell : index * cell
+                width: root.theme.dp(2)
+                height: Math.min(waveform.height, Math.max(root.theme.dp(2), modelData * root.theme.dp(14)))
                 y: (waveform.height - height) / 2
-                color: played ? root.theme.accent : root.theme.foreground
-                opacity: played ? .85 : .4
-                radius: root.theme.dp(.5)
+                color: played ? root.theme.menuAccent : root.lightTheme ? root.theme.border : "#404040"
+                radius: root.theme.dp(1)
             }
         }
     }
@@ -268,11 +275,12 @@ T.Slider {
         }
     }
     handle: Rectangle {
+        z: 1
         x: root.leftPadding + root.visualPosition * (root.availableWidth - width)
         y: root.topPadding
-        width: theme.dp(8)
+        width: theme.dp(root.waveformActive ? 4 : 8)
         height: root.availableHeight
-        radius: theme.dp(4)
+        radius: width / 2
         color: theme.accent
         opacity: root.enabled ? 1 : 0.35
     }
@@ -293,8 +301,7 @@ T.Slider {
         x: {
             if (!root.Window.window) return 0
             const left = root.mapToItem(root.Window.window.contentItem, 0, 0).x
-            const cursor = root.leftPadding + root.handle.width / 2 + (root.previewPosition - root.from) / (root.to - root.from) * (root.availableWidth - root.handle.width)
-            return Math.max(-left, Math.min(cursor - width / 2, root.Window.window.width - left - width))
+            return Math.max(-left, Math.min(root.previewOffset - width / 2, root.Window.window.width - left - width))
         }
         y: -height - root.theme.dp(12)
         background: Rectangle {
@@ -330,5 +337,12 @@ T.Slider {
             }
         }
     }
-    RedesignToolTip { theme: root.theme; text: root.cueDragging ? qsTr("Subtitle delay: %1 s").arg((root.displayedDelayMS / 1000).toFixed(3)) : root.timeForPosition(root.previewPosition); visible: root.enabled && (root.hovered || root.pressed || root.visualFocus || root.cueDragging) && !root.previewReady; delay: 0 }
+    RedesignToolTip {
+        theme: root.theme
+        text: root.cueDragging ? qsTr("Subtitle delay: %1 s").arg((root.displayedDelayMS / 1000).toFixed(3)) : root.timeForPosition(root.previewPosition)
+        x: root.previewOffset - width / 2
+        y: -height - root.theme.dp(6)
+        visible: root.enabled && (root.hovered || root.pressed || root.visualFocus || root.cueDragging) && !root.previewReady
+        delay: 0
+    }
 }

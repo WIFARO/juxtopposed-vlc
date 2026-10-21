@@ -444,6 +444,8 @@ FocusScope {
         canBrowseMedia: root.canBrowseMedia
         minimumY: Math.min(root.height - height - theme.dp(6), theme.dp(46) + (root.floatingQueue ? theme.dp(356) : 0))
         previewEnabled: root.showSeekPreview && !root.presentationOnly
+        audioWaveformEnabled: root.audioWaveformEnabled
+        audioWaveformPeaks: root.audioWaveformPeaks
         thumbnailContent: root.seekThumbnailContent
         videoBackdropContent: root.videoBackdropContent
         previewImage: root.seekPreviewImage; previewImagePosition: root.seekPreviewImagePosition

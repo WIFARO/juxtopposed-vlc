@@ -77,6 +77,7 @@ PlayerControllerPrivate::~PlayerControllerPrivate()
     // Finish cancelled reads before the interface and queued callbacks die.
     m_subtitleTimelineWorkers.waitForDone();
     m_audioWaveformEnabled = false;
+    m_audioWaveformAutomatic = false;
     resetAudioWaveform();
     m_audioWaveformWorkers.waitForDone();
 
@@ -421,6 +422,21 @@ static  void on_player_current_media_changed(vlc_player_t *, input_item_t *new_m
         emit q->playbackRestoreQueried();
 
         emit q->inputChanged(true);
+    });
+}
+
+static void on_player_length_changed(vlc_player_t *player, vlc_tick_t length, void *data)
+{
+    auto* that = static_cast<PlayerControllerPrivate*>(data);
+    SharedInputItem media(vlc_player_GetCurrentMedia(player));
+    that->callAsync([that, media, length] {
+        if (that->m_currentItem != media)
+            return;
+        const auto duration = length > 0 ? VLCDuration(length) : VLCDuration();
+        if (that->m_length.toVLCTick() != duration.toVLCTick()) {
+            that->m_length = duration;
+            emit that->q_func()->lengthChanged(duration);
+        }
     });
 }
 
@@ -1135,7 +1151,7 @@ static void on_player_timer_seek(const struct vlc_player_timer_point *point,
             PlayerController* q = that->q_func();
 
             that->m_player_time = point_copy;
-            if (that->m_player_time.position > 0)
+            if (that->m_player_time.position >= 0)
                 that->m_position = that->m_player_time.position;
             if (that->m_player_time.ts != VLC_TICK_INVALID)
                 that->m_time = that->m_player_time.ts - VLC_TICK_0;
@@ -1190,6 +1206,7 @@ static const struct vlc_player_cbs player_cbs = [] {
     struct vlc_player_cbs cbs {};
     cbs.on_current_media_changed = on_player_current_media_changed;
     cbs.on_state_changed = on_player_state_changed;
+    cbs.on_length_changed = on_player_length_changed;
     cbs.on_error_changed = on_player_error_changed;
     cbs.on_buffering_changed = on_player_buffering;
     cbs.on_capabilities_changed = on_player_capabilities_changed;
@@ -1353,13 +1370,16 @@ PlayerController::PlayerController( qt_intf_t *_p_intf )
     connect(&d->m_audioWaveformTimeout, &QTimer::timeout, this, [d] {
         if (d->m_audioWaveformRequest) vlc_interrupt_kill(d->m_audioWaveformRequest->interrupt);
     });
-    const auto refreshWaveform = [d] { d->resetAudioWaveform(); };
+    const auto refreshWaveform = [d] { d->refreshAudioWaveform(); };
     connect(this, &PlayerController::inputChanged, this, refreshWaveform);
     connect(this, &PlayerController::lengthChanged, this, refreshWaveform);
     connect(&d->m_audioTracks, &QAbstractItemModel::dataChanged, this, refreshWaveform);
     connect(&d->m_audioTracks, &QAbstractItemModel::rowsInserted, this, refreshWaveform);
     connect(&d->m_audioTracks, &QAbstractItemModel::rowsRemoved, this, refreshWaveform);
     connect(&d->m_audioTracks, &QAbstractItemModel::modelReset, this, refreshWaveform);
+    connect(&d->m_videoTracks, &QAbstractItemModel::rowsInserted, this, refreshWaveform);
+    connect(&d->m_videoTracks, &QAbstractItemModel::rowsRemoved, this, refreshWaveform);
+    connect(&d->m_videoTracks, &QAbstractItemModel::modelReset, this, refreshWaveform);
     d->m_subtitleTimelineWorkers.setMaxThreadCount(1);
     d->m_subtitleTimelineRefresh.setSingleShot(true);
     d->m_subtitleTimelineRefresh.setInterval(100);
@@ -1561,6 +1581,7 @@ void PlayerControllerPrivate::readSubtitleTimeline()
 }
 
 bool PlayerController::getAudioWaveformEnabled() const { return d_ptr->m_audioWaveformEnabled; }
+bool PlayerController::getAudioWaveformAutomatic() const { return d_ptr->m_audioWaveformAutomatic; }
 QVariantList PlayerController::getAudioWaveformPeaks() const { return d_ptr->m_audioWaveformPeaks; }
 QString PlayerController::getAudioWaveformState() const { return d_ptr->m_audioWaveformState; }
 void PlayerController::setAudioWaveformEnabled(bool enabled)
@@ -1571,6 +1592,25 @@ void PlayerController::setAudioWaveformEnabled(bool enabled)
     d->resetAudioWaveform();
     emit audioWaveformEnabledChanged();
 }
+void PlayerControllerPrivate::refreshAudioWaveform()
+{
+    // Audio files get a wavebar independently of the selected live visualizer.
+    // Use media tracks, since a visualizer can itself create a video output.
+    QUrl url;
+    {
+        vlc_player_locker lock{m_player};
+        if (isCurrentItemSynced() && m_currentItem
+            && vlc_player_GetSelectedTrack(m_player, AUDIO_ES)
+            && vlc_player_GetTrackCount(m_player, VIDEO_ES) == 0
+            && vlc_player_GetLength(m_player) > 0) {
+            vlc_mutex_locker itemLock{&m_currentItem->lock};
+            url = QUrl::fromEncoded(m_currentItem->psz_uri);
+        }
+    }
+    m_audioWaveformAutomatic = url.isLocalFile() && url.host().isEmpty();
+    resetAudioWaveform();
+}
+
 void PlayerControllerPrivate::resetAudioWaveform()
 {
     ++m_audioWaveformGeneration;
@@ -1578,9 +1618,10 @@ void PlayerControllerPrivate::resetAudioWaveform()
     if (m_audioWaveformRequest) vlc_interrupt_kill(m_audioWaveformRequest->interrupt);
     m_audioWaveformRequest.reset();m_audioWaveformWorkers.clear();
     m_audioWaveformPeaks.clear();
-    m_audioWaveformState = m_audioWaveformEnabled ? QStringLiteral("loading") : QStringLiteral("off");
+    const bool enabled = m_audioWaveformEnabled || m_audioWaveformAutomatic;
+    m_audioWaveformState = enabled ? QStringLiteral("loading") : QStringLiteral("off");
     emit q_ptr->audioWaveformChanged();
-    if (m_audioWaveformEnabled) m_audioWaveformRefresh.start();
+    if (enabled) m_audioWaveformRefresh.start();
 }
 void PlayerControllerPrivate::readAudioWaveform()
 {

@@ -145,6 +145,7 @@ public:
     Q_PROPERTY(QUrl seekPreview READ getSeekPreview NOTIFY seekPreviewChanged FINAL)
     Q_PROPERTY(double seekPreviewPosition READ getSeekPreviewPosition NOTIFY seekPreviewChanged FINAL)
     Q_PROPERTY(bool audioWaveformEnabled READ getAudioWaveformEnabled WRITE setAudioWaveformEnabled NOTIFY audioWaveformEnabledChanged FINAL)
+    Q_PROPERTY(bool audioWaveformAutomatic READ getAudioWaveformAutomatic NOTIFY audioWaveformChanged FINAL)
     Q_PROPERTY(QVariantList audioWaveformPeaks READ getAudioWaveformPeaks NOTIFY audioWaveformChanged FINAL)
     Q_PROPERTY(QString audioWaveformState READ getAudioWaveformState NOTIFY audioWaveformChanged FINAL)
     Q_PROPERTY(bool subtitleTimelineEnabled READ getSubtitleTimelineEnabled WRITE setSubtitleTimelineEnabled NOTIFY subtitleTimelineEnabledChanged FINAL)
@@ -364,6 +365,7 @@ public slots:
     double getSeekPreviewPosition() const;
     double getLengthSeconds() const;
     bool getAudioWaveformEnabled() const;
+    bool getAudioWaveformAutomatic() const;
     void setAudioWaveformEnabled(bool enabled);
     QVariantList getAudioWaveformPeaks() const;
     QString getAudioWaveformState() const;

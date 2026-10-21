@@ -14,6 +14,8 @@ Rectangle {
     property bool hasPrevious: false
     property bool hasNext: false
     property bool hasVideo: false
+    property bool audioWaveformEnabled: false
+    property var audioWaveformPeaks: []
     property bool previewEnabled: false
     property real position: 0
     property string mediaTitle: ""
@@ -135,6 +137,8 @@ Rectangle {
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         enabled: root.seekable
         mediaStarted: root.started; playerPosition: root.position
+        waveformEnabled: root.audioWaveformEnabled
+        waveformPeaks: root.audioWaveformPeaks
         previewEnabled: root.previewEnabled && root.hasVideo && root.started
         thumbnailContent: root.thumbnailContent
         videoBackdropContent: root.videoBackdropContent
