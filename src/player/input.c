@@ -1304,6 +1304,7 @@ vlc_player_input_New(vlc_player_t *player, input_item_t *item)
     input->ml.delay_restore = false;
     input->ml.completed = false;
     input->ml.pos = -1.f;
+    input->ml.stop_position = -1.f;
     input->ml.has_audio_tracks = input->ml.has_video_tracks = false;
 
     static const struct vlc_input_thread_callbacks cbs = {

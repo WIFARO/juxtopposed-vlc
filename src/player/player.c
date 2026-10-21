@@ -128,6 +128,16 @@ vlc_player_destructor_AddInput(vlc_player_t *player,
 {
     if (input->started)
     {
+        if (input == player->input && input->state == VLC_PLAYER_STATE_PAUSED)
+        {
+            /* A paused seek can display a new frame before the input sends
+             * another periodic position event. Keep that decoded clock point
+             * before detaching the input and clearing the player timer. */
+            const double position = vlc_player_input_GetPos(input, false,
+                                                           vlc_tick_now());
+            if (position >= 0. && position <= 1.)
+                input->ml.stop_position = position;
+        }
         input->started = false;
         /* Add this input to the stop list: it will be stopped by the
          * destructor thread */

@@ -301,7 +301,8 @@ vlc_player_UpdateMLStates(vlc_player_t *player, struct vlc_player_input* input)
     {
         /* Match the float precision used by Media::computePositionType(),
          * including positions exactly at a margin. */
-        float position = input->position;
+        float position = input->ml.stop_position >= 0.f
+                       ? input->ml.stop_position : input->position;
         /* A short clip can finish before its last position update reaches
          * the end margin. Use the stop reason instead: let the library handle
          * completion when it knows the duration, or clear progress directly. */

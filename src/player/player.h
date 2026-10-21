@@ -120,6 +120,7 @@ struct vlc_player_input
             VLC_RESTOREPOINT_NONE,
         } restore;
         float pos;
+        float stop_position;
         bool restore_states;
         bool delay_restore;
         /* Natural completion must not depend on periodic position updates. */
