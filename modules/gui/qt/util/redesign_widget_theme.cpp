@@ -84,8 +84,9 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QAbstractSpinBox { min-height: %9px; }"
             "QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { background: transparent; border: none; }"
             "QAbstractSpinBox QLineEdit { background: transparent; border: none; padding: 0; }"
-            "QComboBox::drop-down { background: transparent; border: none; }"
-            "QComboBox::down-arrow { image: none; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid %2; border-bottom: none; }"
+            "QComboBox::drop-down { background: transparent; border: none; width: %11px; }"
+            "QComboBox::down-arrow { image: url(:/icons/chevron-down-%12.svg); width: %10px; height: %10px; border: none; }"
+            "QComboBox::down-arrow:disabled { image: url(:/icons/chevron-down-%12-disabled.svg); }"
             "QCheckBox::indicator, QGroupBox::indicator, QRadioButton::indicator { width: 14px; height: 14px; background: %4; border: 1px solid %6; }"
             "QCheckBox::indicator, QGroupBox::indicator { border-radius: 3px; }"
             "QRadioButton::indicator { border-radius: 7px; }"
@@ -122,7 +123,8 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }"
             "QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }"
             "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }")
-            .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover).arg(dp(18)));
+            .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover)
+            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark"));
     };
     applyTheme();
     if (ctx) {

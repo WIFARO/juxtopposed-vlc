@@ -882,6 +882,10 @@ libqt_plugin_la_RES = \
 	pixmaps/icons/breadcrumb_prev.svg \
 	pixmaps/icons/breadcrumb_sep.svg \
 	pixmaps/icons/check.svg \
+	pixmaps/icons/chevron-down-dark.svg \
+	pixmaps/icons/chevron-down-light.svg \
+	pixmaps/icons/chevron-down-dark-disabled.svg \
+	pixmaps/icons/chevron-down-light-disabled.svg \
 	pixmaps/icons/clear.svg \
 	pixmaps/icons/close.svg \
 	pixmaps/icons/ic_fluent_full_screen_minimize.svg \

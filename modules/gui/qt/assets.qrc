@@ -26,6 +26,10 @@
     </qresource>
     <qresource prefix="/icons">
         <file alias="check.svg">pixmaps/icons/check.svg</file>
+        <file alias="chevron-down-dark.svg">pixmaps/icons/chevron-down-dark.svg</file>
+        <file alias="chevron-down-light.svg">pixmaps/icons/chevron-down-light.svg</file>
+        <file alias="chevron-down-dark-disabled.svg">pixmaps/icons/chevron-down-dark-disabled.svg</file>
+        <file alias="chevron-down-light-disabled.svg">pixmaps/icons/chevron-down-light-disabled.svg</file>
         <file alias="atob.svg">pixmaps/icons/atob.svg</file>
         <file alias="ic_fluent_arrow_download_24_regular.svg">pixmaps/icons/ic_fluent_arrow_download_24_regular.svg</file>
         <file alias="ic_fluent_arrow_sync_24_regular.svg">pixmaps/icons/ic_fluent_arrow_sync_24_regular.svg</file>
