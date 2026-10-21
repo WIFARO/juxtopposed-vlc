@@ -181,6 +181,7 @@ public:
     SharedInputItem m_seekDragItem;
     bool m_seekDragWasPlaying = false;
     bool            m_canRestorePlayback = false;
+    double m_playbackRestorePosition = -1.;
 
     int             m_capabilities = 0;
 

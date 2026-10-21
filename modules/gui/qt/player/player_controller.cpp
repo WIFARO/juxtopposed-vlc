@@ -419,6 +419,7 @@ static  void on_player_current_media_changed(vlc_player_t *, input_item_t *new_m
         }
 
         that->m_canRestorePlayback = false;
+        that->m_playbackRestorePosition = -1.;
         emit q->playbackRestoreQueried();
 
         emit q->inputChanged(true);
@@ -497,6 +498,7 @@ static void on_player_state_changed(vlc_player_t *, enum vlc_player_state state,
             that->m_isInteractive= false;
             emit q->isInteractiveChanged( false );
             that->m_canRestorePlayback = false;
+            that->m_playbackRestorePosition = -1.;
             emit q->playbackRestoreQueried();
 
             that->m_teletextAvailable = false;
@@ -1053,11 +1055,16 @@ static void on_player_corks_changed(vlc_player_t *, unsigned, void *data)
     msg_Dbg( that->p_intf, "on_player_corks_changed");
 }
 
-static void on_player_playback_restore_queried(vlc_player_t *, void *data)
+static void on_player_playback_restore_queried(vlc_player_t *player, void *data)
 {
     PlayerControllerPrivate* that = static_cast<PlayerControllerPrivate*>(data);
     msg_Dbg( that->p_intf, "on_playback_restore_queried");
-    that->callAsync([that](){
+    SharedInputItem media(vlc_player_GetCurrentMedia(player));
+    const auto position = vlc_player_GetPlaybackRestorePosition(player);
+    that->callAsync([that, media, position](){
+        if (that->m_currentItem != media)
+            return;
+        that->m_playbackRestorePosition = position;
         that->m_canRestorePlayback = true;
         emit that->q_func()->playbackRestoreQueried();
     });
@@ -2745,10 +2752,13 @@ void PlayerController::updateTimeFromTimer()
 void PlayerController::restorePlaybackPos()
 {
     Q_D(PlayerController);
-    vlc_player_locker lock{ d->m_player };
-    if (!d->isCurrentItemSynced())
-        return;
-    vlc_player_RestorePlaybackPos( d->m_player );
+    {
+        vlc_player_locker lock{ d->m_player };
+        if (!d->m_canRestorePlayback || !d->isCurrentItemSynced())
+            return;
+        vlc_player_RestorePlaybackPos( d->m_player );
+    }
+    acknowledgeRestoreCallback();
 }
 
 void PlayerController::acknowledgeRestoreCallback()
@@ -2756,6 +2766,7 @@ void PlayerController::acknowledgeRestoreCallback()
     Q_D(PlayerController);
     if (d->m_canRestorePlayback) {
         d->m_canRestorePlayback = false;
+        d->m_playbackRestorePosition = -1.;
         emit playbackRestoreQueried();
     }
 }
@@ -3169,6 +3180,7 @@ PRIMITIVETYPE_GETTER(bool, isRewindable, m_capabilities & VLC_PLAYER_CAP_REWIND)
 PRIMITIVETYPE_GETTER(bool, isPausable, m_capabilities & VLC_PLAYER_CAP_PAUSE)
 PRIMITIVETYPE_GETTER(bool, isRateChangable, m_capabilities & VLC_PLAYER_CAP_CHANGE_RATE)
 PRIMITIVETYPE_GETTER(bool, canRestorePlayback, m_canRestorePlayback);
+PRIMITIVETYPE_GETTER(double, getPlaybackRestorePosition, m_playbackRestorePosition);
 PRIMITIVETYPE_GETTER(float, getSubtitleFPS, m_subtitleFPS)
 PRIMITIVETYPE_GETTER(int, getSubtitleTextScale, m_subtitleTextScale)
 PRIMITIVETYPE_GETTER(int, getSubtitleTextSizeMode, m_subtitleTextSizeMode)

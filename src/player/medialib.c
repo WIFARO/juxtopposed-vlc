@@ -411,3 +411,10 @@ vlc_player_RestorePlaybackPos(vlc_player_t *player)
 {
     vlc_player_input_RestoreMlStates(player->input, true);
 }
+
+double
+vlc_player_GetPlaybackRestorePosition(vlc_player_t *player)
+{
+    struct vlc_player_input *input = vlc_player_get_input_locked(player);
+    return input ? input->ml.pos : -1.;
+}

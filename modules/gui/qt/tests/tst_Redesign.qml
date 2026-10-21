@@ -165,6 +165,7 @@ TestCase {
     SignalSpy { id: folderSpy; target: player; signalName: "mediaFolderRequested" }
     SignalSpy { id: artistSpy; target: player; signalName: "artistRequested" }
     SignalSpy { id: compactCategorySpy; target: player.libraryItem; signalName: "categoryRequested" }
+    SignalSpy { id: resumeSpy; target: player; signalName: "resumeRequested" }
 
     RedesignSettingSlider {
         id: settingControl
@@ -194,6 +195,9 @@ TestCase {
         settingSpy.clear()
         statisticsSwitch.visible = false
         player.showStatistics = false
+        player.resumeAvailable = false
+        player.resumeTimeText = ""
+        resumeSpy.clear()
         player.showSubtitleTimeline = false
         player.showSeekPreview = true
         player.subtitleTimelineCues = []
@@ -1184,6 +1188,25 @@ TestCase {
         verify(player.bottomVisible)
         player.started = false
         verify(player.bottomVisible)
+    }
+    function test_resumeOffersSavedTimeAndSeparateActions() {
+        player.resumeTimeText = "00:12:34"
+        player.resumeAvailable = true
+        const prompt = findChild(player, "resumePlaybackPrompt")
+        const label = findChild(player, "resumePlaybackLabel")
+        tryCompare(prompt, "visible", true)
+        verify(label.text.includes("00:12:34"))
+        verify(!label.truncated)
+        mouseClick(findChild(player, "resumeContinueButton"))
+        compare(resumeSpy.count, 1)
+        compare(resumeSpy.signalArguments[0][0], true)
+        mouseClick(findChild(player, "resumeDismissButton"))
+        compare(resumeSpy.count, 2)
+        compare(resumeSpy.signalArguments[1][0], false)
+        player.resumeTimeText = ""
+        verify(label.text.length > 0)
+        verify(!label.text.includes("00:00:00"))
+        player.resumeAvailable = false
     }
     function test_minimalViewHidesChromeAndClosesPanels() {
         player.resumeAvailable = true

@@ -979,6 +979,15 @@ VLC_API void
 vlc_player_RestorePlaybackPos(vlc_player_t *player);
 
 /**
+ * Get the saved position offered by on_playback_restore_queried.
+ *
+ * @param player locked player instance
+ * @return saved position as a fraction of the media length, or -1 if unavailable
+ */
+VLC_API double
+vlc_player_GetPlaybackRestorePosition(vlc_player_t *player);
+
+/**
  * Get the V4L2 object used to do controls
  *
  * @param player locked player instance

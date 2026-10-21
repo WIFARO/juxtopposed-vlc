@@ -84,6 +84,7 @@ FocusScope {
     property string artist: ""
     property url artwork
     property bool resumeAvailable: false
+    property string resumeTimeText: ""
     property var timeForPosition: function(position) { return "" }
     property url seekPreviewImage
     property Component seekThumbnailContent
@@ -373,27 +374,44 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: theme.dp(24)
-            width: Math.max(0, Math.min(parent.width - theme.dp(24), theme.dp(540)))
-            height: theme.dp(width < theme.dp(420) ? 80 : 64)
+            width: Math.max(0, Math.min(parent.width - theme.dp(24), theme.dp(550)))
+            height: Math.max(theme.dp(52), resumeRow.implicitHeight + theme.dp(20))
             visible: root.resumeAvailable && !root.minimalView
-            color: theme.panel; radius: theme.dp(8); border.color: theme.border
+            Accessible.role: Accessible.Dialog
+            Accessible.name: qsTr("Continue Watching")
+            color: theme.lightTheme ? theme.panel : "#161616"
+            radius: theme.dp(16)
             RowLayout {
                 id: resumeRow
-                anchors.fill: parent; anchors.margins: theme.dp(12)
+                anchors.fill: parent; anchors.margins: theme.dp(10)
+                anchors.leftMargin: theme.dp(20)
+                spacing: theme.dp(10)
                 Text {
+                    objectName: "resumePlaybackLabel"
+                    readonly property string escapedTime: root.resumeTimeText.replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;").replace(/>/g, "&gt;")
                     Layout.fillWidth: true
-                    text: qsTr("Continue where you left off?")
-                    color: theme.bright; font.pixelSize: theme.dp(14)
+                    text: root.resumeTimeText.length ? qsTr("Continue from %1").arg("<b>" + escapedTime + "</b>")
+                        : qsTr("Continue where you left off?")
+                    textFormat: Text.StyledText
+                    color: theme.bright; font.pixelSize: theme.dp(16)
+                    font.weight: Font.Normal
                     wrapMode: Text.WordWrap
                 }
                 ChromeButton {
+                    objectName: "resumeContinueButton"
+                    implicitHeight: theme.dp(32)
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                    caption: qsTr("Continue"); text: caption; accent: true
+                    caption: qsTr("Continue Watching"); text: caption; accent: true
                     onClicked: root.resumeRequested(true)
                 }
                 ChromeButton {
+                    objectName: "resumeDismissButton"
+                    Layout.preferredWidth: theme.dp(44)
+                    implicitHeight: theme.dp(32)
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                    iconName: "close"; text: qsTr("Start from the beginning")
+                    filled: true; iconSize: theme.dp(18)
+                    iconName: "close"; text: qsTr("Close")
                     onClicked: root.resumeRequested(false)
                 }
             }

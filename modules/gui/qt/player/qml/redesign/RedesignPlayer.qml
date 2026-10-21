@@ -14,7 +14,7 @@ FocusScope {
     property var pagePrefix: []
     readonly property real positionSliderY: view.positionSliderY
     readonly property ColorContext colorContext: ColorContext { palette: VLCStyle.palette; colorSet: ColorContext.Window }
-    property bool resumeAvailable: false
+    readonly property bool resumeAvailable: Player.canRestorePlayback
     property int queueTab: 0
     // The projection retains folder state while its lazy source is unloaded.
     PlaylistTreeModel { id: queueTreeModel; treeEnabled: MainCtx.playlistTree }
@@ -310,6 +310,8 @@ FocusScope {
         canBrowseMedia: MainCtx.mediaLibraryAvailable
         artwork: Player.artwork
         resumeAvailable: rootPlayer.resumeAvailable
+        resumeTimeText: Player.playbackRestorePosition >= 0 && Player.lengthSeconds > 0
+            ? rootPlayer.clockText(Player.length.scale(Player.playbackRestorePosition)) : ""
         timeForPosition: value => rootPlayer.clockText(Player.length.scale(value))
         seekPreviewImage: Player.seekPreview
         videoBackdropContent: Component { SurfaceBackdrop { } }
@@ -387,7 +389,6 @@ FocusScope {
         onMenuRequested: anchor => mediaMenu.toggleFrom(anchor, view)
         onContextMenuRequested: globalPosition => audioContextMenu.popup(globalPosition)
         onResumeRequested: resume => {
-            rootPlayer.resumeAvailable = false
             if (resume) Player.restorePlaybackPos()
             else Player.acknowledgeRestoreCallback()
         }
@@ -604,10 +605,6 @@ FocusScope {
         function onMainInterfaceModesChanged() {
             if (!MainCtx.minimalView && !MainCtx.playerView && Player.isStarted) { view.libraryOpen = true; view.libraryExpanded = true }
         }
-    }
-    Connections {
-        target: Player
-        function onPlaybackRestoreQueried() { rootPlayer.resumeAvailable = Player.canRestorePlayback }
     }
     Dialogs {
         z: 10
