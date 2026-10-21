@@ -255,6 +255,10 @@ size_t vout_NextPicture( vout_thread_t *p_vout, size_t request_frame_count );
  */
 void vout_DisplayTitle( vout_thread_t *p_vout, const char *psz_title );
 
+/* The filename has its own visibility preference, separate from feedback. */
+void vout_OSDTitle(vout_thread_t *, int position, vlc_tick_t duration,
+                   const char *text);
+
 /**
  * This function will return true if no more pictures are to be displayed.
  */

@@ -138,7 +138,8 @@ VLC_API void vout_PutPicture( vout_thread_t *, picture_t * );
 #define VOUT_SPU_CHANNEL_OSD            0 /* OSD channel is automatically cleared */
 #define VOUT_SPU_CHANNEL_OSD_HSLIDER    1
 #define VOUT_SPU_CHANNEL_OSD_VSLIDER    2
-#define VOUT_SPU_CHANNEL_OSD_COUNT      3
+#define VOUT_SPU_CHANNEL_OSD_TITLE      3 /* Independent media filename */
+#define VOUT_SPU_CHANNEL_OSD_COUNT      4
 
 /* */
 VLC_API void vout_PutSubpicture( vout_thread_t *, subpicture_t * );

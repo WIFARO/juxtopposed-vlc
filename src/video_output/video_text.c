@@ -31,6 +31,7 @@
 #include <vlc_vout.h>
 #include <vlc_vout_osd.h>
 #include <vlc_subpicture.h>
+#include "vout_internal.h"
 
 typedef struct {
     int  position;
@@ -92,11 +93,11 @@ static void OSDTextDestroy(subpicture_t *subpic)
     free(sys);
 }
 
-void vout_OSDText(vout_thread_t *vout, int channel,
-                   int position, vlc_tick_t duration, const char *text)
+static void OSDText(vout_thread_t *vout, int channel,
+                    int position, vlc_tick_t duration, const char *text)
 {
     assert( (position & ~SUBPICTURE_ALIGN_MASK) == 0);
-    if (!var_InheritBool(vout, "osd") || duration <= 0)
+    if (duration <= 0)
         return;
 
     osd_spu_updater_sys_t *sys = malloc(sizeof(*sys));
@@ -129,6 +130,19 @@ void vout_OSDText(vout_thread_t *vout, int channel,
     subpic->b_fade     = true;
 
     vout_PutSubpicture(vout, subpic);
+}
+
+void vout_OSDText(vout_thread_t *vout, int channel,
+                   int position, vlc_tick_t duration, const char *text)
+{
+    if (var_InheritBool(vout, "osd"))
+        OSDText(vout, channel, position, duration, text);
+}
+
+void vout_OSDTitle(vout_thread_t *vout, int position, vlc_tick_t duration,
+                    const char *text)
+{
+    OSDText(vout, VOUT_SPU_CHANNEL_OSD_TITLE, position, duration, text);
 }
 
 void vout_OSDMessageVa(vout_thread_t *vout, int channel,

@@ -295,7 +295,7 @@ void vout_DisplayTitle(vout_thread_t *vout, const char *title)
     if (!var_InheritBool(vout, "video-title-show"))
         return;
 
-    vout_OSDText(vout, VOUT_SPU_CHANNEL_OSD,
+    vout_OSDTitle(vout,
                  var_InheritInteger(vout, "video-title-position"),
                  VLC_TICK_FROM_MS(var_InheritInteger(vout, "video-title-timeout")), title);
 }
@@ -2285,8 +2285,9 @@ vout_thread_t *vout_Create(vlc_object_t *object)
     vout_statistic_Init(&sys->statistic);
 
     /* Initialize subpicture unit */
-    sys->spu = var_InheritBool(vout, "spu") || var_InheritBool(vout, "osd") ?
-               spu_Create(vout, vout) : NULL;
+    /* Keep the renderer available when subtitles, feedback or filenames are
+     * enabled later in preferences, including on a reused output. */
+    sys->spu = spu_Create(vout, vout);
 
     vout_control_Init(&sys->control);
     atomic_init(&sys->control_is_terminated, false);

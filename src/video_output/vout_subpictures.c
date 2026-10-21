@@ -2205,9 +2205,11 @@ void spu_PutSubpicture(spu_t *spu, subpicture_t *subpic)
         return;
     }
 
-    /* SPU_DEFAULT_CHANNEL always reset itself */
-    if (subpic->i_channel == VOUT_SPU_CHANNEL_OSD)
-        spu_ClearChannel(spu, VOUT_SPU_CHANNEL_OSD);
+    /* Replace the previous message of the same type without clearing the
+     * independent filename when shortcut feedback is shown or hidden. */
+    if (subpic->i_channel == VOUT_SPU_CHANNEL_OSD
+        || subpic->i_channel == VOUT_SPU_CHANNEL_OSD_TITLE)
+        spu_ClearChannel(spu, subpic->i_channel);
 
     /* p_private is for spu only and cannot be non NULL here */
     subpicture_region_t *r;
