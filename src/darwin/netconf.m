@@ -26,6 +26,7 @@
 
 #include <vlc_common.h>
 #include <vlc_network.h>
+#include "../network/proxy.h"
 
 #import <Foundation/Foundation.h>
 
@@ -43,6 +44,10 @@ char *vlc_getProxyUrl(const char *url)
     if (url == NULL) {
         return NULL;
     }
+    bool configured;
+    char *proxy = vlc_proxy_GetConfigured(&configured);
+    if (configured)
+        return proxy;
 #if !TARGET_OS_IPHONE
     NSDictionary *proxySettings = CFBridgingRelease(CFNetworkCopySystemProxySettings());
     if (NULL != proxySettings) {

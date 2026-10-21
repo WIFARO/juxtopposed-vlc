@@ -32,6 +32,7 @@
 #include <vlc_interrupt.h>
 
 #include "proxy.h"
+#include "../network/proxy.h"
 
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
 #include <winhttp.h>
@@ -255,8 +256,9 @@ clean_url:
 
 char *vlc_getProxyUrl(const char *psz_url)
 {
-    char *proxy = config_GetPsz( "http-proxy" );
-    if (proxy == NULL)
+    bool configured;
+    char *proxy = vlc_proxy_GetConfigured(&configured);
+    if (!configured)
     {
 #if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
         return psz_url ? proxy_system(psz_url) : NULL;
@@ -266,26 +268,5 @@ char *vlc_getProxyUrl(const char *psz_url)
 #endif
     }
 
-    char *proxy_pwd = config_GetPsz( "http-proxy-pwd" );
-    if (proxy_pwd == NULL)
-        return proxy;
-
-    vlc_url_t url;
-    if (vlc_UrlParse(&url, proxy) < 0) {
-        vlc_UrlClean(&url);
-        free (proxy);
-        free (proxy_pwd);
-        return NULL;
-    }
-
-    if (url.psz_password == NULL )
-        url.psz_password = proxy_pwd;
-
-    char *proxy_url = vlc_uri_compose (&url);
-    vlc_UrlClean (&url);
-
-    free (proxy_pwd);
-    free (proxy);
-
-    return proxy_url;
+    return proxy;
 }

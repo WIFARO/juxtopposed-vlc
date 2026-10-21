@@ -30,6 +30,7 @@
 #include <vlc_fs.h>
 #include "../libvlc.h"
 #include "../config/configuration.h"
+#include "../network/proxy.h"
 
 #include <string.h>
 #include <jni.h>
@@ -333,6 +334,11 @@ char *config_GetSysPath(vlc_sysdir_t type, const char *filename)
 
 char *vlc_getProxyUrl(const char *url)
 {
+    bool configured;
+    char *proxy = vlc_proxy_GetConfigured(&configured);
+    if (configured)
+        return proxy;
+
     VLC_UNUSED(url);
 
     /**

@@ -1012,9 +1012,9 @@ static const char* const ppsz_restore_playback_desc[] = {
 #endif
 #else
 #define PROXY_LONGTEXT N_( \
-    "HTTP proxy to be used It must be of the form " \
-    "http://[user@]myproxy.mydomain:myport/ ; " \
-    "if empty, the http_proxy environment variable will be tried." )
+    "Leave this field empty to use automatic proxy detection. " \
+    "To use another proxy, enter its address, for example " \
+    "http://user@proxy.example.com:8080/." )
 #endif
 
 #define PROXY_PASS_TEXT N_("HTTP proxy password")
@@ -2035,14 +2035,8 @@ vlc_module_begin ()
     add_obsolete_string( "http-ca" ) /* since 3.0.0 */
     add_obsolete_string( "http-crl" ) /* since 3.0.0 */
 
-#ifdef _WIN32
     add_string( "http-proxy", NULL, PROXY_TEXT, PROXY_LONGTEXT )
     add_password("http-proxy-pwd", NULL, PROXY_PASS_TEXT, PROXY_PASS_LONGTEXT)
-#else
-    add_obsolete_string( "http-proxy" ) /* since 4.0.0 */
-    add_obsolete_string( "http-proxy-pwd" ) /* since 4.0.0 */
-
-#endif
     add_obsolete_bool( "http-use-IE-proxy" ) /* since 4.0.0 */
 
     set_section( N_("Metadata" ) , NULL )

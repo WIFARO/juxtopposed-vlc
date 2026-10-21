@@ -1,4 +1,11 @@
 vlc_tests += {
+    'name': 'test_src_misc_configured_proxy',
+    'sources': files('misc/configured_proxy.c'),
+    'suite': ['src', 'test_src'],
+    'link_with': [libvlccore],
+}
+
+vlc_tests += {
     'name': 'test_src_misc_file_logger',
     'sources': files('misc/file_logger.c'),
     'suite': ['src', 'test_src'],

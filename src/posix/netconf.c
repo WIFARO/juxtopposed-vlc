@@ -29,9 +29,15 @@
 #include <vlc_fs.h>
 #include <vlc_network.h>
 #include <vlc_spawn.h>
+#include "../network/proxy.h"
 
 char *vlc_getProxyUrl(const char *url)
 {
+    bool configured;
+    char *proxy = vlc_proxy_GetConfigured(&configured);
+    if (configured)
+        return proxy;
+
     int fd[2];
 
     if (vlc_pipe(fd))
