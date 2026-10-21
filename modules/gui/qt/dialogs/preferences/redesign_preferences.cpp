@@ -17,6 +17,7 @@
 #include <vlc_iso_lang.h>
 #include <vlc_subpicture.h>
 #include <vlc_vout.h>
+#include <vlc_vout_osd.h>
 #include "../../../../audio_filter/equalizer_presets.h"
 #include <cmath>
 #include <climits>
@@ -506,6 +507,13 @@ void applyOsdPreferences(qt_intf_t* intf, const QVariantMap& changed)
     vlc_player_Unlock(intf->p_player);
     for (size_t i = 0; i < count; ++i) {
         apply(outputs[i]);
+        if (changed.contains(QStringLiteral("osd")) && !config_GetInt("osd")) {
+            // Stop current feedback as well as future messages. The filename
+            // has its own channel and keeps its independent display setting.
+            for (int channel : {VOUT_SPU_CHANNEL_OSD, VOUT_SPU_CHANNEL_OSD_HSLIDER,
+                                VOUT_SPU_CHANNEL_OSD_VSLIDER})
+                vout_FlushSubpictureChannel(outputs[i], channel);
+        }
         vout_Release(outputs[i]);
     }
     free(outputs);
