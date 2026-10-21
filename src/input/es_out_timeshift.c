@@ -693,6 +693,14 @@ static int ControlLocked( es_out_t *p_out, input_source_t *in, int i_query,
         return es_out_in_Control( p_sys->p_out, in, ES_OUT_GET_ES_STATE,
                                   p_es->p_es, pb_enabled );
     }
+    case ES_OUT_GET_ES_DELAY:
+    {
+        es_out_id_t *es = va_arg(args, es_out_id_t *);
+        vlc_tick_t *delay = va_arg(args, vlc_tick_t *);
+        if( p_sys->b_delayed || es == NULL || es->p_es == NULL )
+            return VLC_EGENERIC;
+        return es_out_in_Control(p_sys->p_out, in, ES_OUT_GET_ES_DELAY, es->p_es, delay);
+    }
     case ES_OUT_VOUT_SET_MOUSE_EVENT:
     {
         es_out_id_t *p_es = va_arg( args, es_out_id_t * );

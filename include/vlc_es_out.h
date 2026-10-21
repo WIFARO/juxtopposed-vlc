@@ -115,6 +115,10 @@ enum es_out_query_e
     ES_OUT_SPU_SET_HIGHLIGHT, /* arg1= es_out_id_t* (spu es),
                                  arg2= const vlc_spu_highlight_t *, res=can fail  */
 
+    /* Get the effective track delay, including the category default unless
+     * the track has its own override. arg1=es_out_id_t*, arg2=vlc_tick_t* */
+    ES_OUT_GET_ES_DELAY,
+
     /* First value usable for private control */
     ES_OUT_PRIVATE_START = 0x10000,
 };

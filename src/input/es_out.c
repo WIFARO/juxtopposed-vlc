@@ -31,6 +31,7 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <stdckdint.h>
 #include <vlc_common.h>
 #include <vlc_configuration.h>
 
@@ -1451,19 +1452,26 @@ static void EsOutProgramChangePause(es_out_sys_t *p_sys, bool b_paused, vlc_tick
     }
 }
 
+static vlc_tick_t EsOutGetEsDelay(const es_out_sys_t *p_sys, const es_out_id_t *p_es)
+{
+    if( p_es->delay != VLC_TICK_MAX )
+        return p_es->delay;
+    else if( p_es->fmt.i_cat == AUDIO_ES )
+        return p_sys->i_audio_delay;
+    else if( p_es->fmt.i_cat == SPU_ES )
+        return p_sys->i_spu_delay;
+    else if( p_es->fmt.i_cat == VIDEO_ES )
+        return p_sys->i_video_delay;
+    else
+        return 0;
+}
+
 static void EsOutDecoderChangeDelay(es_out_sys_t *p_sys, es_out_id_t *p_es)
 {
-    vlc_tick_t i_delay;
-    if( p_es->delay != VLC_TICK_MAX )
-        i_delay = p_es->delay; /* The track use its own delay, and not a category delay */
-    else if( p_es->fmt.i_cat == AUDIO_ES )
-        i_delay = p_sys->i_audio_delay;
-    else if( p_es->fmt.i_cat == SPU_ES )
-        i_delay = p_sys->i_spu_delay;
-    else if( p_es->fmt.i_cat == VIDEO_ES )
-        i_delay = p_sys->i_video_delay;
-    else
+    if( p_es->delay == VLC_TICK_MAX && p_es->fmt.i_cat != AUDIO_ES
+        && p_es->fmt.i_cat != SPU_ES && p_es->fmt.i_cat != VIDEO_ES )
         return;
+    const vlc_tick_t i_delay = EsOutGetEsDelay(p_sys, p_es);
 
     if( p_es->p_dec )
         vlc_input_decoder_ChangeDelay( p_es->p_dec, i_delay );
@@ -3308,8 +3316,12 @@ static int EsOutSend(es_out_t *out, es_out_id_t *es, block_t *p_block )
             es->i_pts_level = i_date + p_block->i_length;
 
         /* If i_date is still invalid (first/all non dated), expect to be in preroll */
+        const vlc_tick_t delay = es->fmt.i_cat == SPU_ES ? EsOutGetEsDelay(p_sys, es) : 0;
+        vlc_tick_t end;
+        const bool before = ckd_add(&end, es->i_pts_level, delay)
+            ? delay < 0 : end < p_sys->i_preroll_end;
         if( i_date == VLC_TICK_INVALID ||
-            es->i_pts_level < p_sys->i_preroll_end )
+            before )
             p_block->i_flags |= BLOCK_FLAG_PREROLL;
     }
 
@@ -3587,6 +3599,16 @@ static int EsOutVaControlLocked(es_out_sys_t *p_sys, input_source_t *source,
         bool *pb = va_arg( args, bool * );
 
         *pb = EsIsSelected( es );
+        return VLC_SUCCESS;
+    }
+
+    case ES_OUT_GET_ES_DELAY:
+    {
+        const es_out_id_t *es = va_arg(args, es_out_id_t *);
+        vlc_tick_t *delay = va_arg(args, vlc_tick_t *);
+        if( es == NULL || es->b_terminated )
+            return VLC_EGENERIC;
+        *delay = EsOutGetEsDelay(p_sys, es);
         return VLC_SUCCESS;
     }
 

@@ -24,6 +24,15 @@ public:
     };
     using seekpoints_t = std::vector<Seekpoint>;
 
+    static bool targetBeforeDelay( vlc_tick_t target, vlc_tick_t delay, vlc_tick_t &result )
+    {
+        if( (delay > 0 && target < std::numeric_limits<vlc_tick_t>::min() + delay)
+            || (delay < 0 && target > std::numeric_limits<vlc_tick_t>::max() + delay) )
+            return false;
+        result = target - delay;
+        return true;
+    }
+
     void add( Seekpoint point )
     {
         // -1 marks cue metadata whose packet duration has not been read yet.

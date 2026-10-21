@@ -57,4 +57,14 @@ int main()
     assert( limits.active( 1, high ).empty() );
     assert( limits.active( 2, high ).size() == 1 );
     assert( limits.active( 2, low ).empty() );
+    vlc_tick_t target;
+    assert( SubtitleSeekIndex::targetBeforeDelay(10, 5, target) && target == 5 );
+    assert( SubtitleSeekIndex::targetBeforeDelay(10, -5, target) && target == 15 );
+    assert( !SubtitleSeekIndex::targetBeforeDelay(low, 1, target) );
+    assert( !SubtitleSeekIndex::targetBeforeDelay(high, -1, target) );
+    assert( SubtitleSeekIndex::targetBeforeDelay(low, -1, target) && target == low + 1 );
+    assert( SubtitleSeekIndex::targetBeforeDelay(high, 1, target) && target == high - 1 );
+    assert( !SubtitleSeekIndex::targetBeforeDelay(0, low, target) );
+    assert( SubtitleSeekIndex::targetBeforeDelay(-1, low, target) && target == high );
+    assert( SubtitleSeekIndex::targetBeforeDelay(low, low, target) && target == 0 );
 }

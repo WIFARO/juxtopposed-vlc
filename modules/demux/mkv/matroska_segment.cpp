@@ -815,7 +815,12 @@ void matroska_segment_c::PrerollSubtitles( demux_t &demuxer, vlc_tick_t target,
         const auto track = tracks.find( id );
         if( track == tracks.end() || track->second->fmt.i_cat != SPU_ES )
             continue;
-        const auto active = _seeker.get_subtitle_seekpoints( id, target );
+        vlc_tick_t delay = 0;
+        es_out_Control(demuxer.out, ES_OUT_GET_ES_DELAY, track->second->p_es, &delay);
+        vlc_tick_t cue_target;
+        if( !SubtitleSeekIndex::targetBeforeDelay(target, delay, cue_target) )
+            continue;
+        const auto active = _seeker.get_subtitle_seekpoints( id, cue_target );
         points.insert( points.end(), active.begin(), active.end() );
     }
     std::sort( points.begin(), points.end(), [](const auto &a, const auto &b) {
@@ -879,8 +884,12 @@ void matroska_segment_c::PrerollSubtitles( demux_t &demuxer, vlc_tick_t target,
                 const vlc_tick_t pts = raw_pts + pcr_shift - track->i_codec_delay;
                 const auto length = SubtitleBlockDuration( duration, i_timescale, *track );
                 const auto block_position = simple ? internal.GetElementPosition() : i_block_pos;
-                if( block_position < start && pts <= target
-                    && uint64_t(target) - uint64_t(pts) < uint64_t(length)
+                vlc_tick_t delay = 0;
+                es_out_Control(demuxer.out, ES_OUT_GET_ES_DELAY, track->p_es, &delay);
+                vlc_tick_t cue_target;
+                if( SubtitleSeekIndex::targetBeforeDelay(target, delay, cue_target)
+                    && block_position < start && pts <= cue_target
+                    && uint64_t(cue_target) - uint64_t(pts) < uint64_t(length)
                     && delivered.insert(block_position).second )
                 {
                     msg_Dbg( &demuxer, "seek: subtitle preroll track %u at %" PRIu64, track->i_number, block_position );
