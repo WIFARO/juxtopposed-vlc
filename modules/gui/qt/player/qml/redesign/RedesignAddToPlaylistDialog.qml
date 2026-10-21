@@ -125,7 +125,7 @@ C.Dialog {
                     id: heading
                     x: root.theme.dp(20); width: parent.width - root.theme.dp(40)
                     y: root.theme.dp(42) - baselineOffset
-                    text: qsTr("Choose a Playlist"); color: root.theme.settingsHeading
+                    text: qsTr("Select a Playlist"); color: root.theme.settingsHeading
                     font.pixelSize: root.theme.dp(16); wrapMode: Text.WordWrap
                 }
                 Text {

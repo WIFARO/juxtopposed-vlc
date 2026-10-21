@@ -293,7 +293,7 @@ void MediaLib::resyncFolder(const QUrl& url, QJSValue callback)
     if (!callback.isCallable()) return;
     runOnMLThread<QVariantMap>(this,
         [url](vlc_medialibrary_t* ml, QVariantMap& result) {
-            result = {{"success", false}, {"error", qtr("VLC cannot rescan this folder. Check the folder and try again.")}};
+            result = {{"success", false}, {"error", qtr("VLC cannot rescan this folder. Make sure that you can read the folder. Try again.")}};
             if (!url.isValid() || url.scheme().isEmpty()) return;
             const auto mrl = url.toEncoded();
             if (vlc_ml_reload_folder(ml, mrl.constData()) == VLC_SUCCESS)

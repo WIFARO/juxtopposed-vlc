@@ -285,7 +285,7 @@ C.Dialog {
             if (providerConfigured) { languagesRequested(); requestSearch() }
             else { searching = false; onlineSources = [] }
         }
-        else providerSetup.errorMessage = error || qsTr("VLC cannot save the API key. Check it and try again.")
+        else providerSetup.errorMessage = error || qsTr("VLC cannot save the API key. Make sure that the API key is correct. Try again.")
     }
     function setTracks(url, selection) {
         const draft = drafts[url]
@@ -618,7 +618,7 @@ C.Dialog {
         Text {
             anchors.centerIn: parent; width: parent.width - root.theme.dp(40); horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
             visible: !(root.onlineMode && !root.providerConfigured) && (root.loading || root.loadingSources || root.loadingDrop || root.matching || root.searching || (!list.count && !root.errorMessage))
-            text: root.searching ? qsTr("Searching subtitles…") : root.matching ? qsTr("Matching tracks…") : root.loading || root.loadingSources || root.loadingDrop ? qsTr("Loading files…") : root.onlineMode ? qsTr("No subtitles found. Try another title or language.") : root.linkMode ? qsTr("Paste a direct subtitle file link, then select Add.") : root.fileMode ? qsTr("Select a folder or choose track files from your computer.") : qsTr("There are no media files here.")
+            text: root.searching ? qsTr("Searching subtitles…") : root.matching ? qsTr("Matching tracks…") : root.loading || root.loadingSources || root.loadingDrop ? qsTr("Loading files…") : root.onlineMode ? qsTr("No subtitles found. Try another title or language.") : root.linkMode ? qsTr("Paste a direct subtitle file link. Then select Add.") : root.fileMode ? qsTr("Select a folder or select track files from your computer.") : qsTr("There are no media files here.")
             color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
         }        Column {
             anchors.centerIn: parent; width: Math.max(0, parent.width - root.theme.dp(60))
@@ -751,7 +751,7 @@ C.Dialog {
             }
             RowLayout {
                 Layout.fillWidth: true
-                RedesignButton { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor; caption: qsTr("Choose files…"); text: caption; onClicked: root.filesRequested(picker.targetUrl) }
+                RedesignButton { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor; caption: qsTr("Select files…"); text: caption; onClicked: root.filesRequested(picker.targetUrl) }
                 RedesignButton { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor; caption: qsTr("Clear"); text: caption; onClicked: root.setTracks(picker.targetUrl, []) }
                 Item { Layout.fillWidth: true }
                 RedesignButton { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor; caption: qsTr("Done"); text: caption; onClicked: picker.close() }

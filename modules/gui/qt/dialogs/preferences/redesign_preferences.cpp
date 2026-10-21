@@ -725,16 +725,16 @@ RedesignPreferences::RedesignPreferences(QObject* parent) : QObject(parent)
     });
     connect(&m_pluginScan, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart)
-            finishPluginScan(qtr("VLC cannot start the plugin scan. Check that the cache generator is installed."), true);
+            finishPluginScan(qtr("VLC cannot start the plugin scan. Make sure that the cache generator is installed."), true);
     });
     connect(&m_pluginScan, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
         [this](int code, QProcess::ExitStatus status) {
             if (m_pluginScanTimedOut)
                 finishPluginScan(qtr("The plugin scan timed out. Try again."), true);
             else if (code != 0 || status != QProcess::NormalExit)
-                finishPluginScan(qtr("VLC cannot update the plugin cache. Check folder access and try again."), true);
+                finishPluginScan(qtr("VLC cannot update the plugin cache. Make sure that you have access to the folder. Try again."), true);
             else
-                finishPluginScan(qtr("VLC updated the plugin cache. Restart VLC to use plugin changes."), false);
+                finishPluginScan(qtr("VLC updated the plugin cache. Close VLC. Start VLC again to use plugin changes."), false);
         });
     m_pluginScan.setStandardOutputFile(QProcess::nullDevice());
     m_pluginScan.setStandardErrorFile(QProcess::nullDevice());
@@ -1345,7 +1345,7 @@ bool RedesignPreferences::stagePlayerPresetOptions(const QVariantMap& options)
             m_edits = edits; m_invalid = invalid; m_saveTimer.stop();
             m_libraryStartupEdited = libraryStartup; m_autoPreparseEdited = autoPreparse; m_singleInstanceEdited = singleInstance;
             notifications.unblock();
-            return playerPresetError(m_applicationProfile ? qtr("VLC cannot apply this profile. Check its saved settings.") : qtr("VLC cannot apply this preset. Check its saved settings."));
+            return playerPresetError(m_applicationProfile ? qtr("VLC cannot apply this profile. Make sure that its saved settings are correct.") : qtr("VLC cannot apply this preset. Make sure that its saved settings are correct."));
         }
     }
     // Some editors stage dependent settings (for example, an equalizer curve).
@@ -1696,7 +1696,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         description.insert(QStringLiteral("choices"), choices);
         description.insert(QStringLiteral("value"), current);
         description.insert(QStringLiteral("defaultValue"), QStringLiteral("errors"));
-        description.insert(QStringLiteral("help"), qtr("Choose the messages to save in the log file. Restart VLC after a change."));
+        description.insert(QStringLiteral("help"), qtr("Select the messages to save in the log file. After a change, close VLC. Start VLC again."));
         return description;
     }
     if (!VLC_SKINS_ENABLED && name == QLatin1String("skins2-last"))
@@ -1711,7 +1711,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         return {{QStringLiteral("kind"), QStringLiteral("action")}, {QStringLiteral("editor"), QStringLiteral("action")},
             {QStringLiteral("buttonLabel"), m_pluginScanRunning ? qtr("Scanning…") : qtr("Rescan")},
             {QStringLiteral("supported"), !m_pluginScanRunning},
-            {QStringLiteral("help"), qtr("Check plugin files and update the plugin cache. Restart VLC after the scan to use plugin changes.")}};
+            {QStringLiteral("help"), qtr("VLC examines plugin files and updates the plugin cache. After the scan, close VLC. Start VLC again to use plugin changes.")}};
     }
     if (name == QLatin1String("redesign-postprocessing")) {
         auto description = describe(QStringLiteral("postproc-q"));
@@ -1760,7 +1760,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         description.insert(QStringLiteral("defaultValue"),
             !enabled.value(QStringLiteral("defaultValue")).toBool() || deviceDefault == QLatin1String("none")
                 ? QStringLiteral("none") : deviceDefault.isEmpty() ? QStringLiteral("any") : deviceDefault);
-        description.insert(QStringLiteral("help"), qtr("Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Reopen the video after a change."));
+        description.insert(QStringLiteral("help"), qtr("Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."));
         return description;
     }
     if (name == QLatin1String("redesign-subtitle-encoding")) {
@@ -1788,7 +1788,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         description.insert(QStringLiteral("defaultValue"),
             QString((detection.value(QStringLiteral("defaultValue")).toBool() ? QStringLiteral("auto:") : QStringLiteral("fixed:"))
             + description.value(QStringLiteral("defaultValue")).toString()));
-        description.insert(QStringLiteral("help"), qtr("Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Reopen the subtitle file after a change."));
+        description.insert(QStringLiteral("help"), qtr("Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."));
         if (current.startsWith(QLatin1String("auto:")) && !encoding.isEmpty())
             description.insert(QStringLiteral("help"), QString(description.value(QStringLiteral("help")).toString()
                 + QLatin1Char(' ') + qtr("The current automatic fallback is %1.").arg(encoding)));
@@ -1935,7 +1935,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         return {{QStringLiteral("kind"), QStringLiteral("integer")}, {QStringLiteral("editor"), QStringLiteral("track")},
             {QStringLiteral("minimum"), 0}, {QStringLiteral("maximum"), INT_MAX},
             {QStringLiteral("defaultValue"), 0}, {QStringLiteral("value"), value(name)},
-            {QStringLiteral("help"), qtr("Choose a track for the next video. Track numbers start at 1. Automatic uses the language setting.")}};
+            {QStringLiteral("help"), qtr("Select a track for the next video. Track numbers start at 1. Automatic uses the language setting.")}};
     if (const auto option = languageOption(name); !option.isEmpty()) {
         const bool menu = option == QLatin1String("menu-language");
         return {{QStringLiteral("kind"), QStringLiteral("string")}, {QStringLiteral("editor"), QStringLiteral("language")},
@@ -1944,7 +1944,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
             {QStringLiteral("value"), value(name)},
             {QStringLiteral("help"), menu
                 ? qtr("Select a language for disc menus. For a list, separate language names or codes with commas. Open the disc again to use this change.")
-                : qtr("Choose a language. System language uses your system's language. Choose Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file.")}};
+                : qtr("Select a language. System language uses your system's language. Select Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file.")}};
     }
     if (name == QLatin1String("redesign-reset-all"))
         return {{QStringLiteral("kind"), QStringLiteral("action")}, {QStringLiteral("editor"), QStringLiteral("action")},
@@ -1962,7 +1962,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         })) choices.append(QVariantMap{{QStringLiteral("label"), qtr("Unavailable device (%1)").arg(configured)}, {QStringLiteral("value"), configured}});
         return {{QStringLiteral("kind"), QStringLiteral("string")}, {QStringLiteral("title"), qtr("Output device")},
             {QStringLiteral("choices"), choices}, {QStringLiteral("defaultValue"), QString()}, {QStringLiteral("value"), configured},
-            {QStringLiteral("help"), qtr("Choose the device to use for audio. A disconnected device falls back to the audio driver's default.")}};
+            {QStringLiteral("help"), qtr("Select the device to use for audio. If the device is not connected, VLC uses the audio driver's default device.")}};
     }
     if (name == QLatin1String("redesign-startup-volume"))
         return {{QStringLiteral("kind"), QStringLiteral("integer")}, {QStringLiteral("title"), qtr("Startup volume")},
@@ -1973,7 +1973,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         return {{QStringLiteral("kind"), QStringLiteral("bool")}, {QStringLiteral("title"), qtr("Web remote control")},
             {QStringLiteral("defaultValue"), false}, {QStringLiteral("value"), value(name)},
             {QStringLiteral("supported"), supportsWebRemote()},
-            {QStringLiteral("help"), supportsWebRemote() ? qtr("Control VLC from a web browser. Restart VLC after changing the web remote, port or password.")
+            {QStringLiteral("help"), supportsWebRemote() ? qtr("Control VLC from a web browser. After you change the web remote, port or password, close VLC. Start VLC again.")
                 : qtr("Web remote control is unavailable in this VLC build.")}};
 
     if (name == QLatin1String("redesign-repeat") || name == QLatin1String("redesign-after-playback")) {
@@ -2001,7 +2001,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
     QVariantMap result{{QStringLiteral("name"), name}, {QStringLiteral("title"), qtr(cfg->psz_text ? cfg->psz_text : cfg->psz_name)},
         {QStringLiteral("help"), qtr(cfg->psz_longtext ? cfg->psz_longtext : "")}, {QStringLiteral("value"), value(name)}};
     if (name == QLatin1String("high-priority"))
-        result.insert(QStringLiteral("help"), qtr("Request a higher process priority from the system. Restart VLC after a change."));
+        result.insert(QStringLiteral("help"), qtr("Request a higher process priority from the system. After a change, close VLC. Start VLC again."));
     if (name == QLatin1String("spu"))
         result.insert(QStringLiteral("help"), qtr("Turn this off to hide subtitles. After you turn it on, select a track or open the file again."));
     if (name == QLatin1String("audio"))
@@ -2030,7 +2030,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
 #endif
 #endif
     if (name == QLatin1String("aout"))
-        result.insert(QStringLiteral("help"), qtr("Select an audio output driver. Restart VLC to use a new driver."));
+        result.insert(QStringLiteral("help"), qtr("Select an audio output driver. Close VLC. Start VLC again to use a new driver."));
     if (name == QLatin1String("pitch-shift"))
         result.insert(QStringLiteral("help"), qtr("Set the pitch in semitones. Use 0 to turn off this effect. Playback speed does not change."));
     if (name == QLatin1String("audio-spatial") || name == QLatin1String("audio-spatial-mode")) {
@@ -2107,7 +2107,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         const auto current = value(name).toLongLong();
         if (current < 0 || current > 4)
             choices.append(QVariantMap{{QStringLiteral("label"), qtr("Custom (%1)").arg(current)}, {QStringLiteral("value"), current}});
-        result.insert(QStringLiteral("help"), qtr("Choose how closely subtitle file names must match the video title."));
+        result.insert(QStringLiteral("help"), qtr("Select how closely subtitle file names must match the video title."));
     }
     if (name == QLatin1String("freetype-shadow-distance")) {
         choices = {
@@ -2154,21 +2154,21 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
     }
     result.insert(QStringLiteral("editor"), editor);
     if (name == QLatin1String("file-logging"))
-        result.insert(QStringLiteral("help"), qtr("Save messages to a file. Restart VLC after a change."));
+        result.insert(QStringLiteral("help"), qtr("Save messages to a file. After a change, close VLC. Start VLC again."));
     if (name == QLatin1String("logfile"))
-        result.insert(QStringLiteral("help"), qtr("Choose the log file. VLC adds new messages to the end of this file. Restart VLC after a change."));
+        result.insert(QStringLiteral("help"), qtr("Select the log file. VLC adds new messages to the end of this file. After a change, close VLC. Start VLC again."));
     if (name == QLatin1String("logmode"))
-        result.insert(QStringLiteral("help"), qtr("Choose plain text or HTML for the log file. Restart VLC after a change."));
+        result.insert(QStringLiteral("help"), qtr("Select plain text or HTML for the log file. After a change, close VLC. Start VLC again."));
     if (name == QLatin1String("verbose"))
-        result.insert(QStringLiteral("help"), qtr("Choose the VLC log level. File logs can use this level or a separate file log level. Restart VLC after a change."));
+        result.insert(QStringLiteral("help"), qtr("Select the VLC log level. File logs can use this level or a separate file log level. After a change, close VLC. Start VLC again."));
     if (name == QLatin1String("qt-system-tray"))
         result.insert(QStringLiteral("help"), qtr("Show the VLC icon in the system tray."));
     if (name == QLatin1String("qt-start-minimized"))
-        result.insert(QStringLiteral("help"), qtr("Start VLC in the system tray. This turns on the tray icon. Restart VLC after a change."));
+        result.insert(QStringLiteral("help"), qtr("Start VLC in the system tray. This turns on the tray icon. After a change, close VLC. Start VLC again."));
     if (name == QLatin1String("qt-notification"))
         result.insert(QStringLiteral("help"), qtr("Show a track message always, only when VLC is hidden or minimized, or never."));
     if (name == QLatin1String("qt-notification-timeout"))
-        result.insert(QStringLiteral("help"), qtr("Choose how long the track popup is shown. The system can change this time."));
+        result.insert(QStringLiteral("help"), qtr("Select how long VLC shows the track popup. The system can change this time."));
     if (name == QLatin1String("qt-opacity"))
         result.insert(QStringLiteral("help"), qtr("Change the opacity of the main VLC window. The change applies at once."));
     if (name == QLatin1String("qt-fs-opacity"))
@@ -2180,9 +2180,9 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
     if (name == QLatin1String("qt-video-autoresize"))
         result.insert(QStringLiteral("help"), qtr("Select Never to keep the window size. Select Always to resize the window when a video opens. Fullscreen and maximized windows keep their size. Audio visualizers do not change the window size."));
     if (name == QLatin1String("qt-minimal-view"))
-        result.insert(QStringLiteral("help"), qtr("Start VLC in compact mode. Restart VLC after a change. Launch options can override this setting."));
+        result.insert(QStringLiteral("help"), qtr("Start VLC in compact mode. After a change, close VLC. Start VLC again. Launch options can override this setting."));
     if (name == QLatin1String("qt-verbose"))
-        result.insert(QStringLiteral("help"), qtr("Add internal interface information, warnings and errors to the VLC log. Use Log details to choose which messages to save."));
+        result.insert(QStringLiteral("help"), qtr("Add internal interface information, warnings and errors to the VLC log. Use Log details to select which messages to save."));
     if (name == QLatin1String("qt-error-dialogs"))
         result.insert(QStringLiteral("help"), qtr("Show error messages and confirmation questions. When this is off, VLC cancels normal and warning questions. Errors stay in the error history. Login, progress and critical questions stay on."));
     if (name == QLatin1String("language")) {
@@ -2193,7 +2193,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
             choices.append(QVariantMap{{QStringLiteral("label"), qtr("Saved language (%1)").arg(current)}, {QStringLiteral("value"), current}});
         result.insert(QStringLiteral("editor"), QStringLiteral("choice"));
         result.insert(QStringLiteral("defaultValue"), QStringLiteral("auto"));
-        result.insert(QStringLiteral("help"), qtr("Choose a language for the interface. Changes apply at once. Text without a translation is shown in English."));
+        result.insert(QStringLiteral("help"), qtr("Select a language for the interface. Changes apply at once. If text has no translation, VLC shows it in English."));
     }
     if (name == QLatin1String("codec") || name == QLatin1String("sout-transcode-venc")
         || name == QLatin1String("sout-transcode-aenc") || name == QLatin1String("sout-transcode-senc")) {
@@ -2215,7 +2215,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
             : qtr("VLC uses this encoder for conversion and streaming. It must support the output format. An output profile can override this choice."));
     }
     if (name == QLatin1String("startup-options"))
-        result.insert(QStringLiteral("help"), qtr("Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. Restart VLC after a change. Use --ignore-config to start without saved options."));
+        result.insert(QStringLiteral("help"), qtr("Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. After a change, close VLC. Start VLC again. Use --ignore-config to start without saved options."));
     if (name == QLatin1String("clock-synchro"))
         result.insert(QStringLiteral("help"), qtr("Control input clock synchronization for live streams. Default uses the source settings. Open the stream again after a change."));
     if (name == QLatin1String("clock-jitter"))
@@ -2236,13 +2236,13 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
         result.insert(QStringLiteral("help"), supported
             ? qtr("Include subfolders adds files from the folder and keeps its subfolders in the queue. Open folders on playback reads a folder when you play it. Expand all subfolders reads all files at once. Changes apply to the next folder you add.")
             : value(QStringLiteral("auto-preparse")).toBool()
-                ? qtr("Restart VLC to use this option. A command-line option can stop VLC from reading file information.")
-                : qtr("Turn on \"Read file metadata automatically\" in Advanced Options, then restart VLC to use this option."));
+                ? qtr("Close VLC. Start VLC again to use this option. A command-line option can stop VLC from reading file information.")
+                : qtr("Turn on \"Read file metadata automatically\" in Advanced Options. Close VLC. Start VLC again to use this option."));
     }
     if (name == QLatin1String("auto-preparse")) {
         result.insert(QStringLiteral("restartRequired"), m_ctx && m_autoPreparseEdited
             && value(name).toBool() != (directoryDepth(m_ctx) != VLC_PLAYLIST_PREPARSING_DISABLED));
-        result.insert(QStringLiteral("help"), qtr("Read file information for items added to the queue. Restart VLC after a change."));
+        result.insert(QStringLiteral("help"), qtr("Read file information for items added to the queue. After a change, close VLC. Start VLC again."));
     }
     if (name == QLatin1String("one-instance")) {
         auto* instance = m_ctx ? vlc_object_instance(m_ctx->getIntf()) : nullptr;
@@ -2250,7 +2250,7 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
             && var_GetBool(instance, "single-instance-listening");
         result.insert(QStringLiteral("restartRequired"), m_ctx && m_singleInstanceEdited
             && value(name).toBool() && !listening);
-        result.insert(QStringLiteral("help"), qtr("Use one VLC window for app launches. The file manager option also includes files opened from the file manager. Close all VLC windows and start VLC again after you turn this on. Command-line options can override these settings."));
+        result.insert(QStringLiteral("help"), qtr("Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."));
     }
     if (name == QLatin1String("one-instance-when-started-from-file"))
         result.insert(QStringLiteral("help"), qtr("Use the same VLC window for files opened from the file manager."));
@@ -2610,7 +2610,7 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
         && (normalized.toString().contains(QChar::Null)
             || config_ValidateStartupOptions(VLC_OBJECT(m_ctx->getIntf()), normalized.toString().toUtf8().constData()) != VLC_SUCCESS)) {
         m_invalid.insert(name);
-        m_error = qtr("Enter VLC options only. Check the option names and quotation marks.");
+        m_error = qtr("Enter VLC options only. Make sure that the option names and quotation marks are correct.");
         ++m_revision; emit changed(); return false;
     }
     if (valid && name == QLatin1String("recentplay-filter")
@@ -2623,7 +2623,7 @@ bool RedesignPreferences::stage(const QString& name, const QVariant& proposed)
         const auto selected = normalized.toString();
         if (!installedInterfaceLanguage(selected) && selected != value(name).toString()) {
             m_invalid.insert(name);
-            m_error = qtr("Choose a language from the list.");
+            m_error = qtr("Select a language from the list.");
             ++m_revision; emit changed(); return false;
         }
     }
@@ -2848,7 +2848,7 @@ bool RedesignPreferences::save()
             for (auto it = previous.cbegin(); it != previous.cend(); ++it) write(it.key().toUtf8(), it.value());
             const int restored = config_SaveConfigFile(m_ctx->getIntf());
             return playerPresetError(restored || recovery.status() != QSettings::NoError
-                ? qtr("VLC cannot restore the settings file. Restart VLC and check your settings.")
+                ? qtr("VLC cannot restore the settings file. Close VLC. Start VLC again. Make sure that your settings are correct.")
                 : qtr("VLC cannot save the interface settings. Try again."));
         }
     }
@@ -3158,7 +3158,7 @@ bool RedesignPreferences::resetAll()
         restore();
         const int restored = config_SaveConfigFile(intf);
         if (restored != 0 || recovery.status() != QSettings::NoError) {
-            m_error = qtr("VLC cannot restore the settings file. Restart VLC and check your settings.");
+            m_error = qtr("VLC cannot restore the settings file. Close VLC. Start VLC again. Make sure that your settings are correct.");
             ++m_revision; emit changed(); return false;
         }
         return failed();
@@ -3296,7 +3296,7 @@ QUrl RedesignPreferences::configurationFolder() const
 
 QString RedesignPreferences::chooseColor(const QString& initial)
 {
-    const QColor color = QColorDialog::getColor(QColor(initial), nullptr, qtr("Choose color"));
+    const QColor color = QColorDialog::getColor(QColor(initial), nullptr, qtr("Select color"));
     return color.isValid() ? color.name() : QString();
 }
 

@@ -86,7 +86,7 @@ FocusScope {
                 x: 248; y: 366; width: 594; height: 84; lineHeight: 1.4; color: "#969696"
                 text: qsTr("VLC is a free and open source media player.\nPlay videos and music from files, discs, and network streams.\nYou can change all settings later.")
             }
-            Label { x: 248; y: 500; width: 594; text: qsTr("Choose a media folder to start with"); font.pixelSize: 14; font.weight: Font.Normal }
+            Label { x: 248; y: 500; width: 594; text: qsTr("Select a media folder to start with"); font.pixelSize: 14; font.weight: Font.Normal }
             C.TextField {
                 id: folderField; objectName: "onboardingFolder"
                 x: 248; y: 534; width: 469; height: 34

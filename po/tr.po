@@ -49861,3 +49861,219 @@ msgstr "%s\nKısayol: %s"
 #: modules/gui/qt/network/addonsmodel.cpp:770
 msgid "VLC cannot load the add-on list. Try again."
 msgstr "VLC eklenti listesini yükleyemiyor. Yeniden deneyin."
+
+#: modules/gui/qt/dialogs/firstrun/firstrunwizard.cpp:121
+msgid "VLC cannot save the theme. Make sure that you have access to the settings folder. Try again."
+msgstr "VLC temayı kaydedemiyor. Ayar klasörünü denetleyip yeniden deneyin."
+
+#: modules/gui/qt/dialogs/messages/messages.cpp:264
+msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again."
+msgstr "Bu pencere uzun günlük iletilerinin yalnızca bir bölümünü gösterebilir. Günlüğün tamamını saklamak için Ayarlar'da Günlük kaydet seçeneğini açın. Bu değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:728
+msgid "VLC cannot start the plugin scan. Make sure that the cache generator is installed."
+msgstr "VLC eklenti taramasını başlatamıyor. Önbellek oluşturucunun kurulu olduğunu denetleyin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:735
+msgid "VLC cannot update the plugin cache. Make sure that you have access to the folder. Try again."
+msgstr "VLC eklenti önbelleğini güncelleyemiyor. Klasöre erişimi denetleyip yeniden deneyin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:737
+msgid "VLC updated the plugin cache. Close VLC. Start VLC again to use plugin changes."
+msgstr "VLC eklenti önbelleğini güncelledi. Eklenti değişikliklerini kullanmak için VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
+msgid "VLC cannot apply this profile. Make sure that its saved settings are correct."
+msgstr "VLC bu profili uygulayamıyor. Kayıtlı ayarlarını denetleyin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
+msgid "VLC cannot apply this preset. Make sure that its saved settings are correct."
+msgstr "VLC bu ön ayarı uygulayamıyor. Kayıtlı ayarlarını denetleyin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1699
+msgid "Select the messages to save in the log file. After a change, close VLC. Start VLC again."
+msgstr "Günlük dosyasına kaydedilecek iletileri seçin. Değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1714
+msgid "VLC examines plugin files and updates the plugin cache. After the scan, close VLC. Start VLC again to use plugin changes."
+msgstr "Eklenti dosyalarını denetleyip önbelleği günceller. Değişiklikleri kullanmak için taramadan sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1763
+msgid "Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
+msgstr "Otomatik seçeneğinde çözücü aygıtını VLC seçer. Kapalı seçeneği yazılım çözümlemesini kullanır ve kayıtlı aygıt seçiminizi korur. Değişiklikten sonra videoyu yeniden açın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1791
+msgid "Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
+msgstr "Otomatik seçeneği önce UTF-8 metni algılar. Algılama başarısız olursa VLC varsayılan metin kodlamasını kullanır. Bu algılamayı kapatmak için belirli bir kodlama seçin. Değişiklikten sonra altyazı dosyasını yeniden açın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1938
+msgid "Select a track for the next video. Track numbers start at 1. Automatic uses the language setting."
+msgstr "Sonraki video için bir iz seçin. İz numaraları 1'den başlar. Otomatik seçeneği dil ayarını kullanır."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1947
+msgid "Select a language. System language uses your system's language. Select Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file."
+msgstr "Bir dil seçin. Sistem dili seçeneği sisteminizin dilini kullanır. Dil sırası yazmak için Özel seçeneğini seçin. Adları veya kodları virgülle ayırın. Sonraki dosyanın iz seçimi Otomatik olarak ayarlanır."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1965
+msgid "Select the device to use for audio. If the device is not connected, VLC uses the audio driver's default device."
+msgstr "Ses aygıtını seçin. Aygıtın bağlantısı kesilirse ses sürücüsünün varsayılan aygıtı kullanılır."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1976
+msgid "Control VLC from a web browser. After you change the web remote, port or password, close VLC. Start VLC again."
+msgstr "VLC'yi bir web tarayıcısından denetleyin. Web denetimini, bağlantı noktasını veya parolayı değiştirdikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2004
+msgid "Request a higher process priority from the system. After a change, close VLC. Start VLC again."
+msgstr "Sistemden daha yüksek işlem önceliği ister. Değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2033
+msgid "Select an audio output driver. Close VLC. Start VLC again to use a new driver."
+msgstr "Bir ses çıkış sürücüsü seçin. Yeni sürücüyü kullanmak için VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2110
+msgid "Select how closely subtitle file names must match the video title."
+msgstr "Altyazı dosyalarının adlarının video başlığına ne kadar benzemesi gerektiğini seçin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2157
+msgid "Save messages to a file. After a change, close VLC. Start VLC again."
+msgstr "İletileri dosyaya kaydeder. Değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2159
+msgid "Select the log file. VLC adds new messages to the end of this file. After a change, close VLC. Start VLC again."
+msgstr "Günlük dosyasını seçin. VLC yeni iletileri bu dosyanın sonuna ekler. Değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2161
+msgid "Select plain text or HTML for the log file. After a change, close VLC. Start VLC again."
+msgstr "Günlük dosyası için düz metin veya HTML seçin. Değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2163
+msgid "Select the VLC log level. File logs can use this level or a separate file log level. After a change, close VLC. Start VLC again."
+msgstr "VLC günlük düzeyini seçin. Dosya günlükleri bu düzeyi veya ayrı bir dosya günlük düzeyini kullanabilir. Değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2167
+msgid "Start VLC in the system tray. This turns on the tray icon. After a change, close VLC. Start VLC again."
+msgstr "VLC'yi sistem tepsisinde başlatır. Tepsi simgesini de açar. Değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2171
+msgid "Select how long VLC shows the track popup. The system can change this time."
+msgstr "Parça bildiriminin gösterilme süresini seçin. Sistem bu süreyi değiştirebilir."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2183
+msgid "Start VLC in compact mode. After a change, close VLC. Start VLC again. Launch options can override this setting."
+msgstr "VLC'yi küçük görünümde başlatır. Değişiklikten sonra VLC'yi yeniden başlatın. Başlatma seçenekleri bu ayarı geçersiz kılabilir."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2185
+msgid "Add internal interface information, warnings and errors to the VLC log. Use Log details to select which messages to save."
+msgstr "Arayüzün iç bilgilerini, uyarılarını ve hatalarını VLC günlüğüne ekler. Kaydedilecek iletileri seçmek için Günlük ayrıntı düzeyi seçeneğini kullanın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2196
+msgid "Select a language for the interface. Changes apply at once. If text has no translation, VLC shows it in English."
+msgstr "Arayüz için bir dil seçin. Değişiklikler hemen uygulanır. Çevirisi olmayan metinler İngilizce gösterilir."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2218
+msgid "Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. After a change, close VLC. Start VLC again. Use --ignore-config to start without saved options."
+msgstr "Yalnızca VLC seçeneklerini yazın. Boşluk içeren metinleri tırnak içine alın. Başlatma komutu önceliklidir. Değişiklikten sonra VLC'yi yeniden başlatın. Kayıtlı seçenekler olmadan başlatmak için --ignore-config kullanın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2239
+msgid "Close VLC. Start VLC again to use this option. A command-line option can stop VLC from reading file information."
+msgstr "Bu seçeneği kullanmak için VLC'yi yeniden başlatın. Komut satırı seçeneği dosya bilgilerinin okunmasını engelleyebilir."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2240
+msgid "Turn on \"Read file metadata automatically\" in Advanced Options. Close VLC. Start VLC again to use this option."
+msgstr "Gelişmiş Seçenekler bölümünde «Dosya üst verilerini otomatik oku» seçeneğini açıp bu seçeneği kullanmak için VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2245
+msgid "Read file information for items added to the queue. After a change, close VLC. Start VLC again."
+msgstr "Sıraya eklenen ögelerin dosya bilgilerini okur. Değişiklikten sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2613
+msgid "Enter VLC options only. Make sure that the option names and quotation marks are correct."
+msgstr "Yalnızca VLC seçeneklerini yazın. Seçenek adlarını ve tırnakları denetleyin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2626
+msgid "Select a language from the list."
+msgstr "Listeden bir dil seçin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2851 modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3161
+msgid "VLC cannot restore the settings file. Close VLC. Start VLC again. Make sure that your settings are correct."
+msgstr "VLC ayar dosyasını geri yükleyemiyor. VLC'yi yeniden başlatıp ayarlarınızı denetleyin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3299
+msgid "Select color"
+msgstr "Renk seç"
+
+#: modules/gui/qt/medialibrary/medialib.cpp:296
+msgid "VLC cannot rescan this folder. Make sure that you can read the folder. Try again."
+msgstr "VLC bu klasörü yeniden tarayamıyor. Klasörü denetleyip yeniden deneyin."
+
+#: modules/gui/qt/player/qml/redesign/RedesignAddToPlaylistDialog.qml:128
+msgid "Select a Playlist"
+msgstr "Oynatma listesi seç"
+
+#: modules/gui/qt/player/qml/redesign/RedesignFolderInfo.qml:28
+msgid "VLC cannot read this folder. Make sure that you can read the folder. Try again."
+msgstr "VLC bu klasörü okuyamıyor. Klasörü denetleyip yeniden deneyin."
+
+#: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:45
+msgid "VLC cannot open these streams. Make sure that the links are correct. Try again."
+msgstr "VLC bu akışları açamıyor. Bağlantıları denetleyip yeniden deneyin."
+
+#: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:159
+msgid "To save a playlist, turn on the media library in Settings. Close VLC. Start VLC again."
+msgstr "Oynatma listesi kaydetmek için Ayarlar'da ortam kitaplığını açın. Ardından VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:89
+msgid "Select a media folder to start with"
+msgstr "Başlamak için bir ortam klasörü seçin"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPlayerPreset.qml:243
+msgid "Save all VLC settings in this profile. Some settings apply to the next file or after you close VLC and start it again."
+msgstr "Tüm VLC ayarlarını bu profile kaydedin. Bazı ayarlar sonraki dosyaya veya VLC yeniden başlatıldıktan sonra uygulanır."
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferenceRow.qml:204
+msgid "Close VLC. Start VLC again to use this change."
+msgstr "Bu değişikliği kullanmak için VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:53
+msgid "Show a border and title bar on a separate video window. Close VLC. Start VLC again to use this setting."
+msgstr "Ayrı görüntü penceresinde kenarlık ve başlık çubuğu gösterir. Bu ayarı kullanmak için VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:83
+msgid "This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again."
+msgstr "Bu işlem VLC'nin tüm ayarlarını varsayılan ayarlarla değiştirir. İşlemden sonra VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:153
+msgid "VLC saved the default settings. Close VLC. Start VLC again to use all settings."
+msgstr "VLC varsayılan ayarları kaydetti. Tüm ayarları kullanmak için VLC'yi yeniden başlatın."
+
+#: modules/gui/qt/player/qml/redesign/RedesignSubtitleProviderSetup.qml:24
+msgid "VLC cannot save this change. Make sure that the key is correct. Try again."
+msgstr "VLC bu değişikliği kaydedemedi. Anahtarı denetleyip yeniden deneyin."
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:288
+msgid "VLC cannot save the API key. Make sure that the API key is correct. Try again."
+msgstr "VLC API anahtarını kaydedemedi. Denetleyip yeniden deneyin."
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:621
+msgid "Select a folder or select track files from your computer."
+msgstr "Bir klasör seçin veya bilgisayarınızdan iz dosyalarını seçin."
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:754
+msgid "Select files…"
+msgstr "Dosya seç…"
+
+#: modules/gui/qt/player/qml/redesign/RedesignVideoSettings.qml:462
+msgid "Select %1 color"
+msgstr "%1 için renk seç"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPlaylistTrackTarget.qml:85
+msgid "Select a file. Then select the tracks for that file."
+msgstr "Bir dosya seçin, ardından o dosyanın izlerini seçin."
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:621
+msgid "Paste a direct subtitle file link. Then select Add."
+msgstr "Doğrudan altyazı dosyası bağlantısı yapıştırıp Ekle seçeneğini seçin."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
+msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
+msgstr "Uygulama başlatmalarında tek bir VLC penceresi kullanır. Dosya yöneticisi seçeneği, dosya yöneticisinden açılan dosyaları da kapsar. Açtıktan sonra tüm VLC pencerelerini kapatıp VLC'yi yeniden başlatın. Komut satırı seçenekleri bu ayarları geçersiz kılabilir."

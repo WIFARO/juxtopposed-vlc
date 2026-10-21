@@ -50,7 +50,7 @@ QtObject {
                 ["qt-video-autoresize", qsTr("Resize window to fit video"), {choices: [{label: qsTr("Never"), value: false}, {label: qsTr("Always"), value: true}]}],
                 ["qt-remember-window-geometry", qsTr("Remember window size and position")],
                 ["video-on-top", qsTr("Keep window above other windows")],
-                ["video-deco", qsTr("Show window decorations"), {help: qsTr("Show a border and title bar on a separate video window. Restart VLC to use this setting.")}],
+                ["video-deco", qsTr("Show window decorations"), {help: qsTr("Show a border and title bar on a separate video window. Close VLC. Start VLC again to use this setting.")}],
                 ["qt-name-in-title", qsTr("Show the file name in the title bar")],
                 ["qt-fullscreen-screennumber", qsTr("Open fullscreen on")] ] },
             { title: qsTr("Playback Controls"), rows: [

@@ -47224,3 +47224,219 @@ msgstr "%s\nAtalho: %s"
 #: modules/gui/qt/network/addonsmodel.cpp:770
 msgid "VLC cannot load the add-on list. Try again."
 msgstr "Não foi possível carregar a lista de extensões. Tente novamente."
+
+#: modules/gui/qt/dialogs/firstrun/firstrunwizard.cpp:121
+msgid "VLC cannot save the theme. Make sure that you have access to the settings folder. Try again."
+msgstr "O VLC não consegue guardar o tema. Verifique a pasta de definições e tente novamente."
+
+#: modules/gui/qt/dialogs/messages/messages.cpp:264
+msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again."
+msgstr "Esta janela pode mostrar apenas parte de uma mensagem longa do registo. Para guardar um registo completo, ative Guardar um registo nas Definições. Reinicie o VLC após esta alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:728
+msgid "VLC cannot start the plugin scan. Make sure that the cache generator is installed."
+msgstr "O VLC não consegue iniciar a busca de plugins. Verifique se o gerador de cache está instalado."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:735
+msgid "VLC cannot update the plugin cache. Make sure that you have access to the folder. Try again."
+msgstr "O VLC não consegue atualizar o cache de plugins. Verifique o acesso à pasta e tente novamente."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:737
+msgid "VLC updated the plugin cache. Close VLC. Start VLC again to use plugin changes."
+msgstr "O VLC atualizou o cache de plugins. Reinicie o VLC para aplicar as alterações nos plugins."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
+msgid "VLC cannot apply this profile. Make sure that its saved settings are correct."
+msgstr "O VLC não consegue aplicar este perfil. Verifique as definições guardadas."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
+msgid "VLC cannot apply this preset. Make sure that its saved settings are correct."
+msgstr "O VLC não consegue aplicar esta preposição. Verifique as definições guardadas nela."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1699
+msgid "Select the messages to save in the log file. After a change, close VLC. Start VLC again."
+msgstr "Escolha as mensagens que serão guardadas no ficheiro de registo. Reinicie o VLC após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1714
+msgid "VLC examines plugin files and updates the plugin cache. After the scan, close VLC. Start VLC again to use plugin changes."
+msgstr "Verifique os ficheiros de plugins e atualize o cache. Reinicie o VLC após a verificação para aplicar as alterações nos plugins."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1763
+msgid "Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
+msgstr "Automático permite que o VLC escolha o dispositivo de descodificação. Desativado usa descodificação por software e mantém a escolha de dispositivo guardada. Reabra o vídeo após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1791
+msgid "Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
+msgstr "Automático deteta primeiro texto UTF-8. Se a deteção falhar, o VLC usa a codificação de texto predefinida. Selecione uma codificação específica para desativar esta deteção. Reabra o ficheiro de legendas após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1938
+msgid "Select a track for the next video. Track numbers start at 1. Automatic uses the language setting."
+msgstr "Escolha uma faixa para o próximo vídeo. A numeração começa em 1. Automático usa a definição de idioma."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1947
+msgid "Select a language. System language uses your system's language. Select Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file."
+msgstr "Escolha um idioma. Idioma do sistema usa o idioma do seu sistema. Escolha Personalizado para inserir uma ordem de idiomas. Separe nomes ou códigos com vírgulas. Isso define a faixa como Automático para o próximo ficheiro."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1965
+msgid "Select the device to use for audio. If the device is not connected, VLC uses the audio driver's default device."
+msgstr "Escolha o dispositivo de áudio. Se ele estiver desconectado, será usado o dispositivo predefinido do driver de áudio."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1976
+msgid "Control VLC from a web browser. After you change the web remote, port or password, close VLC. Start VLC again."
+msgstr "Controle o VLC pelo navegador. Reinicie o VLC após alterar o controlo remoto pela web, a porta ou a palavra-passe."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2004
+msgid "Request a higher process priority from the system. After a change, close VLC. Start VLC again."
+msgstr "Solicite uma prioridade maior de processo ao sistema. Reinicie o VLC após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2033
+msgid "Select an audio output driver. Close VLC. Start VLC again to use a new driver."
+msgstr "Selecione um driver de saída de áudio. Reinicie o VLC para usar o novo driver."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2110
+msgid "Select how closely subtitle file names must match the video title."
+msgstr "Escolha o grau de correspondência necessário entre os nomes dos ficheiros de legendas e o título do vídeo."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2157
+msgid "Save messages to a file. After a change, close VLC. Start VLC again."
+msgstr "Guarde mensagens num ficheiro. Reinicie o VLC após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2159
+msgid "Select the log file. VLC adds new messages to the end of this file. After a change, close VLC. Start VLC again."
+msgstr "Escolha o ficheiro de registo. O VLC acrescenta novas mensagens ao fim do ficheiro. Reinicie o VLC após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2161
+msgid "Select plain text or HTML for the log file. After a change, close VLC. Start VLC again."
+msgstr "Escolha texto simples ou HTML para o ficheiro de registo. Reinicie o VLC após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2163
+msgid "Select the VLC log level. File logs can use this level or a separate file log level. After a change, close VLC. Start VLC again."
+msgstr "Escolha o nível de registo do VLC. Registos em ficheiro podem usar este nível ou um nível próprio. Reinicie o VLC após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2167
+msgid "Start VLC in the system tray. This turns on the tray icon. After a change, close VLC. Start VLC again."
+msgstr "Inicie o VLC na área de notificação. Esta opção ativa o ícone da área de notificação. Reinicie o VLC após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2171
+msgid "Select how long VLC shows the track popup. The system can change this time."
+msgstr "Escolha por quanto tempo a notificação de faixa aparece. O sistema pode alterar esse tempo."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2183
+msgid "Start VLC in compact mode. After a change, close VLC. Start VLC again. Launch options can override this setting."
+msgstr "Inicie o VLC no modo compacto. Reinicie o VLC após uma alteração. Opções de inicialização podem substituir esta definição."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2185
+msgid "Add internal interface information, warnings and errors to the VLC log. Use Log details to select which messages to save."
+msgstr "Adicione informações internas da interface, avisos e erros ao registo do VLC. Use Detalhes do registo para escolher as mensagens a guardar."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2196
+msgid "Select a language for the interface. Changes apply at once. If text has no translation, VLC shows it in English."
+msgstr "Escolha um idioma para a interface. As alterações são aplicadas de imediato. O texto sem tradução é apresentado em inglês."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2218
+msgid "Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. After a change, close VLC. Start VLC again. Use --ignore-config to start without saved options."
+msgstr "Insira somente opções do VLC. Use aspas em textos com espaços. O comando de inicialização tem prioridade. Reinicie o VLC após uma alteração. Use --ignore-config para iniciar sem as opções guardadas."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2239
+msgid "Close VLC. Start VLC again to use this option. A command-line option can stop VLC from reading file information."
+msgstr "Reinicie o VLC para usar esta opção. Uma opção de linha de comando pode impedir a leitura de informações dos ficheiros."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2240
+msgid "Turn on \"Read file metadata automatically\" in Advanced Options. Close VLC. Start VLC again to use this option."
+msgstr "Ative “Ler metadados dos ficheiros automaticamente” nas Opções avançadas e reinicie o VLC para usar esta opção."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2245
+msgid "Read file information for items added to the queue. After a change, close VLC. Start VLC again."
+msgstr "Leia informações dos ficheiros dos itens adicionados à fila. Reinicie o VLC após uma alteração."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2613
+msgid "Enter VLC options only. Make sure that the option names and quotation marks are correct."
+msgstr "Insira somente opções do VLC. Verifique os nomes das opções e as aspas."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2626
+msgid "Select a language from the list."
+msgstr "Escolha um idioma da lista."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2851 modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3161
+msgid "VLC cannot restore the settings file. Close VLC. Start VLC again. Make sure that your settings are correct."
+msgstr "O VLC não consegue restaurar o ficheiro de definições. Reinicie o VLC e verifique as suas definições."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3299
+msgid "Select color"
+msgstr "Escolher cor"
+
+#: modules/gui/qt/medialibrary/medialib.cpp:296
+msgid "VLC cannot rescan this folder. Make sure that you can read the folder. Try again."
+msgstr "O VLC não consegue verificar esta pasta novamente. Verifique a pasta e tente de novo."
+
+#: modules/gui/qt/player/qml/redesign/RedesignAddToPlaylistDialog.qml:128
+msgid "Select a Playlist"
+msgstr "Escolher uma lista de reprodução"
+
+#: modules/gui/qt/player/qml/redesign/RedesignFolderInfo.qml:28
+msgid "VLC cannot read this folder. Make sure that you can read the folder. Try again."
+msgstr "O VLC não consegue ler esta pasta. Verifique a pasta e tente novamente."
+
+#: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:45
+msgid "VLC cannot open these streams. Make sure that the links are correct. Try again."
+msgstr "O VLC não consegue abrir estes fluxos. Verifique as ligações e tente novamente."
+
+#: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:159
+msgid "To save a playlist, turn on the media library in Settings. Close VLC. Start VLC again."
+msgstr "Para guardar uma lista de reprodução, ative a biblioteca multimédia em Definições. Depois, reinicie o VLC."
+
+#: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:89
+msgid "Select a media folder to start with"
+msgstr "Escolha uma pasta multimédia para começar"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPlayerPreset.qml:243
+msgid "Save all VLC settings in this profile. Some settings apply to the next file or after you close VLC and start it again."
+msgstr "Guarde todas as definições do VLC neste perfil. Algumas definições aplicam-se ao ficheiro seguinte ou após reiniciar o VLC."
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferenceRow.qml:204
+msgid "Close VLC. Start VLC again to use this change."
+msgstr "Reinicie o VLC para usar esta alteração."
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:53
+msgid "Show a border and title bar on a separate video window. Close VLC. Start VLC again to use this setting."
+msgstr "Mostre um contorno e uma barra de título numa janela de vídeo separada. Reinicie o VLC para usar esta definição."
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:83
+msgid "This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again."
+msgstr "Esta ação substitui todas as definições do VLC pelos valores predefinidos. Reinicie o VLC após esta ação."
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:153
+msgid "VLC saved the default settings. Close VLC. Start VLC again to use all settings."
+msgstr "O VLC guardou as predefinições. Reinicie o VLC para aplicar todas as definições."
+
+#: modules/gui/qt/player/qml/redesign/RedesignSubtitleProviderSetup.qml:24
+msgid "VLC cannot save this change. Make sure that the key is correct. Try again."
+msgstr "O VLC não conseguiu guardar esta alteração. Verifique a chave e tente novamente."
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:288
+msgid "VLC cannot save the API key. Make sure that the API key is correct. Try again."
+msgstr "O VLC não conseguiu guardar a chave de API. Verifique-a e tente novamente."
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:621
+msgid "Select a folder or select track files from your computer."
+msgstr "Selecione uma pasta ou escolha ficheiros de faixa do seu computador."
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:754
+msgid "Select files…"
+msgstr "Escolher ficheiros…"
+
+#: modules/gui/qt/player/qml/redesign/RedesignVideoSettings.qml:462
+msgid "Select %1 color"
+msgstr "Escolher cor de %1"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPlaylistTrackTarget.qml:85
+msgid "Select a file. Then select the tracks for that file."
+msgstr "Selecione um ficheiro e depois as faixas para esse ficheiro."
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:621
+msgid "Paste a direct subtitle file link. Then select Add."
+msgstr "Cole uma ligação direta para um ficheiro de legendas e selecione Adicionar."
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
+msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
+msgstr "Use uma única janela do VLC ao iniciar a aplicação. A opção do gestor de ficheiros também inclui ficheiros abertos através dele. Feche todas as janelas do VLC e inicie-o novamente após ativar esta opção. As opções da linha de comandos podem substituir estas definições."

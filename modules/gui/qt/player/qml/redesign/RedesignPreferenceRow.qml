@@ -87,7 +87,9 @@ ColumnLayout {
             HoverHandler { id: rowHover }
             Text {
                 id: labelText
-                width: Math.min(implicitWidth, Math.max(0, parent.width - (helpButton.visible ? theme.dp(32) : 0)))
+                // Reserve space for Reset even before hover, so it cannot cover
+                // the help button when a long label wraps in a narrow window.
+                width: Math.min(implicitWidth, Math.max(0, parent.width - (helpButton.visible ? theme.dp(root.description.kind === "action" ? 32 : 66) : 0)))
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.label || root.description.title || ""
                 color: root.compact ? theme.playerLabel : theme.foreground; font.pixelSize: theme.dp(14)
@@ -201,7 +203,7 @@ ColumnLayout {
         objectName: "preferenceRestartNote"
         Layout.fillWidth: true
         visible: !!root.description.restartRequired
-        text: qsTr("Restart VLC to use this change.")
+        text: qsTr("Close VLC. Start VLC again to use this change.")
         color: theme.foreground; font.pixelSize: theme.dp(12); wrapMode: Text.WordWrap
     }
     Component {
@@ -691,7 +693,7 @@ ColumnLayout {
             leftPadding: theme.dp(root.presentation.flatColorField ? 12 : 14); rightPadding: theme.dp(root.presentation.flatColorField ? 5 : root.compact ? 7 : 6)
             scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
             readonly property string chosenColor: "#" + Number(root.currentValue).toString(16).padStart(6, "0")
-            caption: chosenColor.toUpperCase(); text: qsTr("Choose %1").arg(root.label)
+            caption: chosenColor.toUpperCase(); text: qsTr("Select %1").arg(root.label)
             background: Rectangle { radius: theme.dp(root.compact ? 6 : 4); border.width: root.presentation.flatColorField ? 0 : root.compact ? theme.dp(2) : 1; color: theme.field; border.color: root.compact && !root.lightTheme ? "#191919" : theme.border }
             contentItem: RowLayout {
                 Text { Layout.fillWidth: true; text: parent.parent.caption; color: theme.foreground; font.pixelSize: theme.dp(14) }

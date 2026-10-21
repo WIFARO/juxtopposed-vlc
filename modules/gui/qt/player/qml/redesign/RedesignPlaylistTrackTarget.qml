@@ -82,7 +82,7 @@ C.Dialog {
             Text {
                 Layout.fillWidth: true; Layout.leftMargin: root.theme.dp(20); Layout.rightMargin: root.theme.dp(20)
                 visible: !root.loading && root.items.length > 0
-                text: qsTr("Select a file, then select the tracks for that file.")
+                text: qsTr("Select a file. Then select the tracks for that file.")
                 color: root.theme.foreground; font.pixelSize: root.theme.dp(14); wrapMode: Text.WordWrap
             }
             RedesignComboBox {

@@ -80,7 +80,7 @@ RedesignSettingsDialog {
         parent: content
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         title: qsTr("Reset all settings")
-        message: qsTr("This action replaces all VLC settings with the default settings. Restart VLC after this action.")
+        message: qsTr("This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again.")
         confirmText: qsTr("Reset"); destructive: true
         onAccepted: root.resetSettings()
     }
@@ -150,7 +150,7 @@ RedesignSettingsDialog {
         resetFailed = !preferenceStore.resetAll()
         if (!resetFailed) {
             actionMessageIsError = false
-            actionMessage = qsTr("VLC saved the default settings. Restart VLC to use all settings.")
+            actionMessage = qsTr("VLC saved the default settings. Close VLC. Start VLC again to use all settings.")
         }
     }
     onDismissRequested: root.closeSettings()

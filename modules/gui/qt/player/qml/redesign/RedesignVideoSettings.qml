@@ -459,7 +459,7 @@ ColumnLayout {
                                     anchors.right: parent.right; anchors.rightMargin: theme.dp(5); anchors.verticalCenter: parent.verticalCenter
                                     width: theme.dp(22); height: width
                                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                                    text: qsTr("Choose %1 color").arg(modelData.label)
+                                    text: qsTr("Select %1 color").arg(modelData.label)
                                     background: Rectangle { radius: theme.dp(2); color: colorField.text; border.width: theme.dp(1.5); border.color: parent.visualFocus ? theme.accent : Qt.rgba(1, 1, 1, .21) }
                                     onClicked: { const color = root.backend.chooseColor(colorField.text); if (color) root.backend.stage(modelData.option, parseInt(color.replace(/^#/, ""), 16)) }
                                 }

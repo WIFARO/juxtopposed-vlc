@@ -21,7 +21,7 @@ C.Popup {
     padding: theme.dp(20); modal: true; focus: true
     function finish(success, error = "") {
         if (success) close()
-        else errorMessage = error || qsTr("VLC cannot save this change. Check the key and try again.")
+        else errorMessage = error || qsTr("VLC cannot save this change. Make sure that the key is correct. Try again.")
     }
     onOpened: { errorMessage = ""; apiKeyField.forceActiveFocus() }
     onClosed: apiKeyField.text = ""

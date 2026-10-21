@@ -231,7 +231,7 @@ TestCase {
         verify(!note.visible)
         const height = startupRow.implicitHeight
         startupStore.metadata.restartRequired = true; startupStore.revision++
-        tryCompare(note, "visible", true); compare(note.text, "Restart VLC to use this change.")
+        tryCompare(note, "visible", true); compare(note.text, "Close VLC. Start VLC again to use this change.")
         tryVerify(() => startupRow.implicitHeight > height)
         startupStore.revision++
         verify(note.visible)
@@ -807,6 +807,34 @@ TestCase {
         mouseClick(button); tryCompare(popup, "opened", true)
         mouseClick(testCase, 899, 599)
         tryCompare(popup, "visible", false)
+    }
+    Component {
+        id: narrowHelpRow
+        RedesignPreferenceRow {
+            width: 344; y: 100; z: 40
+            backend: store; optionName: "resize"
+            label: "Only allow one VLC window"
+        }
+    }
+    function test_narrowHelpClickDoesNotResetTheSetting() {
+        store.providedHelp = "Help for this setting."
+        store.stage("resize", false)
+        const row = createTemporaryObject(narrowHelpRow, testCase)
+        verify(row)
+        const help = findChild(row, "preferenceHelpIcon")
+        const popup = findChild(row, "preferenceHelpPopup")
+        const reset = findChild(row, "preferenceResetButton")
+        mouseMove(help, help.width / 2, help.height / 2)
+        mouseClick(help)
+        tryCompare(popup, "opened", true)
+        compare(store.value("resize"), false)
+        keyClick(Qt.Key_Escape)
+        tryCompare(popup, "visible", false)
+        mouseMove(reset, reset.width / 2, reset.height / 2)
+        tryCompare(reset, "visible", true)
+        mouseClick(reset)
+        compare(store.value("resize"), true)
+        testCase.forceActiveFocus(); mouseMove(testCase, 899, 599)
     }
     function test_helpSupportsKeyboardAndClosesWhenTheRowIsHidden() {
         store.providedHelp = "Help for this setting."

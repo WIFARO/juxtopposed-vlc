@@ -47753,3 +47753,219 @@ msgstr "%s\n快捷键：%s"
 #: modules/gui/qt/network/addonsmodel.cpp:770
 msgid "VLC cannot load the add-on list. Try again."
 msgstr "VLC 无法加载附加组件列表。请重试。"
+
+#: modules/gui/qt/dialogs/firstrun/firstrunwizard.cpp:121
+msgid "VLC cannot save the theme. Make sure that you have access to the settings folder. Try again."
+msgstr "VLC 无法保存主题。请检查设置文件夹后重试。"
+
+#: modules/gui/qt/dialogs/messages/messages.cpp:264
+msgid "This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again."
+msgstr "此窗口可能只显示较长日志消息的一部分。若要保留完整日志，请在设置中启用“保存日志”。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:728
+msgid "VLC cannot start the plugin scan. Make sure that the cache generator is installed."
+msgstr "VLC 无法启动插件扫描。请检查是否已安装缓存生成工具。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:735
+msgid "VLC cannot update the plugin cache. Make sure that you have access to the folder. Try again."
+msgstr "VLC 无法更新插件缓存。请检查文件夹访问权限后重试。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:737
+msgid "VLC updated the plugin cache. Close VLC. Start VLC again to use plugin changes."
+msgstr "VLC 已更新插件缓存。请重启 VLC 以应用插件更改。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
+msgid "VLC cannot apply this profile. Make sure that its saved settings are correct."
+msgstr "VLC 无法应用此配置。请检查其已保存的设置。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1348
+msgid "VLC cannot apply this preset. Make sure that its saved settings are correct."
+msgstr "VLC 无法应用此预设。请检查其中保存的设置。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1699
+msgid "Select the messages to save in the log file. After a change, close VLC. Start VLC again."
+msgstr "选择要保存到日志文件的消息。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1714
+msgid "VLC examines plugin files and updates the plugin cache. After the scan, close VLC. Start VLC again to use plugin changes."
+msgstr "检查插件文件并更新插件缓存。扫描后请重启 VLC 以应用插件更改。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1763
+msgid "Automatic lets VLC select a decoder device. Off uses software decoding and keeps your saved device choice. Open the video again after a change."
+msgstr "“自动”让 VLC 选择解码设备。“关闭”使用软件解码，并保留已保存的设备选择。更改后请重新打开视频。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1791
+msgid "Automatic detects UTF-8 text first. If detection fails, VLC uses the default text encoding. Select a specific encoding to turn off this detection. Open the subtitle file again after a change."
+msgstr "“自动”会先检测 UTF-8 文本。检测失败时，VLC 使用默认文本编码。选择特定编码可关闭此检测。更改后请重新打开字幕文件。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1938
+msgid "Select a track for the next video. Track numbers start at 1. Automatic uses the language setting."
+msgstr "选择下一视频使用的轨道。轨道编号从 1 开始。“自动”使用语言设置。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1947
+msgid "Select a language. System language uses your system's language. Select Custom to enter a language order. Separate names or codes with commas. This sets the track to Automatic for the next file."
+msgstr "选择语言。“系统语言”使用系统的语言。选择“自定义”可输入语言优先顺序。名称或代码之间用逗号分隔。下一文件的轨道选择会设为“自动”。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1965
+msgid "Select the device to use for audio. If the device is not connected, VLC uses the audio driver's default device."
+msgstr "选择音频使用的设备。设备断开连接时，会改用音频驱动程序的默认设备。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:1976
+msgid "Control VLC from a web browser. After you change the web remote, port or password, close VLC. Start VLC again."
+msgstr "通过网页浏览器控制 VLC。更改网页远程控制、端口或密码后，请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2004
+msgid "Request a higher process priority from the system. After a change, close VLC. Start VLC again."
+msgstr "向系统请求更高的进程优先级。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2033
+msgid "Select an audio output driver. Close VLC. Start VLC again to use a new driver."
+msgstr "选择音频输出驱动程序。请重启 VLC 以使用新驱动程序。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2110
+msgid "Select how closely subtitle file names must match the video title."
+msgstr "选择字幕文件名与视频标题所需的匹配程度。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2157
+msgid "Save messages to a file. After a change, close VLC. Start VLC again."
+msgstr "将消息保存到文件。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2159
+msgid "Select the log file. VLC adds new messages to the end of this file. After a change, close VLC. Start VLC again."
+msgstr "选择日志文件。VLC 会将新消息追加到文件末尾。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2161
+msgid "Select plain text or HTML for the log file. After a change, close VLC. Start VLC again."
+msgstr "选择纯文本或 HTML 日志格式。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2163
+msgid "Select the VLC log level. File logs can use this level or a separate file log level. After a change, close VLC. Start VLC again."
+msgstr "选择 VLC 日志级别。文件日志可使用此级别或独立的文件日志级别。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2167
+msgid "Start VLC in the system tray. This turns on the tray icon. After a change, close VLC. Start VLC again."
+msgstr "将 VLC 启动到系统托盘。此操作也会启用托盘图标。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2171
+msgid "Select how long VLC shows the track popup. The system can change this time."
+msgstr "选择曲目通知的显示时长。系统可能更改此时长。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2183
+msgid "Start VLC in compact mode. After a change, close VLC. Start VLC again. Launch options can override this setting."
+msgstr "以紧凑模式启动 VLC。更改后请重启 VLC。启动选项可能覆盖此设置。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2185
+msgid "Add internal interface information, warnings and errors to the VLC log. Use Log details to select which messages to save."
+msgstr "将界面内部信息、警告和错误添加到 VLC 日志。使用“日志详细程度”选择要保存的消息。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2196
+msgid "Select a language for the interface. Changes apply at once. If text has no translation, VLC shows it in English."
+msgstr "选择界面语言。更改将立即生效。未翻译的文字将以英语显示。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2218
+msgid "Enter VLC options only. Use quotes for text with spaces. The launch command takes priority. After a change, close VLC. Start VLC again. Use --ignore-config to start without saved options."
+msgstr "仅输入 VLC 选项。含空格的文本请用引号括起。启动命令优先。更改后请重启 VLC。使用 --ignore-config 可忽略已保存选项启动。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2239
+msgid "Close VLC. Start VLC again to use this option. A command-line option can stop VLC from reading file information."
+msgstr "请重启 VLC 以应用此选项。命令行选项可能阻止 VLC 读取文件信息。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2240
+msgid "Turn on \"Read file metadata automatically\" in Advanced Options. Close VLC. Start VLC again to use this option."
+msgstr "请在“高级选项”中启用“自动读取文件元数据”，然后重启 VLC 以使用此选项。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2245
+msgid "Read file information for items added to the queue. After a change, close VLC. Start VLC again."
+msgstr "读取添加到队列中项目的文件信息。更改后请重启 VLC。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2613
+msgid "Enter VLC options only. Make sure that the option names and quotation marks are correct."
+msgstr "仅输入 VLC 选项。请检查选项名称和引号。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2626
+msgid "Select a language from the list."
+msgstr "请从列表中选择语言。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2851 modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3161
+msgid "VLC cannot restore the settings file. Close VLC. Start VLC again. Make sure that your settings are correct."
+msgstr "VLC 无法恢复设置文件。请重启 VLC 并检查设置。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:3299
+msgid "Select color"
+msgstr "选择颜色"
+
+#: modules/gui/qt/medialibrary/medialib.cpp:296
+msgid "VLC cannot rescan this folder. Make sure that you can read the folder. Try again."
+msgstr "VLC 无法重新扫描此文件夹。请检查文件夹后重试。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignAddToPlaylistDialog.qml:128
+msgid "Select a Playlist"
+msgstr "选择播放列表"
+
+#: modules/gui/qt/player/qml/redesign/RedesignFolderInfo.qml:28
+msgid "VLC cannot read this folder. Make sure that you can read the folder. Try again."
+msgstr "VLC 无法读取此文件夹。请检查文件夹后重试。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:45
+msgid "VLC cannot open these streams. Make sure that the links are correct. Try again."
+msgstr "VLC 无法打开这些流。请检查链接后重试。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignNetworkDialog.qml:159
+msgid "To save a playlist, turn on the media library in Settings. Close VLC. Start VLC again."
+msgstr "要保存播放列表，请在设置中启用媒体库，然后重启 VLC。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignOnboardingView.qml:89
+msgid "Select a media folder to start with"
+msgstr "先选择一个媒体文件夹"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPlayerPreset.qml:243
+msgid "Save all VLC settings in this profile. Some settings apply to the next file or after you close VLC and start it again."
+msgstr "将 VLC 的所有设置保存在此配置中。部分设置将在下一个文件或重新启动 VLC 后生效。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferenceRow.qml:204
+msgid "Close VLC. Start VLC again to use this change."
+msgstr "请重启 VLC 以应用此更改。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesCatalog.qml:53
+msgid "Show a border and title bar on a separate video window. Close VLC. Start VLC again to use this setting."
+msgstr "为独立视频窗口显示边框和标题栏。请重启 VLC 以应用此设置。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:83
+msgid "This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again."
+msgstr "此操作会将 VLC 的所有设置恢复为默认设置。操作后请重启 VLC。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPreferencesWindow.qml:153
+msgid "VLC saved the default settings. Close VLC. Start VLC again to use all settings."
+msgstr "VLC 已保存默认设置。请重启 VLC 以应用全部设置。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignSubtitleProviderSetup.qml:24
+msgid "VLC cannot save this change. Make sure that the key is correct. Try again."
+msgstr "VLC 无法保存此更改。请检查密钥后重试。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:288
+msgid "VLC cannot save the API key. Make sure that the API key is correct. Try again."
+msgstr "VLC 无法保存 API 密钥。请检查后重试。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:621
+msgid "Select a folder or select track files from your computer."
+msgstr "请选择文件夹，或从计算机中选择轨道文件。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:754
+msgid "Select files…"
+msgstr "选择文件…"
+
+#: modules/gui/qt/player/qml/redesign/RedesignVideoSettings.qml:462
+msgid "Select %1 color"
+msgstr "选择 %1 的颜色"
+
+#: modules/gui/qt/player/qml/redesign/RedesignPlaylistTrackTarget.qml:85
+msgid "Select a file. Then select the tracks for that file."
+msgstr "选择文件，然后为该文件选择轨道。"
+
+#: modules/gui/qt/player/qml/redesign/RedesignTrackAssignmentDialog.qml:621
+msgid "Paste a direct subtitle file link. Then select Add."
+msgstr "粘贴字幕文件的直接链接，然后选择“添加”。"
+
+#: modules/gui/qt/dialogs/preferences/redesign_preferences.cpp:2253
+msgid "Use one VLC window for app launches. The file manager option also includes files that you open from the file manager. After you turn this on, close all VLC windows. Start VLC again. Command-line options can override these settings."
+msgstr "再次启动应用时使用同一个 VLC 窗口。文件管理器选项还包括从文件管理器打开的文件。启用后请关闭所有 VLC 窗口，再重新启动。命令行选项可能覆盖这些设置。"

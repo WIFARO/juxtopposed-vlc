@@ -261,7 +261,7 @@ void MessagesDialog::updateHistoryInfo()
     if (m_skippedMessages)
         text += QLatin1Char('\n') + qtr("Log messages not shown: %1").arg(QLocale().toString(m_skippedMessages));
     m_historyInfo->setText(text);
-    const auto help = qtr("This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. Restart VLC after this change.");
+    const auto help = qtr("This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again.");
     m_historyInfo->setToolTip(QStringLiteral("<qt>%1</qt>").arg(help.toHtmlEscaped()));
     m_historyInfo->setAccessibleDescription(help);
 }
