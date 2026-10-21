@@ -116,6 +116,17 @@ TestCase {
         compare(message.textFormat, Text.PlainText)
         verify(message.visible)
     }
+    function test_failedDiscoveryDoesNotLookLikeAnEmptyResult() {
+        store.records = []; store.rebuild(); page.discoveryRequested = true; wait(20)
+        verify(item("addonsEmptyState").visible)
+        store.errorMessage = "VLC cannot load the add-on list. Try again."; wait(20)
+        verify(item("addonsError").visible); verify(!item("addonsEmptyState").visible)
+        store.errorMessage = ""; store.loading = true; wait(20)
+        verify(item("addonsEmptyState").visible)
+        compare(item("addonsEmptyState").text, "Loading add-ons…")
+        store.loading = false; wait(20)
+        compare(item("addonsEmptyState").text, "No add-ons found.")
+    }
     function test_detailsUseTheStableIdAndKeepMetadataLiteral() {
         store.records[0] = Object.assign({}, store.records[0], {
             name: "<Title>", author: "<Author>", version: "1.2", typeLabel: "Extensions",

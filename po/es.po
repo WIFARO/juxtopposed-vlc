@@ -51093,3 +51093,8 @@ msgstr "VLC no puede guardar estos perfiles. Elimine los perfiles que no use."
 #, c-format
 msgid "%s\nShortcut: %s"
 msgstr "%s\nAtajo: %s"
+
+#. Add-on discovery failed; the user can retry with Find more extensions.
+#: modules/gui/qt/network/addonsmodel.cpp:770
+msgid "VLC cannot load the add-on list. Try again."
+msgstr "VLC no puede cargar la lista de complementos. Inténtelo de nuevo."

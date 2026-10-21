@@ -47219,3 +47219,8 @@ msgstr "O VLC não consegue guardar estes perfis. Remova os perfis não utilizad
 #, c-format
 msgid "%s\nShortcut: %s"
 msgstr "%s\nAtalho: %s"
+
+#. Add-on discovery failed; the user can retry with Find more extensions.
+#: modules/gui/qt/network/addonsmodel.cpp:770
+msgid "VLC cannot load the add-on list. Try again."
+msgstr "Não foi possível carregar a lista de extensões. Tente novamente."

@@ -81,8 +81,10 @@ ColumnLayout {
             }
         }
         Text {
+            objectName: "addonsEmptyState"
             anchors.centerIn: parent
-            visible: !list.count && (root.backend.loading || root.discoveryRequested || search.text.length > 0)
+            visible: !list.count && !root.actionMessage && !root.backend.errorMessage
+                && (root.backend.loading || root.discoveryRequested || search.text.length > 0)
             text: root.backend.loading ? qsTr("Loading add-ons…") : qsTr("No add-ons found.")
             color: theme.playerLabel; font.pixelSize: theme.dp(14)
         }
@@ -135,7 +137,7 @@ ColumnLayout {
                     objectName: "addonDetailsName"
                     Layout.fillWidth: true; Layout.minimumWidth: 0
                     text: root.selectedAddon.name || ""; textFormat: Text.PlainText
-                    color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; wrapMode: Text.WrapAnywhere
+                    color: theme.settingsHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; wrapMode: Text.Wrap
                 }
                 RedesignButton {
                     objectName: "addonDetailsClose"
@@ -192,7 +194,7 @@ ColumnLayout {
         }
     }
     component DetailText: TextEdit {
-        readOnly: true; selectByMouse: true; textFormat: TextEdit.PlainText; wrapMode: TextEdit.WrapAnywhere
+        readOnly: true; selectByMouse: true; textFormat: TextEdit.PlainText; wrapMode: TextEdit.Wrap
         color: theme.foreground; font.pixelSize: theme.dp(13)
         selectionColor: theme.accent; selectedTextColor: theme.field
         Layout.preferredHeight: contentHeight

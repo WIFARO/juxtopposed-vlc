@@ -39447,3 +39447,8 @@ msgstr "VLC kann diese Profile nicht speichern. Entfernen Sie unbenutzte Profile
 #, c-format
 msgid "%s\nShortcut: %s"
 msgstr "%s\nTastenkürzel: %s"
+
+#. Add-on discovery failed; the user can retry with Find more extensions.
+#: modules/gui/qt/network/addonsmodel.cpp:770
+msgid "VLC cannot load the add-on list. Try again."
+msgstr "VLC kann die Erweiterungsliste nicht laden. Versuchen Sie es erneut."

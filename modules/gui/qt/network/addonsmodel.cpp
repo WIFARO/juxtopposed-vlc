@@ -175,6 +175,9 @@ public:
         Q_Q(AddonsModel);
         if (!m_manager)
             return false;
+        m_error.clear();
+        m_revision++;
+        emit q->catalogChanged();
         m_loading = true;
         emit q->loadingChanged();
         addons_manager_Gather( m_manager, uri);
@@ -201,7 +204,7 @@ public: //BaseModelPrivateT implementation
 public: //discovery callbacks
     void addonFound( AddonPtr addon );
     void addonChanged( AddonPtr addon, addon_state_t state );
-    void discoveryEnded();
+    void discoveryEnded(int status);
 
 public: //LocalListCacheLoader implementation
     //return the data matching the pattern
@@ -675,9 +678,10 @@ static void addonFoundCallback( addons_manager_t *manager, addon_entry_t *entry 
 static void addonsDiscoveryEndedCallback( addons_manager_t *manager )
 {
     AddonsModelPrivate* d = (AddonsModelPrivate*) manager->owner.sys;
-    QMetaObject::invokeMethod( d->q_func(), [d]()
+    const int status = addons_manager_GetDiscoveryStatus(manager);
+    QMetaObject::invokeMethod( d->q_func(), [d, status]()
         {
-            d->discoveryEnded();
+            d->discoveryEnded(status);
         }, Qt::QueuedConnection);
 }
 
@@ -757,10 +761,12 @@ void AddonsModelPrivate::addonChanged( AddonPtr addon, addon_state_t state )
     emit q_func()->catalogChanged();
 }
 
-void AddonsModelPrivate::discoveryEnded()
+void AddonsModelPrivate::discoveryEnded(int status)
 {
     Q_Q(AddonsModel);
     assert( m_loading );
+    if (status != VLC_SUCCESS)
+        m_error = qtr("VLC cannot load the add-on list. Try again.");
     m_loading = false;
     emit q->loadingChanged();
     m_revision++;
