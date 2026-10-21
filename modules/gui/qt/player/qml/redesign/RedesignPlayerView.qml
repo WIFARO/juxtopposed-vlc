@@ -617,13 +617,15 @@ FocusScope {
             anchors.centerIn: parent === header ? header : undefined
             width: parent === header ? Math.max(0, header.width - Math.max(headerLeft.width,
                 windowControls.width - (closeButton.flushToCorner ? theme.dp(6) : 0)) * 2 - theme.dp(32)) : implicitWidth
-            implicitWidth: Math.min(theme.dp(220), titleLabel.implicitWidth + theme.dp(14))
+            implicitWidth: Math.min(theme.dp(220), titleLabel.implicitWidth - titleLabel.leftPadding + theme.dp(14))
             implicitHeight: theme.dp(36)
             Layout.fillWidth: true
             Text {
                 id: titleLabel
                 anchors.fill: parent
-                horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                horizontalAlignment: titleControl.inHeader ? Text.AlignHCenter : Text.AlignLeft
+                leftPadding: titleControl.inHeader ? 0 : theme.dp(6)
+                verticalAlignment: Text.AlignVCenter
                 text: root.mediaTitle
                 font.pixelSize: theme.dp(14)
                 elide: Text.ElideRight; color: theme.foreground
