@@ -51,6 +51,7 @@ struct addons_manager_private_t
         vlc_thread_t thread;
         vlc_cond_t waitcond;
         bool b_live;
+        int discovery_status;
         vlc_mutex_t lock;
         vlc_interrupt_t *p_interrupt;
         DECL_ARRAY(char*) uris;
@@ -166,6 +167,7 @@ addons_manager_t *addons_manager_New( vlc_object_t *p_this,
 
     INIT_QUEUE( finder )
     INIT_QUEUE( installer )
+    p_manager->p_priv->finder.discovery_status = VLC_SUCCESS;
     ARRAY_INIT( p_manager->p_priv->finder.uris );
 
     return p_manager;
@@ -329,6 +331,14 @@ static void finder_thread_interrupted( void* p_data )
     vlc_mutex_unlock( &p_manager->p_priv->finder.lock );
 }
 
+int addons_manager_GetDiscoveryStatus( addons_manager_t *p_manager )
+{
+    vlc_mutex_lock( &p_manager->p_priv->finder.lock );
+    int status = p_manager->p_priv->finder.discovery_status;
+    vlc_mutex_unlock( &p_manager->p_priv->finder.lock );
+    return status;
+}
+
 static void *FinderThread( void *p_data )
 {
     vlc_thread_set_name("vlc-addon-find");
@@ -367,8 +377,10 @@ static void *FinderThread( void *p_data )
         addons_finder_t *p_finder =
                 vlc_custom_create( p_manager->p_priv->p_parent, sizeof( *p_finder ), "entries finder" );
 
+        int status = VLC_ENOMEM;
         if( p_finder != NULL )
         {
+            status = VLC_EGENERIC;
             p_finder->obj.no_interact = true;
             module_t *p_module;
             ARRAY_INIT( p_finder->entries );
@@ -377,14 +389,18 @@ static void *FinderThread( void *p_data )
             p_module = module_need( p_finder, "addons finder", NULL, false );
             if( p_module )
             {
-                p_finder->pf_find( p_finder );
+                status = p_finder->pf_find( p_finder );
                 module_unneed( p_finder, p_module );
                 MergeSources( p_manager, p_finder->entries.p_elems, p_finder->entries.i_size );
             }
             ARRAY_RESET( p_finder->entries );
-            free( psz_uri );
             vlc_object_delete(p_finder);
         }
+        free( psz_uri );
+
+        vlc_mutex_lock( &p_manager->p_priv->finder.lock );
+        p_manager->p_priv->finder.discovery_status = status;
+        vlc_mutex_unlock( &p_manager->p_priv->finder.lock );
 
         p_manager->owner.discovery_ended( p_manager );
     }

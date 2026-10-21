@@ -173,6 +173,14 @@ VLC_API int addons_manager_LoadCatalog( addons_manager_t * );
 VLC_API void addons_manager_Gather( addons_manager_t *, const char *psz_uri );
 
 /**
+ * Get the most recently completed discovery result (VLC_SUCCESS on success).
+ * Read this from the discovery_ended callback to associate it with that request.
+ * Before the first completed request the result is VLC_SUCCESS. This does not
+ * report whether discovery is currently running or how many entries it found.
+ */
+VLC_API int addons_manager_GetDiscoveryStatus( addons_manager_t * );
+
+/**
  * Install or Remove the addon identified by its uuid
  */
 VLC_API int addons_manager_Install( addons_manager_t *p_manager, const addon_uuid_t uuid );

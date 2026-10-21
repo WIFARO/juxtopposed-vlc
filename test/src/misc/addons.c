@@ -16,7 +16,9 @@ const char vlc_module_name[] = MODULE_STRING;
 struct test_state {
     addon_entry_t *entries[2];
     unsigned count;
-    vlc_sem_t started;
+    vlc_sem_t started, ended;
+    int statuses[8];
+    unsigned discoveries;
 };
 
 static int Find(addons_finder_t *finder)
@@ -37,7 +39,9 @@ static int Find(addons_finder_t *finder)
 static vlc_sem_t finder_started;
 static int FindRepository(addons_finder_t *finder)
 {
-    (void)finder;
+    if (!strcmp(finder->psz_uri, "fixture://empty")) return VLC_SUCCESS;
+    if (!strcmp(finder->psz_uri, "fixture://failed")) return VLC_EGENERIC;
+    if (!strcmp(finder->psz_uri, "fixture://memory")) return VLC_ENOMEM;
     vlc_sem_post(&finder_started);
     vlc_poll_i11e(NULL, 0, -1);
     return VLC_EGENERIC;
@@ -90,7 +94,13 @@ static void Found(addons_manager_t *manager, addon_entry_t *entry)
     state->entries[state->count++] = addon_entry_Hold(entry);
 }
 
-static void Ended(addons_manager_t *manager) { (void)manager; }
+static void Ended(addons_manager_t *manager)
+{
+    struct test_state *state = manager->owner.sys;
+    assert(state->discoveries < ARRAY_SIZE(state->statuses));
+    state->statuses[state->discoveries++] = addons_manager_GetDiscoveryStatus(manager);
+    vlc_sem_post(&state->ended);
+}
 
 static void Changed(addons_manager_t *manager, addon_entry_t *entry)
 {
@@ -112,6 +122,7 @@ int main(void)
     assert(instance != NULL);
     struct test_state state = {0};
     vlc_sem_init(&state.started, 0);
+    vlc_sem_init(&state.ended, 0);
     vlc_sem_init(&finder_started, 0);
     struct addons_manager_owner owner = {&state, Found, Ended, Changed};
     addons_manager_t *manager = addons_manager_New(VLC_OBJECT(instance->p_libvlc_int), &owner);
@@ -130,9 +141,28 @@ int main(void)
 
     manager = addons_manager_New(VLC_OBJECT(instance->p_libvlc_int), &owner);
     assert(manager != NULL);
+    assert(addons_manager_GetDiscoveryStatus(manager) == VLC_SUCCESS);
+    const char *uris[] = {"fixture://empty", "fixture://failed", "fixture://memory",
+                          "fixture://empty", "fixture://failed"};
+    const int expected[] = {VLC_SUCCESS, VLC_EGENERIC, VLC_ENOMEM, VLC_SUCCESS,
+                            VLC_EGENERIC};
+    for (size_t i = 0; i < ARRAY_SIZE(uris); ++i)
+        addons_manager_Gather(manager, uris[i]);
+    for (size_t i = 0; i < ARRAY_SIZE(uris); ++i) {
+        vlc_sem_wait(&state.ended);
+        assert(state.statuses[i] == expected[i]);
+    }
+    assert(state.discoveries == ARRAY_SIZE(uris));
+    assert(addons_manager_GetDiscoveryStatus(manager) == VLC_EGENERIC);
+    assert(state.count == 2); /* Empty success is not inferred from a row count. */
+    addons_manager_Delete(manager);
+
+    manager = addons_manager_New(VLC_OBJECT(instance->p_libvlc_int), &owner);
+    assert(manager != NULL);
     addons_manager_Gather(manager, "fixture://repository");
     vlc_sem_wait(&finder_started);
     addons_manager_Delete(manager);
     libvlc_release(instance);
+    printf("Add-on discovery: %zu queued results passed.\n", ARRAY_SIZE(uris));
     return 0;
 }
