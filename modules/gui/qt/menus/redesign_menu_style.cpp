@@ -15,8 +15,24 @@
 #include <QPainter>
 #include <QEvent>
 #include <QScopedValueRollback>
+#include <QStringList>
 
 namespace {
+QString shortcutText(const QString& text)
+{
+    auto chords = text.split(QStringLiteral(", "));
+    for (auto& chord : chords) {
+        const bool plusKey = chord.endsWith(QStringLiteral("++"));
+        // Native modifier symbols can sit directly beside a literal plus key.
+        if (!plusKey && chord.endsWith(QLatin1Char('+'))) continue;
+        if (plusKey) chord.chop(1);
+        if (chord != QLatin1String("+"))
+            chord.replace(QLatin1Char('+'), QStringLiteral(" + "));
+        if (plusKey) chord += QLatin1Char('+');
+    }
+    return chords.join(QStringLiteral(", "));
+}
+
 class RedesignMenuMask final : public QObject
 {
 public:
@@ -53,6 +69,7 @@ public:
         m_background = QColor(light ? "#acacac" : "#191919");
         m_background.setAlpha(ctx->backdropBlurRequested() ? 230 : 255);
         m_foreground = QColor(light ? "#404040" : "#8f8f8f");
+        m_shortcutForeground = QColor(light ? "#404040" : "#6b6b6b");
         m_disabled = QColor(light ? "#737373" : "#595959");
         m_hover = QColor(light ? "#d5d5d5" : "#1f1f1f");
         m_border = QColor(light ? "#969696" : "#222222");
@@ -79,10 +96,12 @@ public:
                 if (item->menuItemType == QStyleOptionMenuItem::Separator) return QSize(1, dp(1));
                 if (item->menuItemType == QStyleOptionMenuItem::Normal || item->menuItemType == QStyleOptionMenuItem::DefaultItem || item->menuItemType == QStyleOptionMenuItem::SubMenu) {
                     const auto label = item->text.section(QLatin1Char('\t'), 0, 0);
-                    const auto hint = item->text.section(QLatin1Char('\t'), 1);
+                    const auto rawHint = item->text.section(QLatin1Char('\t'), 1);
+                    const auto hint = shortcutText(rawHint);
                     // QMenu adds the shared shortcut column after it measures each item.
                     const int trailing = item->menuItemType == QStyleOptionMenuItem::SubMenu ? dp(m_compact ? 28 : 44) : hint.isEmpty() ? dp(12) : dp(28);
-                    return QSize(textInset(item) + item->fontMetrics.horizontalAdvance(label) + trailing, dp(m_compact ? 28 : 48));
+                    const int hintExtra = item->fontMetrics.horizontalAdvance(hint) - item->fontMetrics.horizontalAdvance(rawHint);
+                    return QSize(textInset(item) + item->fontMetrics.horizontalAdvance(label) + trailing + hintExtra, dp(m_compact ? 28 : 48));
                 }
             }
         }
@@ -167,7 +186,7 @@ public:
             painter->drawPath(check);
         }
         const auto label = item->text.section(QLatin1Char('\t'), 0, 0);
-        const auto hint = item->text.section(QLatin1Char('\t'), 1);
+        const auto hint = shortcutText(item->text.section(QLatin1Char('\t'), 1));
         int trailing = dp(12);
         painter->setFont(item->font);
         if (item->menuItemType == QStyleOptionMenuItem::SubMenu) {
@@ -182,8 +201,7 @@ public:
             trailing = dp(m_compact ? 28 : 44);
         } else if (!hint.isEmpty()) {
             const int width = item->fontMetrics.horizontalAdvance(hint);
-            QColor hintColor = foreground;
-            hintColor.setAlpha(166);
+            const QColor hintColor = enabled ? m_shortcutForeground : m_disabled;
             painter->setPen(hintColor);
             painter->drawText(visual(QRect(rect.right() - dp(12) - width + 1, rect.y(), width, rect.height())), Qt::AlignVCenter | Qt::AlignLeading, hint);
             trailing += width + dp(16);
@@ -203,7 +221,7 @@ private:
     }
     bool m_compact = false;
     qreal m_scale = 1;
-    QColor m_background, m_foreground, m_disabled, m_hover, m_border, m_accent;
+    QColor m_background, m_foreground, m_shortcutForeground, m_disabled, m_hover, m_border, m_accent;
 };
 
 }

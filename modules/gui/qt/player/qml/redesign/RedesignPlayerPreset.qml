@@ -182,7 +182,7 @@ Item {
                 actions.itemAt(actions.currentIndex).forceActiveFocus()
                 event.accepted = true
             }
-            contentItem: Text { text: actionItem.text; color: root.theme.foreground; font.pixelSize: root.theme.dp(14); verticalAlignment: Text.AlignVCenter; leftPadding: root.theme.dp(root.theme.compactMenus ? 8 : 48) }
+            contentItem: Text { text: actionItem.text; color: root.theme.foreground; font.pixelSize: root.theme.dp(14); verticalAlignment: Text.AlignVCenter; leftPadding: root.theme.dp(root.theme.compactMenus ? 8 : 48); topPadding: root.theme.dp(root.theme.compactMenus ? 0 : 1) }
             background: Rectangle { color: !actionItem.highlighted ? "transparent" : root.lightTheme ? root.theme.hover : "#1f1f1f"; radius: root.theme.dp(6) }
         }
         C.Action { text: qsTr("Rename"); onTriggered: root.namePreset("rename", root.contextId, root.contextName) }

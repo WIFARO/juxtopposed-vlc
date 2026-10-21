@@ -110,6 +110,7 @@ ColumnLayout {
         property bool zoomControl: false
         property bool restrictChoices: false
         property real choiceHeight: 34
+        property real subsequentLabelOffset: 0
         property real popupGap: 4
         property var selectedValue: root.current(optionName)
         property string help
@@ -126,6 +127,7 @@ ColumnLayout {
             restrictChoices: parent.restrictChoices
             showSelectionMark: parent.restrictChoices
             choiceHeight: parent.choiceHeight
+            subsequentLabelOffset: parent.subsequentLabelOffset
             popupGap: parent.popupGap
             currentIndex: model.findIndex(row => row.value === parent.selectedValue)
             function restoreIndexBinding() {
@@ -276,7 +278,7 @@ ColumnLayout {
         enabled: root.hdrSupported
         opacity: enabled ? 1 : .5
         restrictChoices: true
-        choiceHeight: 46; popupGap: 20
+        choiceHeight: 46; popupGap: 20; subsequentLabelOffset: 1
         choices: [
             {label: qsTr("Auto"), value: "auto", enabled: root.supportsHdrPolicy("auto")},
             {label: qsTr("Off"), value: "never", enabled: root.supportsHdrPolicy("never")},

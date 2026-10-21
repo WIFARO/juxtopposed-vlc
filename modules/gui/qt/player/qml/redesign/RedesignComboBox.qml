@@ -14,6 +14,7 @@ C.ComboBox {
     // Opt in for array models whose unavailable rows have enabled: false.
     property bool restrictChoices: false
     property real choiceHeight: 34
+    property real subsequentLabelOffset: 0
     property real popupGap: 4
     property real popupBottomPadding: 2
     property Component videoBackdropContent
@@ -142,6 +143,8 @@ C.ComboBox {
                 text: root.labelAt(index); font: root.font; color: root.theme.foreground
                 opacity: choiceDelegate.enabled ? 1 : .4
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
+                Layout.topMargin: choiceDelegate.index > 0 && !root.theme.compactMenus ? root.theme.dp(root.subsequentLabelOffset) : 0
+                Layout.bottomMargin: -Layout.topMargin
             }
             Item {
                 objectName: "choiceSelectionMark"

@@ -71,7 +71,8 @@ C.Menu {
         property string hint: ""
         property int textElide: Text.ElideRight
         implicitHeight: root.theme.menuItemHeight
-        leftPadding: root.theme.dp(root.theme.compactMenus ? 8 : 16); rightPadding: leftPadding
+        leftPadding: root.theme.dp(root.theme.compactMenus ? 8 : 16)
+        rightPadding: root.theme.dp(root.theme.compactMenus ? 8 : row.hint.length > 0 ? 14 : 16)
         topPadding: 0; bottomPadding: 0
         hoverEnabled: true
         indicator: null
@@ -94,7 +95,7 @@ C.Menu {
                 font.pixelSize: root.theme.dp(14)
                 elide: row.textElide
             }
-            Text { text: row.hint; color: root.theme.foreground; opacity: 0.65; font.pixelSize: root.theme.dp(14) }
+            Text { text: row.hint; color: root.theme.playerLabel; font.pixelSize: root.theme.dp(14); horizontalAlignment: Text.AlignRight }
             RedesignIcon {
                 visible: !!row.subMenu
                 Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20)
@@ -116,12 +117,12 @@ C.Menu {
         contentItem: Rectangle { implicitHeight: root.theme.dp(1); color: root.theme.border }
     }
 
-    MenuRow { text: qsTr("Open File(s)"); glyph: "menu-file"; hint: "Ctrl+O"; onTriggered: root.activate("file") }
-    MenuRow { text: qsTr("Open Folder"); glyph: "menu-folder"; hint: "Ctrl+F"; onTriggered: root.activate("directory") }
-    MenuRow { text: qsTr("Open Network Stream"); glyph: "menu-network"; hint: "Ctrl+N"; onTriggered: root.activate("network") }
-    MenuRow { text: qsTr("Open Disc"); glyph: "menu-disc"; hint: "Ctrl+D"; onTriggered: root.activate("disc") }
-    MenuRow { text: qsTr("Open Capture Device"); glyph: "menu-capture"; hint: "Ctrl+C"; onTriggered: root.activate("capture") }
-    MenuRow { text: qsTr("Convert"); glyph: "menu-convert"; hint: "Ctrl+R"; onTriggered: root.activate("convert") }
+    MenuRow { text: qsTr("Open File(s)"); glyph: "menu-file"; hint: "Ctrl + O"; onTriggered: root.activate("file") }
+    MenuRow { text: qsTr("Open Folder"); glyph: "menu-folder"; hint: "Ctrl + F"; onTriggered: root.activate("directory") }
+    MenuRow { text: qsTr("Open Network Stream"); glyph: "menu-network"; hint: "Ctrl + N"; onTriggered: root.activate("network") }
+    MenuRow { text: qsTr("Open Disc"); glyph: "menu-disc"; hint: "Ctrl + D"; onTriggered: root.activate("disc") }
+    MenuRow { text: qsTr("Open Capture Device"); glyph: "menu-capture"; hint: "Ctrl + C"; onTriggered: root.activate("capture") }
+    MenuRow { text: qsTr("Convert"); glyph: "menu-convert"; hint: "Ctrl + R"; onTriggered: root.activate("convert") }
     C.Menu {
         id: recentMenu
         overlap: -root.theme.dp(11)
@@ -200,6 +201,6 @@ C.Menu {
     }
     MenuRow { text: qsTr("Keyboard Shortcuts"); glyph: "menu-keyboard"; onTriggered: root.activate("shortcuts") }
     MenuRow { text: qsTr("Customize Player"); glyph: "menu-customize"; onTriggered: root.activate("customize") }
-    MenuRow { text: qsTr("Settings"); glyph: "menu-settings"; hint: "Ctrl+P"; onTriggered: root.activate("settings") }
-    MenuRow { text: qsTr("About VLC"); glyph: "menu-about"; hint: "Shift+F1"; onTriggered: root.activate("about") }
+    MenuRow { text: qsTr("Settings"); glyph: "menu-settings"; hint: "Ctrl + P"; onTriggered: root.activate("settings") }
+    MenuRow { text: qsTr("About VLC"); glyph: "menu-about"; hint: "Shift + F1"; onTriggered: root.activate("about") }
 }
