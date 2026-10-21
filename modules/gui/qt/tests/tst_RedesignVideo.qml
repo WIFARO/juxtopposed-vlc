@@ -102,6 +102,23 @@ TestCase {
         compare(item("aspect-ratioChoice").displayText, "Default")
         compare(item("videoRotation").currentValue, 0)
     }
+    function test_wideLayoutKeepsFilterCardsCompactAndDefaultsWide() {
+        // The 693px reference has 24px and 20px outer content margins.
+        video.width = 649
+        tryCompare(item("videoEssentialSection"), "x", 142.5)
+        for (const name of ["Essential", "Crop", "Colors", "Geometry", "Overlay", "Advanced"]) {
+            const section = item("video" + name + "Section")
+            compare(section.x, 142.5, name)
+            compare(section.width, 360, name)
+        }
+        const zoom = item("zoomChoice")
+        compare(zoom.width, 220)
+        compare(zoom.mapToItem(video, 0, 0).x, 429)
+        video.width = 356
+        tryCompare(item("videoEssentialSection"), "x", -4)
+        for (const name of ["Essential", "Crop", "Colors", "Geometry", "Overlay", "Advanced"])
+            compare(item("video" + name + "Section").width, 360, name)
+    }
     function test_narrowPanelKeepsDefaultsAndColorFieldsInsideItsBounds() {
         video.width = 244
         item("videoColorsSection").expanded = true

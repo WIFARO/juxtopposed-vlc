@@ -34,7 +34,7 @@ ColumnLayout {
 
     RedesignTrackDefaults { Layout.fillWidth: true; subtitles: true; backend: root.backend; scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     Rectangle { Layout.fillWidth: true; Layout.leftMargin: -theme.dp(24); Layout.rightMargin: -theme.dp(20); Layout.topMargin: theme.dp(4); height: theme.dp(1); color: theme.border }
-    Text { objectName: "subtitleSynchronizationHeading"; Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(20); text: qsTr("Synchronization"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium }
+    Text { objectName: "subtitleSynchronizationHeading"; Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(20); text: qsTr("Synchronization"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; topPadding: theme.dp(1.5); bottomPadding: -topPadding }
     RedesignSettingSlider {
         objectName: "subtitleDelaySetting"
         Layout.fillWidth: true
@@ -71,7 +71,7 @@ ColumnLayout {
         onMoved: value => root.backend.stage("redesign-subtitle-duration", value)
     }
     Rectangle { Layout.fillWidth: true; Layout.leftMargin: -theme.dp(24); Layout.rightMargin: -theme.dp(20); Layout.topMargin: theme.dp(20); height: theme.dp(1); color: theme.border }
-    Text { objectName: "subtitleAppearanceHeading"; Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(6); text: qsTr("Appearance"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium }
+    Text { objectName: "subtitleAppearanceHeading"; Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(6); text: qsTr("Appearance"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; topPadding: theme.dp(-0.5); bottomPadding: -topPadding }
     RedesignPreferenceRow {
         objectName: "subtitleAppearance_sub-text-use-embedded-style"
         Layout.fillWidth: true

@@ -18,6 +18,8 @@ ColumnLayout {
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     signal trackRequested(int index)
     signal deinterlaceRequested(int index)
+    readonly property real filterInset: Math.max(0, (width - theme.dp(356)) / 2)
+    readonly property bool wideLayout: filterInset > theme.dp(0.5)
     spacing: 0
 
     function current(name) { backend.revision; liveRevision; return backend.videoValue(name) }
@@ -220,25 +222,37 @@ ColumnLayout {
         onToggled: checked => root.effect(sourceName, checked, "sub-source")
     }
 
-    Text { Layout.topMargin: theme.dp(12); Layout.bottomMargin: theme.dp(26); text: qsTr("Defaults"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium }
-    Text { Layout.bottomMargin: theme.dp(18); text: qsTr("Flip"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
-    RowLayout {
-        Layout.fillWidth: true; Layout.leftMargin: -theme.dp(4); Layout.preferredHeight: theme.dp(44); spacing: theme.dp(2)
-        Repeater {
-            model: [qsTr("None"), qsTr("Horizontal"), qsTr("Vertical")]
-            RedesignButton {
-                required property int index
-                required property string modelData
-                objectName: "videoFlip_" + index
-                Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.fillHeight: true
-                scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                foreground: theme.playerLabel
-                caption: modelData; text: qsTr("Flip: %1").arg(modelData); selected: root.flip === index
-                background: Rectangle { radius: theme.dp(4); color: parent.selected ? theme.progress : parent.hovered ? theme.hover : theme.background; border.color: parent.visualFocus ? theme.accent : theme.field }
-                onClicked: root.setFlip(index)
+    // Opposite padding aligns the reference ink and keeps the layout box.
+    Text { Layout.topMargin: theme.dp(12); Layout.bottomMargin: theme.dp(26); text: qsTr("Defaults"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; topPadding: theme.dp(-2.5); bottomPadding: -topPadding }
+    Text { Layout.bottomMargin: theme.dp(18); text: qsTr("Flip"); color: theme.playerLabel; font.pixelSize: theme.dp(14); topPadding: theme.dp(-2.5625); bottomPadding: -topPadding }
+    Rectangle {
+        objectName: "videoFlipSelector"
+        Layout.topMargin: -theme.dp(1); Layout.bottomMargin: theme.dp(1)
+        Layout.fillWidth: true; Layout.leftMargin: -theme.dp(4); Layout.preferredHeight: theme.dp(44)
+        radius: theme.dp(6); color: theme.field
+        RowLayout {
+            anchors.fill: parent; anchors.margins: theme.dp(2); spacing: theme.dp(2)
+            Repeater {
+                model: [qsTr("None"), qsTr("Horizontal"), qsTr("Vertical")]
+                RedesignButton {
+                    required property int index
+                    required property string modelData
+                    objectName: "videoFlip_" + index
+                    Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.fillHeight: true
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    foreground: theme.playerLabel
+                    caption: modelData; text: qsTr("Flip: %1").arg(modelData); selected: root.flip === index
+                    background: Rectangle {
+                        radius: theme.dp(4)
+                        color: parent.selected ? theme.progress : parent.hovered ? theme.hover : root.lightTheme ? theme.background : "#191919"
+                        border.width: parent.visualFocus ? 1 : 0; border.color: theme.accent
+                    }
+                    onClicked: root.setFlip(index)
+                }
             }
         }
     }
+
     RedesignSettingSlider {
         objectName: "videoRotation"
         Layout.fillWidth: true; Layout.topMargin: theme.dp(28); Layout.bottomMargin: theme.dp(16)
@@ -313,10 +327,11 @@ ColumnLayout {
             }
         }
     }
-    Rectangle { Layout.fillWidth: true; Layout.leftMargin: -theme.dp(24); Layout.rightMargin: -theme.dp(20); Layout.topMargin: theme.dp(10); height: theme.dp(1); color: theme.border }
-    Text { Layout.topMargin: theme.dp(20); text: qsTr("Filters"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium }
+    Rectangle { Layout.fillWidth: true; Layout.leftMargin: root.filterInset - theme.dp(24); Layout.rightMargin: root.filterInset - theme.dp(20); Layout.topMargin: theme.dp(10); height: theme.dp(1); color: theme.border }
+    Text { Layout.leftMargin: root.filterInset; Layout.topMargin: theme.dp(20); text: qsTr("Filters"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; topPadding: theme.dp(-1.5); bottomPadding: -topPadding }
     RedesignFilterSection {
         objectName: "videoEssentialSection"
+        Layout.leftMargin: root.filterInset - theme.dp(4); Layout.rightMargin: root.filterInset
         contentTopMargin: 9; contentBottomMargin: 20
         Layout.fillWidth: true; label: qsTr("Essential")
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
@@ -335,6 +350,8 @@ ColumnLayout {
     RedesignFilterSection {
         id: cropSection
         objectName: "videoCropSection"
+        Layout.leftMargin: root.filterInset - theme.dp(4); Layout.rightMargin: root.filterInset
+        Layout.topMargin: root.wideLayout ? theme.dp(1) : 0
         Layout.fillWidth: true; label: qsTr("Crop"); contentTopMargin: 6
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         settings: ColumnLayout {
@@ -401,6 +418,8 @@ ColumnLayout {
     }
     RedesignFilterSection {
         objectName: "videoColorsSection"
+        Layout.leftMargin: root.filterInset - theme.dp(4); Layout.rightMargin: root.filterInset
+        Layout.topMargin: root.wideLayout ? theme.dp(1) : 0
         Layout.fillWidth: true; label: qsTr("Colors"); contentTopMargin: -4; contentBottomMargin: 20
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         settings: ColumnLayout {
@@ -491,6 +510,8 @@ ColumnLayout {
     }
     RedesignFilterSection {
         objectName: "videoGeometrySection"
+        Layout.leftMargin: root.filterInset - theme.dp(4); Layout.rightMargin: root.filterInset
+        Layout.topMargin: root.wideLayout ? theme.dp(1) : 0
         Layout.fillWidth: true; label: qsTr("Geometry")
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         settings: ColumnLayout {
@@ -515,6 +536,8 @@ ColumnLayout {
     }
     RedesignFilterSection {
         objectName: "videoOverlaySection"
+        Layout.leftMargin: root.filterInset - theme.dp(4); Layout.rightMargin: root.filterInset
+        Layout.topMargin: root.wideLayout ? theme.dp(1) : 0
         Layout.fillWidth: true; label: qsTr("Overlay")
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         settings: ColumnLayout {
@@ -572,6 +595,9 @@ ColumnLayout {
     }
     RedesignFilterSection {
         objectName: "videoAdvancedSection"
+        Layout.leftMargin: root.filterInset - theme.dp(4); Layout.rightMargin: root.filterInset
+        Layout.topMargin: root.wideLayout ? theme.dp(1) : 0
+        showSeparator: !root.wideLayout
         Layout.fillWidth: true; label: qsTr("Advanced")
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         settings: ColumnLayout {

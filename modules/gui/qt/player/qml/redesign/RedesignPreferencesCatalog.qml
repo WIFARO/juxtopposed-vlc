@@ -140,7 +140,7 @@ QtObject {
             { title: qsTr("Visualization"), rows: [ ["audio-visual", qsTr("Visualizer"), {choiceLabels: {none: qsTr("Disabled")}}] ] } ],
         subtitles: [
             { title: qsTr("Tracks & Languages"), rows: [ ["spu", qsTr("Enable subtitles")], ["redesign-sub-language", qsTr("Preferred language"), {editorHeight: 36}], ["redesign-subtitle-encoding", qsTr("Text encoding"), {dynamicChoices: true}] ] },
-            { title: qsTr("Loading Subtitles"), rows: [ ["sub-autodetect-file", qsTr("Load subtitle files automatically")], ["sub-autodetect-fuzzy", qsTr("File name matching"), {dynamicChoices: true}] ] },
+            { title: qsTr("Loading Subtitles"), rows: [ ["sub-autodetect-file", qsTr("Load subtitle files automatically")], ["sub-autodetect-fuzzy", qsTr("File name matching"), {dynamicChoices: true, showSelectionMark: true, choiceHeight: 46, popupGap: 20}] ] },
             { title: qsTr("Appearance"), rows: [ ["freetype-font", qsTr("Font"), {placeholder: qsTr("System, sans-serif")}],
                 ["sub-text-size-mode", qsTr("Size values"), {editor: "segmented", editorHeight: 36, rowHeight: 48, inset: 2}],
                 ["redesign-subtitle-font-size", qsTr("Font size"), {dynamicChoices: true, editorHeight: 36, hideHelp: true}],

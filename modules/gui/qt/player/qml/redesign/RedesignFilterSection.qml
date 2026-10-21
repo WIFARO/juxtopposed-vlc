@@ -6,6 +6,7 @@ ColumnLayout {
     id: root
     property string label
     property bool expanded: false
+    property bool showSeparator: true
     property real contentTopMargin: 10
     property real contentBottomMargin: 16
     property Component settings
@@ -18,7 +19,8 @@ ColumnLayout {
     spacing: 0
     Text {
         Layout.fillWidth: true; Layout.leftMargin: theme.dp(4); Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(18)
-        text: root.label; color: theme.playerLabel; font.pixelSize: theme.dp(14)
+        // Preserve the label box while aligning the Inter outline.
+        text: root.label; color: theme.playerLabel; font.pixelSize: theme.dp(14); topPadding: theme.dp(-1.5625); bottomPadding: -topPadding
     }
     Rectangle {
         Layout.fillWidth: true
@@ -54,6 +56,8 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true; Layout.leftMargin: -theme.dp(20); Layout.rightMargin: -theme.dp(20)
         Layout.topMargin: theme.dp(20)
-        height: theme.dp(1); color: theme.border
+        Layout.preferredHeight: root.showSeparator ? theme.dp(1) : 0
+        Layout.maximumHeight: Layout.preferredHeight
+        color: theme.border
     }
 }

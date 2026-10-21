@@ -79,7 +79,7 @@ ColumnLayout {
         objectName: "audioSynchronizationHeading"
         leftPadding: theme.dp(4)
         Layout.fillWidth: true; Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(18)
-        text: qsTr("Synchronization"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
+        text: qsTr("Synchronization"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; topPadding: theme.dp(-2.5); bottomPadding: -topPadding
     }
     RedesignSettingSlider {
         objectName: "audioDelaySetting"
@@ -102,7 +102,7 @@ ColumnLayout {
         objectName: "audioFiltersHeading"
         leftPadding: theme.dp(4)
         Layout.fillWidth: true; Layout.topMargin: theme.dp(20); Layout.bottomMargin: theme.dp(8)
-        text: qsTr("Filters"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium
+        text: qsTr("Filters"); color: theme.playerHeading; font.pixelSize: theme.dp(16); font.weight: Font.Medium; topPadding: theme.dp(-1.5); bottomPadding: -topPadding
     }
     Text {
         Layout.fillWidth: true; Layout.minimumHeight: theme.dp(36)

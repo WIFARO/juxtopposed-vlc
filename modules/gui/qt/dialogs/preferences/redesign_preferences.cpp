@@ -2090,9 +2090,9 @@ QVariantMap RedesignPreferences::describe(const QString& name) const
     }
     if (name == QLatin1String("sub-autodetect-fuzzy")) {
         choices = {
-            QVariantMap{{QStringLiteral("label"), qtr("None")}, {QStringLiteral("value"), 0}},
-            QVariantMap{{QStringLiteral("label"), qtr("Any subtitle file")}, {QStringLiteral("value"), 1}},
-            QVariantMap{{QStringLiteral("label"), qtr("File name contains title")}, {QStringLiteral("value"), 2}},
+            QVariantMap{{QStringLiteral("label"), qtr("Off")}, {QStringLiteral("value"), 0}},
+            QVariantMap{{QStringLiteral("label"), qtr("Any title")}, {QStringLiteral("value"), 1}},
+            QVariantMap{{QStringLiteral("label"), qtr("Contains title")}, {QStringLiteral("value"), 2}},
             QVariantMap{{QStringLiteral("label"), qtr("Title with extra characters")}, {QStringLiteral("value"), 3}},
             QVariantMap{{QStringLiteral("label"), qtr("Exact title match")}, {QStringLiteral("value"), 4}}
         };

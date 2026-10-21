@@ -547,9 +547,12 @@ ColumnLayout {
             objectName: "preferenceChoiceEditor"
             leftPadding: theme.dp(root.compact ? 14 : 16)
             Accessible.name: root.label || root.description.title
-            implicitHeight: theme.dp(36)
+            implicitHeight: theme.dp(root.presentation.editorHeight || 36)
             model: root.choices; textRole: "label"; valueRole: "value"
             showCurvePreviews: root.choices.some(row => row.curve !== undefined)
+            showSelectionMark: !!root.presentation.showSelectionMark || showCurvePreviews
+            choiceHeight: root.presentation.choiceHeight || 34
+            popupGap: root.presentation.popupGap !== undefined ? root.presentation.popupGap : 4
             currentIndex: {
                 for (let i = 0; i < count; ++i) if (model[i].value == root.displayedValue) return i
                 return -1
