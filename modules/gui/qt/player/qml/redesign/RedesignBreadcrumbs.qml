@@ -12,8 +12,8 @@ C.Control {
     property var entries: []
     signal activated(int index)
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
-    readonly property real separatorWidth: theme.dp(14)
-    readonly property real overflowWidth: theme.dp(20)
+    readonly property real separatorWidth: theme.dp(20)
+    readonly property real overflowWidth: theme.dp(14)
     readonly property var widths: {
         // Measurement methods do not establish a dependency on their font.
         const normalFont = metrics.font

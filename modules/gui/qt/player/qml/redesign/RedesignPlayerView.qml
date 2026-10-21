@@ -79,7 +79,7 @@ FocusScope {
     property string mediaTitle: qsTr("VLC Media Player")
     property string locationTitle: qsTr("Videos")
     property string timeText: "00:00:00"
-    property real timeLabelFontSize: 14
+    property real timeLabelFontSize: 15
     property string lengthText: "00:00:00"
     property string artist: ""
     property url artwork
@@ -587,6 +587,8 @@ FocusScope {
             ChromeButton {
                 id: mediaFolderButton
                 objectName: "mediaFolderButton"
+                captionVerticalOffset: 1
+                implicitWidth: Math.max(theme.dp(36), contentItem.implicitWidth + theme.dp(15))
                 property bool hasMediaFolder: root.started && root.canBrowseMedia && root.mediaFolderTitle.length > 0
                 visible: !root.presentationOnly && !root.libraryExpanded && root.width > theme.dp(700)
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
@@ -613,7 +615,7 @@ FocusScope {
             anchors.centerIn: parent === header ? header : undefined
             width: parent === header ? Math.max(0, header.width - Math.max(headerLeft.width,
                 windowControls.width - (closeButton.flushToCorner ? theme.dp(6) : 0)) * 2 - theme.dp(32)) : implicitWidth
-            implicitWidth: Math.min(theme.dp(220), titleLabel.implicitWidth + theme.dp(16))
+            implicitWidth: Math.min(theme.dp(220), titleLabel.implicitWidth + theme.dp(14))
             implicitHeight: theme.dp(36)
             Layout.fillWidth: true
             Text {

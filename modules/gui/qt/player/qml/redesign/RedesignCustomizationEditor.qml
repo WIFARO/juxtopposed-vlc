@@ -144,8 +144,9 @@ Item {
         if (id === "folder") return Qt.rect(actual.x + dp(6), actual.y + (actual.height - dp(28)) / 2,
             Math.max(0, actual.width - dp(9)), dp(28))
         if (id === "title") {
-            const width = Math.min(actual.width, control.implicitWidth)
-            return Qt.rect(actual.x + (actual.width - width) / 2, actual.y + dp(4), width, Math.max(0, actual.height - dp(8)))
+            const width = Math.min(actual.width, Math.ceil(control.implicitWidth / root.player.scaleFactor) * root.player.scaleFactor)
+            const height = Math.max(0, actual.height - dp(9))
+            return Qt.rect(actual.x + (actual.width - width) / 2, actual.y + (actual.height - height) / 2, width, height)
         }
         if (["minimize", "maximize", "fullscreen", "close"].includes(id)) {
             const rect = centered(actual.width / root.player.scaleFactor, 24)
@@ -361,7 +362,7 @@ Item {
                 Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: parent.height / 2; color: parent.color }
             }
             Text {
-                x: root.theme.dp(20); y: root.theme.dp(10); height: root.theme.dp(32); width: parent.width - root.theme.dp(80)
+                x: root.theme.dp(19); y: root.theme.dp(9.5); height: root.theme.dp(32); width: parent.width - root.theme.dp(80)
                 text: qsTr("Customize Player"); color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
                 verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
             }
@@ -373,7 +374,7 @@ Item {
                 onClicked: root.cancel()
             }
             Text {
-                x: root.theme.dp(20); y: root.theme.dp(54); width: parent.width - root.theme.dp(40); height: root.theme.dp(34)
+                x: root.theme.dp(19); y: root.theme.dp(52.5); width: parent.width - root.theme.dp(40); height: root.theme.dp(34)
                 text: qsTr("Drag items to the player to add or move them. Drag items into this box to remove them.")
                 color: root.theme.playerLabel; font.pixelSize: root.theme.dp(14); wrapMode: Text.WordWrap; verticalAlignment: Text.AlignVCenter
             }
@@ -418,6 +419,7 @@ Item {
                     Keys.onEnterPressed: root.showPlacement(modelData.id, cell)
                     Keys.onSpacePressed: root.showPlacement(modelData.id, cell)
                     Outline {
+                        id: cellOutline
                         objectName: "customizePaletteOutline_" + cell.modelData.id
                         anchors.horizontalCenter: parent.horizontalCenter; y: root.theme.dp(14 - Math.max(0, cell.referenceRow - 2) * 4)
                         width: root.theme.dp(cell.outlineSize.width); height: root.theme.dp(cell.outlineSize.height)
@@ -425,7 +427,7 @@ Item {
                         RedesignIcon { anchors.centerIn: parent; width: root.theme.dp(24); height: width; name: cell.modelData.icon; color: cell.modelData.id === "thumbnail" ? root.theme.lightTheme ? "#a3a3a3" : "#303030" : root.theme.foreground }
                     }
                     Text {
-                        x: root.theme.dp(5); y: root.theme.dp(62 - Math.max(0, cell.referenceRow - 1) * 4)
+                        x: root.theme.dp(5); y: cellOutline.y + cellOutline.height + root.theme.dp(16.5)
                         width: parent.width - root.theme.dp(10); height: root.theme.dp(40)
                         text: root.paletteLabels[cell.modelData.id] || cell.modelData.label; textFormat: Text.PlainText
                         font.pixelSize: root.theme.dp(14); color: root.theme.foreground
@@ -443,7 +445,7 @@ Item {
                 objectName: "customizationCancel"
                 x: root.theme.dp(20); y: parent.height - root.theme.dp(52); width: root.theme.dp(100); height: root.theme.dp(32)
                 scaleFactor: root.theme.scaleFactor; lightTheme: root.theme.lightTheme; accentColor: root.theme.accentColor
-                caption: qsTr("Cancel"); captionFontWeight: Font.Medium; text: caption; enabled: !root.saving; onClicked: root.cancel()
+                caption: qsTr("Cancel"); captionFontWeight: Font.DemiBold; captionVerticalOffset: 1; text: caption; enabled: !root.saving; onClicked: root.cancel()
                 background: Rectangle { radius: root.theme.dp(6); color: parent.hovered ? root.theme.hover : root.theme.background; border.width: parent.visualFocus ? 1 : 0; border.color: root.theme.accent }
             }
             Text {
@@ -458,7 +460,7 @@ Item {
                 x: parent.width - width - root.theme.dp(20); y: parent.height - root.theme.dp(52); width: root.theme.dp(100); height: root.theme.dp(32)
                 scaleFactor: root.theme.scaleFactor; lightTheme: root.theme.lightTheme; accentColor: root.theme.accentColor
                 caption: qsTr("Save"); text: caption; enabled: root.model.dirty && !root.saving; onClicked: root.save()
-                primaryAction: true
+                primaryAction: true; captionFontWeight: Font.DemiBold; captionVerticalOffset: 1
             }
         }
     }

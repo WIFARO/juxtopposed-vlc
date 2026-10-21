@@ -429,7 +429,7 @@ Item {
                     width: theme.dp(32); height: theme.dp(42)
                     RedesignIcon { anchors.centerIn: parent; width: theme.dp(24); height: width; name: "add"; color: theme.playerLabel }
                 }
-                Text { anchors.verticalCenter: parent.verticalCenter; text: root.addLabel; color: theme.playerLabel; font.pixelSize: theme.dp(14) }
+                Text { anchors.verticalCenter: parent.verticalCenter; anchors.verticalCenterOffset: theme.dp(1); text: root.addLabel; color: theme.playerLabel; font.pixelSize: theme.dp(14) }
             }
         }
         RedesignHomeView {

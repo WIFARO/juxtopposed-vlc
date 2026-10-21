@@ -43,7 +43,7 @@ Flickable {
                             id: sectionTitle
                             anchors.left: parent.left; anchors.right: arrow.left; anchors.verticalCenter: parent.verticalCenter
                             text: section.modelData.title; elide: Text.ElideRight
-                            color: root.theme.foreground; font.pixelSize: root.theme.dp(root.expanded ? 20 : 16)
+                            color: root.expanded ? root.theme.foreground : root.theme.playerHeading; font.pixelSize: root.theme.dp(root.expanded ? 20 : 16)
                         }
                         RedesignIcon { id: arrow; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: root.theme.dp(24); height: width; name: "chevron-right"; color: root.theme.foreground }
                     }
