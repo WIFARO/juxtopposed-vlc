@@ -165,7 +165,8 @@ FocusScope {
             Label {
                 x: 100; y: 180; width: 890
                 text: qsTr("Select your preferred theme and color.")
-                horizontalAlignment: Text.AlignHCenter; font.pixelSize: 24; color: "#969696"
+                horizontalAlignment: Text.AlignHCenter; font.pixelSize: 24
+                color: root.previewLight ? preview.theme.foreground : "#969696"
                 // The white-accent reference uses a regular heading.
                 font.weight: root.accentColor.toString() === "#afafaf" ? Font.Normal : Font.Light
                 leftPadding: root.accentColor.toString() === "#afafaf" ? 0 : -0.5; rightPadding: -leftPadding
@@ -196,7 +197,7 @@ FocusScope {
                                 x: 12; y: 12; width: 100; height: 100; visible: schemeButton.modelData.scheme === 0
                                 svg: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><path d="M15 0H88Q100 0 100 12V88Q100 100 88 100H76Z" fill="#afafaf"/></svg>'
                             }
-                            Label { y: 141.5; width: parent.width; text: schemeButton.modelData.label; horizontalAlignment: Text.AlignHCenter }
+                            Label { y: 141.5; width: parent.width; text: schemeButton.modelData.label; horizontalAlignment: Text.AlignHCenter; color: root.previewLight ? preview.theme.foreground : "#8f8f8f" }
                         }
                     }
                 }
