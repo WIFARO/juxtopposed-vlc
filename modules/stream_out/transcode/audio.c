@@ -344,9 +344,20 @@ error:
         error = true;
     } while( p_audio_bufs );
 
-    /* Drain encoder */
+    /* Buffered filters and the resampler must finish before the encoder. */
     if( unlikely( !error && in == NULL ) && transcode_encoder_opened( id->encoder ) )
     {
+        if( id->p_af_chain != NULL )
+        {
+            block_t *tail = aout_FiltersDrain( id->p_af_chain );
+            if( tail != NULL )
+            {
+                tail->i_dts = tail->i_pts;
+                block_t *encoded = transcode_encoder_encode( id->encoder, tail );
+                block_ChainAppend( out, encoded );
+                block_Release( tail );
+            }
+        }
         transcode_encoder_drain( id->encoder, out );
     }
 

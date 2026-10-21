@@ -334,6 +334,14 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name' : 'test_modules_stream_out_audio_tail',
+    'sources' : files('stream_out/audio_tail.c'),
+    'suite' : ['modules', 'test_modules'],
+    'link_with' : [libvlc, libvlccore],
+    'module_depends' : vlc_plugins_targets.keys(),
+}
+
+vlc_tests += {
     'name' : 'test_modules_stream_out_sdi',
     'sources' : files(
         'stream_out/sdi.cpp',

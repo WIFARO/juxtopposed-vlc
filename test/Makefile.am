@@ -131,6 +131,7 @@ check_PROGRAMS = \
 	test_modules_stream_out_sdi \
 	test_modules_tls \
 	test_modules_stream_out_transcode \
+	test_modules_stream_out_audio_tail \
 	test_modules_mux_webvtt \
 	test_modules_stream_out_hls_subtitles_segmenter \
 	$(NULL)
@@ -637,6 +638,9 @@ test_modules_stream_out_transcode_SOURCES = \
 	modules/stream_out/transcode.h \
 	modules/stream_out/transcode_scenarios.c
 test_modules_stream_out_transcode_LDADD = $(LIBVLCCORE) $(LIBVLC)
+
+test_modules_stream_out_audio_tail_SOURCES = modules/stream_out/audio_tail.c
+test_modules_stream_out_audio_tail_LDADD = $(LIBVLCCORE) $(LIBVLC)
 
 test_modules_stream_out_pcr_sync_SOURCES = modules/stream_out/pcr_sync.c \
 	../modules/stream_out/transcode/pcr_sync.c \
