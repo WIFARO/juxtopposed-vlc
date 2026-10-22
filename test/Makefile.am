@@ -903,3 +903,10 @@ test_modules_video_output_opengl_es2_backdrop_LDADD = $(test_modules_video_outpu
 endif
 endif
 endif
+
+if HAVE_WAYLAND
+check_PROGRAMS += test_modules_video_output_wayland_shm_backdrop
+test_modules_video_output_wayland_shm_backdrop_SOURCES = modules/video_output/wayland/shm_backdrop.c \
+    ../modules/video_output/wayland/shm_backdrop.c ../modules/video_output/wayland/shm_backdrop.h
+test_modules_video_output_wayland_shm_backdrop_LDADD = $(LIBVLCCORE) $(LIBM)
+endif

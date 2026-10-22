@@ -9,22 +9,6 @@ wayland_egl_dep = wayland_deps[2]
 wayland_inc = include_directories('.')
 
 # Protocol code generation
-viewporter_xml = wayland_protocols_dir / 'stable/viewporter/viewporter.xml'
-
-viewporter_client_hdr = custom_target(
-    'wayland-viewporter-client-header',
-    output: 'viewporter-client-protocol.h',
-    input: viewporter_xml,
-    command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
-)
-
-viewporter_code = custom_target(
-    'wayland-viewporter-code',
-    output: 'viewporter-protocol.c',
-    input: viewporter_xml,
-    command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
-)
-
 xdg_shell_xml = wayland_protocols_dir / 'stable/xdg-shell/xdg-shell.xml'
 
 xdg_shell_client_hdr = custom_target(
@@ -60,12 +44,10 @@ xdg_decoration_sources = [xdg_decoration_client_hdr, xdg_decoration_code]
 vlc_modules += {
     'name': 'wl_shm',
     'sources': [
-        files('registry.c', 'registry.h', 'shm.c'),
-        viewporter_client_hdr,
-        viewporter_code,
+        files('registry.c', 'registry.h', 'shm.c', 'shm_backdrop.c', 'shm_backdrop.h'),
     ],
     'include_directories': [wayland_inc],
-    'dependencies': [wayland_client_dep],
+    'dependencies': [wayland_client_dep, m_lib],
     'plugin_dir' : 'video_output',
 }
 

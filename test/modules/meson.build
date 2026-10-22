@@ -441,3 +441,13 @@ vlc_tests += {
     'module_depends': ['rotate'],
     'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
 }
+
+if have_wayland
+    vlc_tests += {
+        'name': 'test_modules_video_output_wayland_shm_backdrop',
+        'sources': files('video_output/wayland/shm_backdrop.c', '../../modules/video_output/wayland/shm_backdrop.c'),
+        'suite': ['modules', 'test_modules'],
+        'link_with': [libvlccore],
+        'dependencies': [m_lib],
+    }
+endif

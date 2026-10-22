@@ -1,23 +1,11 @@
 ### Wayland ###
 libwl_shm_plugin_la_SOURCES = \
 	video_output/wayland/registry.c video_output/wayland/registry.h \
-	video_output/wayland/shm.c
-nodist_libwl_shm_plugin_la_SOURCES = \
-	video_output/wayland/viewporter-client-protocol.h \
-	video_output/wayland/viewporter-protocol.c
-libwl_shm_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) \
-	-I$(builddir)/video_output/wayland
+	video_output/wayland/shm.c video_output/wayland/shm_backdrop.c \
+	video_output/wayland/shm_backdrop.h
+libwl_shm_plugin_la_CPPFLAGS = $(AM_CPPFLAGS)
 libwl_shm_plugin_la_CFLAGS = $(WAYLAND_CLIENT_CFLAGS)
-libwl_shm_plugin_la_LIBADD = $(WAYLAND_CLIENT_LIBS)
-CLEANFILES += $(nodist_libwl_shm_plugin_la_SOURCES)
-
-video_output/wayland/viewporter-client-protocol.h: \
-		$(WAYLAND_PROTOCOLS)/stable/viewporter/viewporter.xml
-	$(AM_V_GEN)$(WAYLAND_SCANNER) client-header $< $@
-
-video_output/wayland/viewporter-protocol.c: \
-		$(WAYLAND_PROTOCOLS)/stable/viewporter/viewporter.xml
-	$(AM_V_GEN)$(WAYLAND_SCANNER) private-code $< $@
+libwl_shm_plugin_la_LIBADD = $(WAYLAND_CLIENT_LIBS) $(LIBM)
 
 libwl_shell_plugin_la_SOURCES = $(libxdg_shell_plugin_la_SOURCES)
 libwl_shell_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) \

@@ -29,18 +29,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <sys/types.h>
-#include <sys/mman.h>
-#include <unistd.h>
-
 #include <wayland-client.h>
-#include "viewporter-client-protocol.h"
+#include "shm_backdrop.h"
 #include "registry.h"
 
 #include <vlc_common.h>
 #include <vlc_plugin.h>
 #include <vlc_vout_display.h>
-#include <vlc_fs.h>
 
 #define MAX_PICTURES 4
 
@@ -49,8 +44,10 @@ typedef struct vout_display_sys_t
     vlc_window_t *embed; /* VLC window */
     struct wl_event_queue *eventq;
     struct wl_shm *shm;
-    struct wp_viewporter *viewporter;
-    struct wp_viewport *viewport;
+    struct vlc_shm_backdrop *backdrop;
+    picture_t *attached_picture;
+    bool dirty;
+    bool frame_failed;
 
     size_t active_buffers;
 } vout_display_sys_t;
@@ -60,9 +57,6 @@ struct buffer_data
     picture_t *picture;
     size_t *counter;
 };
-
-static_assert (sizeof (vout_display_sys_t) >= MAX_PICTURES,
-               "Pointer arithmetic error");
 
 static void buffer_release_cb(void *data, struct wl_buffer *buffer)
 {
@@ -87,49 +81,75 @@ static void Prepare(vout_display_t *vd, picture_t *pic,
     vout_display_sys_t *sys = vd->sys;
     struct wl_display *display = sys->embed->display.wl;
     struct wl_surface *surface = sys->embed->handle.wl;
-    struct picture_buffer_t *picbuf = pic->p_sys;
-
-    if (picbuf->fd == -1)
+    sys->dirty = false;
+    if (sys->active_buffers >= MAX_PICTURES)
         return;
 
-    struct buffer_data *d = malloc(sizeof (*d));
-    if (unlikely(d == NULL))
-        return;
-
-    d->picture = pic;
-    d->counter = &sys->active_buffers;
-
-    off_t offset = picbuf->offset;
-    const size_t stride = pic->p->i_pitch;
-    const size_t size = pic->p->i_lines * stride;
-    struct wl_shm_pool *pool;
-    struct wl_buffer *buf;
-
-    pool = wl_shm_create_pool(sys->shm, picbuf->fd, offset + size);
-    if (pool == NULL)
+    vlc_window_backdrops_t *snapshot = vlc_window_HoldBackdrops(sys->embed);
+    size_t count;
+    const struct vlc_window_backdrop_region *regions =
+        vlc_window_GetBackdropRegions(snapshot, &count);
+    picture_t *rendered = vlc_shm_backdrop_Prepare(sys->backdrop, pic, vd->source,
+        vd->place, vd->cfg->display.width, vd->cfg->display.height, regions, count);
+    vlc_window_ReleaseBackdrops(snapshot);
+    if (rendered == NULL)
     {
-        free(d);
+        if (!sys->frame_failed)
+        {
+            msg_Warn(vd, "Cannot prepare a software video frame");
+            video_format_Print(VLC_OBJECT(vd), "picture storage", &pic->format);
+            video_format_Print(VLC_OBJECT(vd), "video source", vd->source);
+        }
+        sys->frame_failed = true;
+        return;
+    }
+    sys->frame_failed = false;
+    if (rendered == sys->attached_picture)
+    {
+        picture_Release(rendered);
         return;
     }
 
-    if (sys->viewport == NULL) /* Poor man's crop */
-        offset += 4 * vd->fmt->i_x_offset
-                  + pic->p->i_pitch * vd->fmt->i_y_offset;
-
-    buf = wl_shm_pool_create_buffer(pool, offset, vd->fmt->i_visible_width,
-                                    vd->fmt->i_visible_height, stride,
-                                    WL_SHM_FORMAT_XRGB8888);
+    const picture_buffer_t *picbuf = rendered->p_sys;
+    if (picbuf->fd == -1 || picbuf->offset < 0
+        || (uint64_t)picbuf->offset + picbuf->size > INT32_MAX)
+    {
+        picture_Release(rendered);
+        return;
+    }
+    struct buffer_data *d = malloc(sizeof(*d));
+    if (d == NULL)
+    {
+        picture_Release(rendered);
+        return;
+    }
+    d->picture = rendered;
+    d->counter = &sys->active_buffers;
+    struct wl_shm_pool *pool = wl_shm_create_pool(sys->shm, picbuf->fd,
+                                                picbuf->offset + picbuf->size);
+    if (pool == NULL)
+    {
+        picture_Release(rendered);
+        free(d);
+        return;
+    }
+    struct wl_buffer *buf = wl_shm_pool_create_buffer(pool, picbuf->offset,
+        rendered->format.i_visible_width, rendered->format.i_visible_height,
+        rendered->p[0].i_pitch, WL_SHM_FORMAT_XRGB8888);
     wl_shm_pool_destroy(pool);
     if (buf == NULL)
     {
+        picture_Release(rendered);
         free(d);
         return;
     }
 
-    picture_Hold(pic);
-
     wl_buffer_add_listener(buf, &buffer_cbs, d);
     wl_surface_attach(surface, buf, 0, 0);
+    if (sys->attached_picture)
+        picture_Release(sys->attached_picture);
+    sys->attached_picture = picture_Hold(rendered);
+    sys->dirty = true;
     wl_surface_damage(surface, 0, 0, vd->cfg->display.width, vd->cfg->display.height);
     wl_display_flush(display);
 
@@ -144,64 +164,25 @@ static void Display(vout_display_t *vd, picture_t *pic)
     struct wl_display *display = sys->embed->display.wl;
     struct wl_surface *surface = sys->embed->handle.wl;
 
-    wl_surface_commit(surface);
+    if (sys->dirty)
+        wl_surface_commit(surface);
     wl_display_roundtrip_queue(display, sys->eventq);
 
     (void) pic;
 }
 
-static int ResetPictures(vout_display_t *vd, video_format_t *fmt)
-{
-    video_format_t src;
-    vout_display_sys_t *sys = vd->sys;
-    assert(sys->viewport == NULL);
-
-    video_format_ApplyRotation(&src, vd->source);
-
-    fmt->i_width  = src.i_width * vd->place->width
-                                / src.i_visible_width;
-    fmt->i_height = src.i_height * vd->place->height
-                                    / src.i_visible_height;
-    fmt->i_visible_width  = vd->place->width;
-    fmt->i_visible_height = vd->place->height;
-    fmt->i_x_offset = src.i_x_offset * vd->place->width
-                                        / src.i_visible_width;
-    fmt->i_y_offset = src.i_y_offset * vd->place->height
-                                        / src.i_visible_height;
-    return VLC_SUCCESS;
-}
-
-static int UpdateViewport(vout_display_t *vd)
-{
-    vout_display_sys_t *sys = vd->sys;
-
-    if (sys->viewport == NULL)
-        return VLC_EGENERIC;
-
-    video_format_t fmt;
-
-    video_format_ApplyRotation(&fmt, vd->source);
-
-    wp_viewport_set_source(sys->viewport,
-                    wl_fixed_from_int(fmt.i_x_offset),
-                    wl_fixed_from_int(fmt.i_y_offset),
-                    wl_fixed_from_int(fmt.i_visible_width),
-                    wl_fixed_from_int(fmt.i_visible_height));
-    wp_viewport_set_destination(sys->viewport,
-                                vd->place->width, vd->place->height);
-    return VLC_SUCCESS;
-}
-
 static int SetDisplaySize(vout_display_t *vd, unsigned width, unsigned height)
 {
     VLC_UNUSED(width); VLC_UNUSED(height);
-    return UpdateViewport(vd);
+    VLC_UNUSED(vd);
+    return VLC_SUCCESS;
 }
 
 static int PlacementChanged(vout_display_t *vd, const vout_display_place_t *place)
 {
     VLC_UNUSED(place);
-    return UpdateViewport(vd);
+    VLC_UNUSED(vd);
+    return VLC_SUCCESS;
 }
 
 static int AspectChanged(vout_display_t *vd, const video_format_t *source)
@@ -245,10 +226,9 @@ static void Close(vout_display_t *vd)
     }
     msg_Dbg(vd, "no active buffers left");
 
-    if (sys->viewport != NULL)
-        wp_viewport_destroy(sys->viewport);
-    if (sys->viewporter != NULL)
-        wp_viewporter_destroy(sys->viewporter);
+    vlc_shm_backdrop_Delete(sys->backdrop);
+    if (sys->attached_picture)
+        picture_Release(sys->attached_picture);
     wl_shm_destroy(sys->shm);
     wl_display_flush(display);
     wl_event_queue_destroy(sys->eventq);
@@ -260,7 +240,6 @@ static const struct vlc_display_operations ops = {
     .prepare = Prepare,
     .display = Display,
     .set_display_size = SetDisplaySize,
-    .reset_pictures = ResetPictures,
     .video_place_changed = PlacementChanged,
     .set_source_aspect = AspectChanged,
     .set_source_crop = AspectChanged,
@@ -275,19 +254,25 @@ static int Open(vout_display_t *vd,
     vout_display_sys_t *sys = malloc(sizeof (*sys));
     if (unlikely(sys == NULL))
         return VLC_ENOMEM;
+    struct vlc_wl_registry *registry = NULL;
 
     vd->sys = sys;
     sys->embed = NULL;
     sys->eventq = NULL;
     sys->shm = NULL;
     sys->active_buffers = 0;
+    sys->attached_picture = NULL;
+    sys->dirty = false;
+    sys->frame_failed = false;
+    sys->backdrop = vlc_shm_backdrop_New();
+    if (sys->backdrop == NULL)
+        goto error;
 
     /* Get window */
     sys->embed = vd->cfg->window;
     assert(sys->embed != NULL);
 
     struct wl_display *display = sys->embed->display.wl;
-    struct vlc_wl_registry *registry = NULL;
 
     sys->eventq = wl_display_create_queue(display);
     if (sys->eventq == NULL)
@@ -301,42 +286,16 @@ static int Open(vout_display_t *vd,
     if (sys->shm == NULL)
         goto error;
 
-    sys->viewporter = (struct wp_viewporter *)
-                      vlc_wl_interface_bind(registry, "wp_viewporter",
-                                            &wp_viewporter_interface, NULL);
-
     wl_shm_add_listener(sys->shm, &shm_cbs, vd);
     wl_display_roundtrip_queue(display, sys->eventq);
 
+    /* The window provider owns buffer scale and any fractional viewport.
+     * Attach a full physical-pixel window buffer; a second viewport on the
+     * same surface would be a protocol error. Compose orientation and crop
+     * into display-owned memory instead of changing decoder pictures. */
     struct wl_surface *surface = sys->embed->handle.wl;
-    if (sys->viewporter != NULL)
-        sys->viewport = wp_viewporter_get_viewport(sys->viewporter, surface);
-    else
-        sys->viewport = NULL;
-
-    /* Determine our pixel format */
-    static const enum wl_output_transform transforms[8] = {
-        [ORIENT_TOP_LEFT] = WL_OUTPUT_TRANSFORM_NORMAL,
-        [ORIENT_TOP_RIGHT] = WL_OUTPUT_TRANSFORM_FLIPPED,
-        [ORIENT_BOTTOM_LEFT] = WL_OUTPUT_TRANSFORM_FLIPPED_180,
-        [ORIENT_BOTTOM_RIGHT] = WL_OUTPUT_TRANSFORM_180,
-        [ORIENT_LEFT_TOP] = WL_OUTPUT_TRANSFORM_FLIPPED_270,
-        [ORIENT_LEFT_BOTTOM] = WL_OUTPUT_TRANSFORM_90,
-        [ORIENT_RIGHT_TOP] = WL_OUTPUT_TRANSFORM_270,
-        [ORIENT_RIGHT_BOTTOM] = WL_OUTPUT_TRANSFORM_FLIPPED_90,
-    };
-
-    if (vlc_wl_interface_get_version(registry, "wl_compositor") >= 2)
-    {
-        wl_surface_set_buffer_transform(surface,
-                                        transforms[fmtp->orientation]);
-    }
-    else
-    {
-        video_format_t fmt = *fmtp;
-        video_format_ApplyRotation(fmtp, &fmt);
-    }
-
+    if (wl_surface_get_version(surface) >= 2)
+        wl_surface_set_buffer_transform(surface, WL_OUTPUT_TRANSFORM_NORMAL);
     fmtp->i_chroma = VLC_CODEC_BGRX;
 
     vd->ops = &ops;
@@ -346,6 +305,7 @@ static int Open(vout_display_t *vd,
     return VLC_SUCCESS;
 
 error:
+    vlc_shm_backdrop_Delete(sys->backdrop);
     if (sys->shm != NULL)
         wl_shm_destroy(sys->shm);
 
