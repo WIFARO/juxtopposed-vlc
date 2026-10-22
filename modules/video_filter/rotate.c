@@ -49,7 +49,20 @@ static int  Create    ( filter_t * );
 static int Mouse( filter_t *p_filter, vlc_mouse_t *p_mouse,
                   const vlc_mouse_t *p_old );
 static picture_t *FilterPacked( filter_t *, picture_t * );
-VIDEO_FILTER_WRAPPER_CLOSE(Filter, Destroy)
+static void Filter(filter_t *, picture_t *, picture_t *);
+static void Destroy(filter_t *);
+static picture_t *FilterPlanar(filter_t *filter, picture_t *input)
+{
+    picture_t *output = filter_NewPicture(filter);
+    if (output != NULL)
+    {
+        Filter(filter, input, output);
+        picture_CopyProperties(output, input);
+    }
+    picture_Release(input);
+    return output;
+}
+
 
 static int RotateCallback( vlc_object_t *p_this, char const *psz_var,
                            vlc_value_t oldval, vlc_value_t newval,
@@ -88,6 +101,22 @@ typedef struct {
     int16_t cos;
 } sincos_t;
 
+typedef struct {
+    int64_t x, y;
+} fixed_point_t;
+
+static fixed_point_t rotate_point(sincos_t sc, int width, int height, int x, int y)
+{
+    const int dx = 2 * x - (width - 1);
+    const int dy = 2 * y - (height - 1);
+    return (fixed_point_t) {
+        .x = ((int64_t)(width - 1) * 4096 + (int64_t)dx * sc.cos
+              - (int64_t)dy * sc.sin) / 2,
+        .y = ((int64_t)(height - 1) * 4096 + (int64_t)dx * sc.sin
+              + (int64_t)dy * sc.cos) / 2,
+    };
+}
+
 typedef struct
 {
     _Atomic sincos_t sincos;
@@ -104,6 +133,11 @@ static void store_trigo( filter_sys_t *sys, float f_angle )
     sincos.cos = lroundf(ldexpf(cosf(f_angle), 12));
     atomic_store_explicit(&sys->sincos, sincos, memory_order_relaxed);
 }
+
+static const struct vlc_filter_operations planar_filter_ops =
+{
+    .filter_video = FilterPlanar, .video_mouse = Mouse, .close = Destroy,
+};
 
 static const struct vlc_filter_operations packed_filter_ops =
 {
@@ -127,7 +161,7 @@ static int Create( filter_t *p_filter )
     switch( p_filter->fmt_in.video.i_chroma )
     {
         CASE_PLANAR_YUV
-            p_filter->ops = &Filter_ops;
+            p_filter->ops = &planar_filter_ops;
             break;
 
         CASE_PACKED_YUV_422
@@ -208,15 +242,11 @@ static int Mouse( filter_t *p_filter, vlc_mouse_t *p_mouse,
         store_trigo( p_sys, i_angle / 20.f );
     }
 
-    p_mouse->i_x = ( p_fmt->i_visible_width >> 1 );
-    p_mouse->i_y = ( p_fmt->i_visible_height >> 1 );
-
-    const int i_rx = ( i_x - p_mouse->i_x );
-    const int i_ry = ( i_y - p_mouse->i_y );
     sincos_t sc = atomic_load_explicit(&p_sys->sincos, memory_order_relaxed);
-
-    p_mouse->i_x += ( ( i_rx * sc.cos - i_ry * sc.sin )>> 12 );
-    p_mouse->i_y += ( ( i_rx * sc.sin + i_ry * sc.cos )>> 12 );
+    fixed_point_t point = rotate_point(sc, p_fmt->i_visible_width,
+                                      p_fmt->i_visible_height, i_x, i_y);
+    p_mouse->i_x = (point.x + 2048) >> 12;
+    p_mouse->i_y = (point.y + 2048) >> 12;
 
     return VLC_SUCCESS;
 }
@@ -244,28 +274,31 @@ static void Filter( filter_t *p_filter, picture_t *p_pic, picture_t *p_outpic )
         const int i_visible_lines = p_srcp->i_visible_lines;
         const int i_visible_pitch = p_srcp->i_visible_pitch;
 
-        const int i_aspect = __MAX( 1, ( i_visible_lines * p_pic->p[Y_PLANE].i_visible_pitch ) / ( p_pic->p[Y_PLANE].i_visible_lines * i_visible_pitch ));
-        /* = 2 for U and V planes in YUV 4:2:2, = 1 otherwise */
-
-        const int i_line_center = i_visible_lines>>1;
-        const int i_col_center  = i_visible_pitch>>1;
-
+        const vlc_chroma_description_t *desc =
+            vlc_fourcc_GetChromaDescription(p_pic->format.i_chroma);
+        const unsigned aspect_num = desc->p[i_plane].h.num * desc->p[i_plane].w.den;
+        const unsigned aspect_den = desc->p[i_plane].h.den * desc->p[i_plane].w.num;
+        const int sin_x = sc.sin * (int)aspect_num / (int)aspect_den;
+        const int sin_y = sc.sin * (int)aspect_den / (int)aspect_num;
         const uint8_t black_pixel = ( i_plane == Y_PLANE ) ? 0x00 : 0x80;
 
-        const int i_line_next =  sc.cos / i_aspect -sc.sin*i_visible_pitch;
-        const int i_col_next  = -sc.sin / i_aspect -sc.cos*i_visible_pitch;
-        int i_line_orig0 = ( - sc.cos * i_line_center / i_aspect
-                             - sc.sin * i_col_center + (1<<11) );
-        int i_col_orig0 =    sc.sin * i_line_center / i_aspect
-                           - sc.cos * i_col_center + (1<<11);
+        /* Rotate around the pixel centers, including half-pixel centers for
+         * even dimensions. Bilinear interpolation must not round coordinates
+         * to the nearest pixel before computing their fractional weights. */
+        const int64_t i_line_next = sc.cos - (int64_t)sin_x * i_visible_pitch;
+        const int64_t i_col_next = -sin_y - (int64_t)sc.cos * i_visible_pitch;
+        int64_t i_line_orig0 = ((int64_t)(i_visible_lines - 1) * (4096 - sc.cos)
+                              - (int64_t)(i_visible_pitch - 1) * sin_x) / 2;
+        int64_t i_col_orig0 = ((int64_t)(i_visible_pitch - 1) * (4096 - sc.cos)
+                             + (int64_t)(i_visible_lines - 1) * sin_y) / 2;
         for( int y = 0; y < i_visible_lines; y++)
         {
             uint8_t *p_out = &p_dstp->p_pixels[y * p_dstp->i_pitch];
 
             for( int x = 0; x < i_visible_pitch; x++, p_out++ )
             {
-                const int i_line_orig = (i_line_orig0>>12)*i_aspect + i_line_center;
-                const int i_col_orig  = (i_col_orig0>>12)  + i_col_center;
+                const int i_line_orig = i_line_orig0 >> 12;
+                const int i_col_orig  = i_col_orig0 >> 12;
                 const uint8_t *p_orig_offset = &p_srcp->p_pixels[i_line_orig * p_srcp->i_pitch + i_col_orig];
                 const uint8_t i_line_percent = (i_line_orig0>>4) & 255;
                 const uint8_t i_col_percent  = (i_col_orig0 >>4) & 255;
@@ -326,7 +359,7 @@ static void Filter( filter_t *p_filter, picture_t *p_pic, picture_t *p_outpic )
                     *p_out = black_pixel;
                 }
 
-                i_line_orig0 += sc.sin;
+                i_line_orig0 += sin_x;
                 i_col_orig0 += sc.cos;
             }
 
@@ -377,8 +410,6 @@ static picture_t *FilterPacked( filter_t *p_filter, picture_t *p_pic )
     uint8_t *p_out_v = p_outpic->p->p_pixels+i_v_offset;
     const int i_out_pitch = p_outpic->p->i_pitch;
 
-    const int i_line_center = i_visible_lines>>1;
-    const int i_col_center  = i_visible_pitch>>1;
 
     if( p_sys->p_motion != NULL )
     {
@@ -395,12 +426,10 @@ static picture_t *FilterPacked( filter_t *p_filter, picture_t *p_pic )
             int i_line_orig;
             int i_col_orig;
             /* Handle "1st Y", U and V */
-            i_line_orig = i_line_center +
-                ( ( sc.sin * ( i_col - i_col_center )
-                  + sc.cos * ( i_line - i_line_center ) )>>12 );
-            i_col_orig = i_col_center +
-                ( ( sc.cos * ( i_col - i_col_center )
-                  - sc.sin * ( i_line - i_line_center ) )>>12 );
+            fixed_point_t point = rotate_point(sc, i_visible_pitch, i_visible_lines,
+                                               i_col, i_line);
+            i_line_orig = (point.y + 2048) >> 12;
+            i_col_orig = (point.x + 2048) >> 12;
             if( 0 <= i_col_orig && i_col_orig < i_visible_pitch
              && 0 <= i_line_orig && i_line_orig < i_visible_lines )
             {
@@ -421,12 +450,9 @@ static picture_t *FilterPacked( filter_t *p_filter, picture_t *p_pic )
             if( i_col >= i_visible_pitch )
                 break;
 
-            i_line_orig = i_line_center +
-                ( ( sc.sin * ( i_col - i_col_center )
-                  + sc.cos * ( i_line - i_line_center ) )>>12 );
-            i_col_orig = i_col_center +
-                ( ( sc.cos * ( i_col - i_col_center )
-                  - sc.sin * ( i_line - i_line_center ) )>>12 );
+            point = rotate_point(sc, i_visible_pitch, i_visible_lines, i_col, i_line);
+            i_line_orig = (point.y + 2048) >> 12;
+            i_col_orig = (point.x + 2048) >> 12;
             if( 0 <= i_col_orig && i_col_orig < i_visible_pitch
              && 0 <= i_line_orig && i_line_orig < i_visible_lines )
             {

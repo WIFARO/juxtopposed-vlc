@@ -111,6 +111,7 @@ check_PROGRAMS = \
 	test_modules_misc_media_tracks \
 	test_modules_visualization_resize \
 	test_modules_video_filter_puzzle \
+	test_modules_video_filter_rotate \
 	test_modules_packetizer_helpers \
 	test_modules_packetizer_hxxx \
 	test_modules_packetizer_h264 \
@@ -877,3 +878,6 @@ test_src_player_timer_seek_length_LDADD = $(LIBVLCCORE) $(LIBM)
 check_PROGRAMS += test_src_network_http_rate
 test_src_network_http_rate_SOURCES = src/network/http_rate.c
 test_src_network_http_rate_LDADD = $(LIBVLCCORE)
+
+test_modules_video_filter_rotate_SOURCES = modules/video_filter/rotate.c
+test_modules_video_filter_rotate_LDADD = $(LIBVLCCORE) $(LIBVLC)

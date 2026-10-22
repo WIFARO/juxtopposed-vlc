@@ -418,3 +418,12 @@ if have_wayland and egl_dep.found()
         }
     endforeach
 endif
+
+vlc_tests += {
+    'name': 'test_modules_video_filter_rotate',
+    'sources': files('video_filter/rotate.c'),
+    'suite': ['modules', 'test_modules'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['rotate'],
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+}
