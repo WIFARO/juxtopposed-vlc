@@ -604,7 +604,7 @@ vlc_tests += {
     'sources': files('video_output/subtitle_snapshot.c'),
     'suite': ['src', 'test_src'],
     'link_with': [libvlc, libvlccore],
-    'module_depends': ['demux_mock', 'rawvideo', 'blend'],
+    'module_depends': ['demux_mock', 'rawvideo', 'blend', 'tdummy', 'swscale', 'yuvp'],
     'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
 }
 
