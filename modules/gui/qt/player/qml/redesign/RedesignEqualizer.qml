@@ -100,6 +100,7 @@ ColumnLayout {
                                 width: root.theme.dp(root.compact ? 14 : 16); height: slider.availableHeight
                                 radius: root.theme.dp(root.compact ? 5 : 6); color: root.theme.field
                                 Rectangle {
+                                    id: sliderFill
                                     readonly property real inset: root.compact ? 0 : root.theme.dp(2)
                                     x: inset
                                     y: inset + (root.compact ? Math.min(slider.visualPosition, 0.5) : slider.visualPosition) * (parent.height - 2 * inset)
@@ -107,6 +108,22 @@ ColumnLayout {
                                     height: (root.compact ? Math.abs(slider.visualPosition - 0.5) : 1 - slider.visualPosition) * (parent.height - 2 * inset)
                                     radius: parent.radius - inset; color: root.theme.progress
                                     border.width: root.compact ? 1 : 0; border.color: root.theme.field
+                                }
+                                Rectangle {
+                                    objectName: "equalizerCenterMark_" + band.index
+                                    visible: !root.compact && band.index > 0
+                                    anchors.centerIn: parent
+                                    width: root.theme.dp(8); height: root.theme.dp(2); radius: root.theme.dp(1)
+                                    color: {
+                                        if (root.lightTheme) return root.theme.sliderTick
+                                        const center = parent.height / 2
+                                        const base = sliderFill.height > 0 && center >= sliderFill.y && center <= sliderFill.y + sliderFill.height
+                                            ? root.theme.progress : root.theme.field
+                                        const ink = root.theme.sliderTick
+                                        return Qt.rgba(1 - (1 - base.r) * (1 - ink.r),
+                                            1 - (1 - base.g) * (1 - ink.g),
+                                            1 - (1 - base.b) * (1 - ink.b), 1)
+                                    }
                                 }
                             }
                             handle: Rectangle {
