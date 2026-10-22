@@ -187,6 +187,6 @@ Rectangle {
                 Text { Layout.fillWidth: true; text: root.artist; elide: Text.ElideRight; color: root.theme.foreground; font.pixelSize: root.theme.dp(14) }
             }
         }
-        MiniButton { id: queueButton; objectName: "miniPlayerQueueButton"; iconName: "queue"; text: qsTr("Play queue"); onClicked: root.queueRequested() }
+        MiniButton { id: queueButton; objectName: "miniPlayerQueueButton"; iconName: "lists"; text: qsTr("Play queue"); onClicked: root.queueRequested() }
     }
 }

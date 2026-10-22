@@ -150,6 +150,8 @@ FocusScope {
     Component.onDestruction: if (seek.dragActive) root.seekDragFinished(seek.dragPosition, false)
 
     component ChromeButton: RedesignButton {
+        highlightSelection: false
+        iconForeground: lightTheme ? theme.bright : theme.foreground
         focusPolicy: root.presentationOnly ? Qt.NoFocus : Qt.StrongFocus
     }
 
@@ -884,7 +886,7 @@ FocusScope {
                 objectName: "audioButton"
                 visible: root.width > theme.dp(900)
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                iconName: "audio"; text: qsTr("Audio tracks and output")
+                iconName: "audio"; selectedIconName: "nav-audio-active"; text: qsTr("Audio tracks and output")
                 selected: !!root.trackPopup && root.trackPopup.visible && root.trackPopup.page === "audio"
                 onClicked: { root.toggleTracks(this, "audio"); root.audioTracksRequested(this) }
             }
@@ -899,6 +901,7 @@ FocusScope {
             }
             ChromeButton {
                 id: playbackSettingsButton
+                rightPadding: selected ? 0 : theme.dp(2)
                 Layout.rightMargin: parent === originalToolbar ? theme.dp(8) : 0
                 objectName: "playbackSettingsButton"
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
@@ -911,7 +914,7 @@ FocusScope {
                 id: queueButton
                 objectName: "queueButton"
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                iconName: "queue"; text: qsTr("Play queue"); selected: root.queueOpen
+                iconName: "lists"; selectedIconName: "lists-active"; text: qsTr("Play queue"); selected: root.queueOpen
                 onClicked: { root.settingsPage = ""; root.queueOpen = !root.queueOpen }
             }
         }

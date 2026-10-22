@@ -17,6 +17,7 @@ T.Button {
     property bool primaryAction: false
     property bool filled: false
     property bool selected: false
+    property bool highlightSelection: true
     property color foreground: primaryAction && enabled ? theme.accent : theme.foreground
     property color iconForeground: foreground
     property color selectedForeground: theme.accent
@@ -50,7 +51,7 @@ T.Button {
     background: Rectangle {
         radius: theme.dp(6)
         color: root.primaryAction ? !root.enabled ? theme.hover : root.hovered ? theme.hover : theme.progress
-            : root.accent ? theme.accent : (root.down || root.selected) ? theme.selected : root.hovered ? theme.hover : root.filled ? theme.background : "transparent"
+            : root.accent ? theme.accent : (root.down || (root.selected && root.highlightSelection)) ? theme.selected : root.hovered ? theme.hover : root.filled ? theme.background : "transparent"
         border.width: root.visualFocus ? theme.dp(root.primaryAction ? 1 : 2) : 0
         border.color: theme.accent
         opacity: root.enabled ? 1 : root.primaryAction ? 0.5 : 0.35

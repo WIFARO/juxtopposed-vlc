@@ -811,6 +811,13 @@ QString menuLabel(const QString& label, const QString& hint)
     return hint.isEmpty() ? label : label + QLatin1Char('\t') + hint;
 }
 
+QColor redesignMenuAccent(MainCtx* ctx)
+{
+    const QColor accent = ctx->redesignAccent();
+    return accent == QColor(QStringLiteral("#d37918"))
+        ? QColor(QStringLiteral("#ab6314")) : accent.darker(123);
+}
+
 QIcon redesignMenuIcon(MainCtx* ctx, const char* name)
 {
     const bool light = ctx->getColorScheme()->currentScheme() == ColorSchemeModel::Day ||
@@ -819,7 +826,7 @@ QIcon redesignMenuIcon(MainCtx* ctx, const char* name)
     return ColorizedSvgIcon(QStringLiteral(":/menu/redesign/%1.svg").arg(QLatin1String(name)), {}, {}, {},
         {{QStringLiteral("#8F8F8F"), light ? QStringLiteral("#404040") : QStringLiteral("#8f8f8f")},
          {QStringLiteral("#D37918"), ctx->redesignAccent().name()},
-         {QStringLiteral("#AB6314"), ctx->redesignAccent().darker(120).name()}});
+         {QStringLiteral("#AB6314"), redesignMenuAccent(ctx).name()}});
 }
 }
 
@@ -843,7 +850,7 @@ QMenu* VLCMenuBar::RedesignPopupMenu(qt_intf_t* p_intf, bool show)
     const auto updatePlay = [p_intf, ctx, play, playHint]() {
         const bool playing = THEMIM->getPlayingState() == PlayerController::PLAYING_STATE_PLAYING;
         play->setText(menuLabel(playing ? qtr("Pause") : qtr("Play"), playHint));
-        play->setIcon(playing ? ColorizedSvgIcon(QStringLiteral(":/menu/ic_pause_filled.svg"), ctx->redesignAccent().darker(120)) : redesignMenuIcon(ctx, "play"));
+        play->setIcon(playing ? ColorizedSvgIcon(QStringLiteral(":/menu/ic_pause_filled.svg"), redesignMenuAccent(ctx)) : redesignMenuIcon(ctx, "play"));
     };
     updatePlay();
     connect(THEMIM, &PlayerController::playingStateChanged, play, updatePlay);
