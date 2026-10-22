@@ -68,6 +68,33 @@ TestCase {
         }
     }
     function item(name) { return findChild(audio, name) }
+    function chevron(item) {
+        if (String(item.name || "").startsWith("chevron-")) return item
+        for (const child of item.children || []) {
+            const found = chevron(child)
+            if (found) return found
+        }
+        return null
+    }
+    function test_disclosureFollowsMirroring() {
+        const section = item("inlineEqualizer")
+        const arrow = chevron(section)
+        verify(arrow !== null)
+        try {
+            section.LayoutMirroring.childrenInherit = true
+            section.LayoutMirroring.enabled = true
+            tryCompare(arrow, "name", "chevron-left")
+            section.expanded = true
+            tryCompare(arrow, "name", "chevron-down")
+            section.expanded = false
+            tryCompare(arrow, "name", "chevron-left")
+        } finally {
+            section.expanded = false
+            section.LayoutMirroring.enabled = false
+            section.LayoutMirroring.childrenInherit = false
+        }
+        tryCompare(arrow, "name", "chevron-right")
+    }
     function init() {
         audio.visible = true
         store.stereoTestRunning = false; store.stereoTestMessage = ""

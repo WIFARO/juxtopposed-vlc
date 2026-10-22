@@ -165,7 +165,7 @@ FocusScope {
                     objectName: "queueGroupToggle_" + row.index
                     visible: row.group
                     Layout.preferredWidth: theme.dp(24)
-                    iconName: row.model.treeExpanded ? "chevron-down" : "chevron-right"
+                    iconName: row.model.treeExpanded ? "chevron-down" : (LayoutMirroring.enabled ? "chevron-left" : "chevron-right")
                     text: row.model.treeExpanded ? qsTr("Collapse") : qsTr("Expand")
                     foreground: row.containsCurrent ? theme.accent : theme.foreground
                     onClicked: {

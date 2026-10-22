@@ -28,9 +28,72 @@ TestCase {
             Text { Layout.fillWidth: true; text: "Queue item" }
         }
     }
+    Component {
+        id: chevronComponent
+        Item {
+            // Some software grabs contain physical pixels but report DPR 1.
+            // Reserve enough bounds for either result, then sample physical pixels.
+            width: 96 * Screen.devicePixelRatio; height: width
+            property alias iconName: arrow.name
+            property alias status: arrow.status
+            Rectangle {
+                width: 96; height: 96; color: "black"
+                RedesignIcon { id: arrow; anchors.fill: parent; color: "white" }
+            }
+        }
+    }
+    Component { id: filterComponent; RedesignFilterSection { width: 320; label: "Filter" } }
+    Component { id: homeComponent; RedesignHomeView { width: 320; height: 100; sections: [{key: "recent", title: "Recent", model: []}] } }
+    function chevron(item) {
+        if (String(item.name || "").startsWith("chevron-")) return item
+        for (const child of item.children || []) {
+            const found = chevron(child)
+            if (found) return found
+        }
+        return null
+    }
+    function test_sectionArrowsFollowMirroring_data() {
+        return [{tag: "filter", component: filterComponent, disclosure: true},
+                {tag: "home", component: homeComponent, disclosure: false}]
+    }
+    function test_sectionArrowsFollowMirroring(data) {
+        const section = createTemporaryObject(data.component, testCase)
+        verify(section !== null)
+        const arrow = chevron(section)
+        verify(arrow !== null)
+        compare(arrow.name, "chevron-right")
+        section.LayoutMirroring.childrenInherit = true
+        section.LayoutMirroring.enabled = true
+        tryCompare(arrow, "name", "chevron-left")
+        if (data.disclosure) {
+            section.expanded = true
+            tryCompare(arrow, "name", "chevron-down")
+            section.expanded = false
+            tryCompare(arrow, "name", "chevron-left")
+        }
+        section.LayoutMirroring.enabled = false
+        tryCompare(arrow, "name", "chevron-right")
+    }
+
     function init() {
         if (typeof failOnWarning === "function") failOnWarning(/Binding loop detected/)
     }
+    function test_chevronsPointInTheirNamedDirection_data() {
+        return [{tag: "left", glyph: "chevron-left", tip: 36, empty: 60},
+                {tag: "right", glyph: "chevron-right", tip: 60, empty: 36}]
+    }
+    function test_chevronsPointInTheirNamedDirection(data) {
+        const icon = createTemporaryObject(chevronComponent, testCase,
+            {iconName: data.glyph})
+        verify(icon !== null)
+        tryCompare(icon, "status", Image.Ready)
+        wait(20)
+        const image = grabImage(icon)
+        const ratio = Screen.devicePixelRatio
+        verify(image.red(Math.round(data.tip * ratio), Math.round(48 * ratio)) > 200)
+        verify(image.red(Math.round(data.empty * ratio), Math.round(48 * ratio)) < 20)
+    }
+
     function test_intrinsicSizeDoesNotFollowRasterRequests() {
         const icon = createTemporaryObject(iconComponent, testCase)
         verify(icon !== null)

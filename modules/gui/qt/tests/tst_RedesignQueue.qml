@@ -72,6 +72,27 @@ TestCase {
         }
         queue.videoBackdropContent = null
     }
+    function test_groupDisclosureFollowsMirroring() {
+        queue.hierarchyModel = treeFixture
+        const button = findChild(queue, "queueGroupToggle_0")
+        verify(button !== null)
+        compare(button.iconName, "chevron-down")
+        try {
+            queue.LayoutMirroring.childrenInherit = true
+            queue.LayoutMirroring.enabled = true
+            treeFixture.setExpanded(0, false)
+            tryVerify(() => findChild(queue, "queueGroupToggle_0") && findChild(queue, "queueGroupToggle_0").iconName === "chevron-left")
+            mouseClick(findChild(queue, "queueGroupToggle_0"))
+            tryVerify(() => findChild(queue, "queueGroupToggle_0") && findChild(queue, "queueGroupToggle_0").iconName === "chevron-down")
+            compare(playSpy.count, 0)
+            compare(removeSpy.count, 0)
+        } finally {
+            queue.LayoutMirroring.enabled = false
+            queue.LayoutMirroring.childrenInherit = false
+        }
+        treeFixture.setExpanded(0, false)
+        tryVerify(() => findChild(queue, "queueGroupToggle_0") && findChild(queue, "queueGroupToggle_0").iconName === "chevron-right")
+    }
     function init() {
         queue.videoBackdropContent = null
         queue.hierarchyModel = null; queue.selectedGroupKey = ""

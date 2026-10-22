@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import QtQuick
+import QtQuick.Window
 import QtTest
 import "../player/qml/redesign"
 
@@ -41,7 +42,13 @@ TestCase {
     SignalSpy { id: recent; target: menu; signalName: "recentRequested" }
     SignalSpy { id: profiles; target: menu; signalName: "profileRequested" }
     SignalSpy { id: profileActions; target: menu; signalName: "profileActionsRequested" }
+    function setWindowMirrored(enabled) {
+        const content = testCase.Window.window.contentItem
+        content.LayoutMirroring.childrenInherit = true
+        content.LayoutMirroring.enabled = enabled
+    }
     function init() {
+        setWindowMirrored(false)
         menu.dismiss()
         menu.parent = testCase
         menu.x = 20; menu.y = 20
@@ -58,7 +65,7 @@ TestCase {
         menu.open()
         tryCompare(menu, "opened", true)
     }
-    function cleanup() { menu.dismiss() }
+    function cleanup() { menu.dismiss(); setWindowMirrored(false) }
     function test_menuButtonTogglesTheMenu() {
         menu.dismiss()
         tryCompare(menu, "visible", false)
@@ -83,6 +90,41 @@ TestCase {
         tryCompare(submenu, "opened", true)
         return submenu
     }
+    function test_submenuChevronFollowsLayoutDirection() {
+        const row = menu.itemAt(6)
+        const arrow = row.contentItem.children.find(child => child.name === "chevron-right")
+        verify(arrow !== undefined)
+        compare(arrow.name, "chevron-right")
+        setWindowMirrored(true)
+        tryCompare(menu, "mirrored", true)
+        tryCompare(arrow, "name", "chevron-left")
+        menu.currentIndex = 6
+        row.forceActiveFocus()
+        keyClick(Qt.Key_Left)
+        tryCompare(row.subMenu, "opened", true)
+        keyClick(Qt.Key_Right)
+        tryCompare(row.subMenu, "visible", false)
+        verify(menu.opened)
+        setWindowMirrored(false)
+        tryCompare(arrow, "name", "chevron-right")
+    }
+
+    function test_emptyRecentKeyboardReturnsToParent_data() {
+        return [{tag: "default", mirrored: false}, {tag: "mirrored", mirrored: true}]
+    }
+    function test_emptyRecentKeyboardReturnsToParent(data) {
+        recentFiles.clear()
+        setWindowMirrored(data.mirrored)
+        const row = menu.itemAt(6)
+        menu.currentIndex = 6
+        row.forceActiveFocus()
+        keyClick(data.mirrored ? Qt.Key_Left : Qt.Key_Right)
+        tryCompare(row.subMenu, "opened", true)
+        keyClick(data.mirrored ? Qt.Key_Right : Qt.Key_Left)
+        tryCompare(row.subMenu, "visible", false)
+        verify(menu.opened)
+    }
+
     function test_orderAndSize() {
         compare(menu.width, 375)
         compare(menu.count, 13)

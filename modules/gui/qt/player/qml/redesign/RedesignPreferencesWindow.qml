@@ -460,7 +460,7 @@ RedesignSettingsDialog {
                             Row {
                                 anchors.centerIn: parent; spacing: theme.dp(10)
                                 Text { text: qsTr("Advanced Options"); color: theme.foreground; font.pixelSize: theme.dp(14); anchors.verticalCenter: parent.verticalCenter }
-                                RedesignIcon { name: root.advanced ? "chevron-down" : "chevron-right"; color: theme.foreground; width: theme.dp(20); height: width }
+                                RedesignIcon { name: root.advanced ? "chevron-down" : (LayoutMirroring.enabled ? "chevron-left" : "chevron-right"); color: theme.foreground; width: theme.dp(20); height: width }
                             }
                         }
                         background: Rectangle { color: parent.hovered ? theme.hover : root.lightTheme ? theme.background : "#191919"; opacity: root.lightTheme ? 1 : 0.95; radius: theme.dp(2) }

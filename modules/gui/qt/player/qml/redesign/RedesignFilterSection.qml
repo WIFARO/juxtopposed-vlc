@@ -39,7 +39,7 @@ ColumnLayout {
                 contentItem: RowLayout {
                     spacing: theme.dp(8)
                     Text { Layout.fillWidth: true; Layout.leftMargin: theme.dp(16); text: parent.parent.text; color: theme.playerLabel; font.pixelSize: theme.dp(14) }
-                    RedesignIcon { Layout.rightMargin: theme.dp(12); name: root.expanded ? "chevron-down" : "chevron-right"; color: theme.foreground; Layout.preferredWidth: theme.dp(20); Layout.preferredHeight: theme.dp(20) }
+                    RedesignIcon { Layout.rightMargin: theme.dp(12); name: root.expanded ? "chevron-down" : (LayoutMirroring.enabled ? "chevron-left" : "chevron-right"); color: theme.foreground; Layout.preferredWidth: theme.dp(20); Layout.preferredHeight: theme.dp(20) }
                 }
                 onClicked: root.expanded = !root.expanded
             }

@@ -134,7 +134,7 @@ C.Menu {
                 visible: !!row.subMenu
                 Layout.preferredWidth: root.theme.dp(root.theme.compactMenus ? 20 : 24); Layout.preferredHeight: Layout.preferredWidth
                 sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
-                name: "chevron-right"; color: root.theme.foreground
+                name: row.mirrored ? "chevron-left" : "chevron-right"; color: root.theme.foreground
             }
         }
         Keys.onPressed: event => {
@@ -161,6 +161,25 @@ C.Menu {
         id: recentMenu
         overlap: -root.theme.dp(11)
         objectName: "redesignRecentMenu"
+        // An empty recent list has no enabled item to receive keyboard focus.
+        // Keep navigation in this submenu so Back returns to its parent.
+        onOpened: if (currentIndex < 0) contentItem.forceActiveFocus(Qt.PopupFocusReason)
+        contentItem: ListView {
+            implicitHeight: contentHeight
+            model: recentMenu.contentModel
+            interactive: Window.window ? contentHeight + recentMenu.topPadding + recentMenu.bottomPadding > recentMenu.height : false
+            clip: true
+            currentIndex: recentMenu.currentIndex
+            C.ScrollIndicator.vertical: C.ScrollIndicator { }
+            Keys.onPressed: event => {
+                if (recentMenu.currentIndex >= 0
+                    || event.key !== (recentMenu.mirrored ? Qt.Key_Right : Qt.Key_Left)) return
+                recentMenu.close()
+                const parentRow = root.itemAt(root.currentIndex)
+                if (parentRow) parentRow.forceActiveFocus(Qt.PopupFocusReason)
+                event.accepted = true
+            }
+        }
         title: qsTr("Open Recent")
         width: root.theme.dp(root.theme.compactMenus ? 280 : 375); padding: root.padding
         popupType: C.Popup.Item

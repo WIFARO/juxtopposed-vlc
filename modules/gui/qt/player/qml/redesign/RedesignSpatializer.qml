@@ -26,7 +26,7 @@ ColumnLayout {
         contentItem: RowLayout {
             spacing: theme.dp(10)
             Text { Layout.fillWidth: true; text: expander.text; color: theme.playerLabel; font.pixelSize: theme.dp(14) }
-            RedesignIcon { name: root.expanded ? "chevron-down" : "chevron-right"; color: theme.playerLabel; Layout.preferredWidth: theme.dp(20); Layout.preferredHeight: theme.dp(20) }
+            RedesignIcon { name: root.expanded ? "chevron-down" : (LayoutMirroring.enabled ? "chevron-left" : "chevron-right"); color: theme.playerLabel; Layout.preferredWidth: theme.dp(20); Layout.preferredHeight: theme.dp(20) }
         }
         leftPadding: theme.dp(16); rightPadding: theme.dp(16)
         onClicked: root.expanded = !root.expanded

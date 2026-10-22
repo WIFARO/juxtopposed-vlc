@@ -45,7 +45,7 @@ Flickable {
                             text: section.modelData.title; elide: Text.ElideRight
                             color: root.expanded ? root.theme.foreground : root.theme.playerHeading; font.pixelSize: root.theme.dp(root.expanded ? 20 : 16)
                         }
-                        RedesignIcon { id: arrow; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: root.theme.dp(24); height: width; name: "chevron-right"; color: root.theme.foreground }
+                        RedesignIcon { id: arrow; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: root.theme.dp(24); height: width; name: (LayoutMirroring.enabled ? "chevron-left" : "chevron-right"); color: root.theme.foreground }
                     }
                 }
                 Flickable {
