@@ -20,7 +20,10 @@ C.Dialog {
     signal saveRequested(var urls, string name)
 
     title: qsTr("Open Network Stream")
-    anchors.centerIn: parent
+    // Keep the centered surface on physical pixels for sharp text and borders.
+    readonly property real pixelRatio: parent ? parent.Screen.devicePixelRatio : 1
+    x: parent ? Math.round((parent.width - width) * pixelRatio / 2) / pixelRatio : 0
+    y: parent ? Math.round((parent.height - height) * pixelRatio / 2) / pixelRatio : 0
     width: Math.min(theme.dp(1048), parent ? parent.width - theme.dp(32) : theme.dp(1048))
     height: Math.min(theme.dp(631), parent ? parent.height - theme.dp(32) : theme.dp(631))
     padding: 0; spacing: 0
@@ -121,7 +124,7 @@ C.Dialog {
                     selectByMouse: true; readOnly: root.busy
                     Accessible.name: qsTr("Network URLs")
                     onActiveFocusChanged: if (activeFocus) root.revealFocusedField()
-                    background: Rectangle { color: root.theme.field; radius: root.theme.dp(5); border.width: root.theme.dp(2); border.color: urlsField.activeFocus ? root.theme.accent : root.lightTheme ? root.theme.border : "#191919" }
+                    background: Rectangle { color: root.theme.field; radius: root.theme.dp(6); border.width: root.theme.dp(2); border.color: urlsField.activeFocus ? root.theme.accent : root.lightTheme ? root.theme.border : "#191919" }
                 }
             }
             Text {
@@ -132,9 +135,15 @@ C.Dialog {
                 Accessible.role: Accessible.AlertMessage
             }
             Item { width: 1; height: root.theme.dp(20) }
-            Rectangle {
+            Item {
                 x: root.theme.dp(20); width: parent.width - root.theme.dp(40)
-                height: root.theme.dp(1); color: root.lightTheme ? root.theme.border : "#222222"
+                height: root.theme.dp(1)
+                RedesignSvg {
+                    y: -root.theme.dp(1); width: parent.width; height: root.theme.dp(2)
+                    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height
+                        + '" viewBox="0 -1 ' + width / root.scaleFactor + ' 2"><path d="M0 0H' + width / root.scaleFactor
+                        + '" stroke="' + (root.lightTheme ? root.theme.border : "#222222") + '"/></svg>'
+                }
             }
             Item {
                 width: parent.width; height: Math.max(root.theme.dp(99), nameHelp.y + nameHelp.height + root.theme.dp(23))
@@ -169,12 +178,13 @@ C.Dialog {
                 color: root.theme.settingsHeading; placeholderTextColor: root.lightTheme ? root.theme.foreground : "#404040"
                 selectionColor: root.theme.accent; selectedTextColor: root.theme.field
                 font.pixelSize: root.theme.dp(14); leftPadding: root.theme.dp(14)
+                topPadding: root.theme.dp(6.5); bottomPadding: root.theme.dp(5.5)
                 enabled: root.canSavePlaylist
                 opacity: enabled ? 1 : .5
                 readOnly: root.busy; selectByMouse: true
                 Accessible.name: qsTr("Playlist name")
                 onActiveFocusChanged: if (activeFocus) root.revealFocusedField()
-                background: Rectangle { color: root.theme.field; radius: root.theme.dp(5); border.width: root.theme.dp(2); border.color: nameField.activeFocus ? root.theme.accent : root.lightTheme ? root.theme.border : "#191919" }
+                background: Rectangle { color: root.theme.field; radius: root.theme.dp(6); border.width: root.theme.dp(2); border.color: nameField.activeFocus ? root.theme.accent : root.lightTheme ? root.theme.border : "#191919" }
                 onAccepted: root.submit()
             }
             Item { width: 1; height: root.theme.dp(20) }
