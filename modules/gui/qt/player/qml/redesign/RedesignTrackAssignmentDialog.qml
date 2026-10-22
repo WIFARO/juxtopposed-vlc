@@ -115,7 +115,9 @@ C.Dialog {
     signal saveRequested(var rows, bool subtitles, int request)
     signal saved(var rows, bool subtitles)
     title: subtitles ? qsTr("Add Subtitles") : qsTr("Add Audio Tracks")
-    anchors.centerIn: parent
+    readonly property real pixelRatio: parent ? parent.Screen.devicePixelRatio : 1
+    x: parent ? Math.round((parent.width - width) * pixelRatio / 2) / pixelRatio : 0
+    y: parent ? Math.round((parent.height - height) * pixelRatio / 2) / pixelRatio : 0
     width: Math.min(theme.dp(1048), parent ? parent.width - theme.dp(32) : theme.dp(1048))
     height: Math.min(theme.dp(800), parent ? parent.height - theme.dp(32) : theme.dp(800))
     padding: 0; spacing: 0; modal: true; dim: true; focus: true
@@ -378,6 +380,7 @@ C.Dialog {
     Shortcut { sequences: ["Ctrl+Return", "Ctrl+Enter"]; enabled: root.visible && !root.saving; onActivated: root.submit() }
 
     component HeaderComboBox: RedesignComboBox {
+        labelColor: root.lightTheme ? root.theme.foreground : "#969696"
         leftPadding: root.theme.dp(12); labelVerticalOffset: 0.5
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         background: Rectangle {
@@ -440,7 +443,7 @@ C.Dialog {
                 contentItem: RowLayout {
                     spacing: root.theme.dp(10)
                     RedesignIcon { objectName: "trackAssignmentFolderIcon"; sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.leftMargin: root.theme.dp(8); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "folder"; color: root.theme.foreground }
-                    Text { objectName: "trackAssignmentFolderCaption"; Layout.fillWidth: true; Layout.rightMargin: root.theme.dp(12); text: root.sourceFolderCaption; textFormat: Text.PlainText; elide: Text.ElideMiddle; font.pixelSize: root.theme.dp(14); color: root.theme.foreground }
+                    Text { objectName: "trackAssignmentFolderCaption"; Layout.fillWidth: true; Layout.rightMargin: root.theme.dp(12); text: root.sourceFolderCaption; textFormat: Text.PlainText; elide: Text.ElideMiddle; font.pixelSize: root.theme.dp(14); color: root.lightTheme ? root.theme.foreground : "#969696" }
                 }
                 onClicked: root.folderRequested()
             }
@@ -451,7 +454,7 @@ C.Dialog {
                 enabled: root.providerConfigured && !root.saving
                 text: root.searchTitle; placeholderText: qsTr("Search subtitles")
                 leftPadding: root.theme.dp(42); rightPadding: root.theme.dp(10)
-                color: root.theme.foreground; placeholderTextColor: root.theme.foreground
+                color: root.lightTheme ? root.theme.foreground : "#969696"; placeholderTextColor: root.theme.foreground
                 font.pixelSize: root.theme.dp(14); selectByMouse: true
                 Accessible.name: qsTr("Search subtitles")
                 background: Rectangle { color: root.lightTheme ? root.theme.panel : "#151515"; radius: root.theme.dp(6); border.color: parent.visualFocus ? root.theme.accent : "transparent" }
@@ -544,6 +547,10 @@ C.Dialog {
                     required property var modelData
                     required property int index
                     objectName: "trackAssignmentRow_" + index
+                    readonly property real connectorNameWidth: {
+                        fileNameMetrics.font
+                        return Math.min(root.fileNameColumnWidth, Math.round(fileNameMetrics.advanceWidth(String(modelData.name))))
+                    }
                     width: ListView.view.width; height: root.theme.dp(36)
                     enabled: !root.saving; padding: 0
                     leftPadding: root.theme.dp(root.fileMode ? 8 : 10); rightPadding: leftPadding
@@ -571,13 +578,14 @@ C.Dialog {
                             checked: !!root.selectedRows[entry.modelData.url]
                             Accessible.name: qsTr("Select %1").arg(entry.modelData.name)
                             onToggled: root.selectedRows = Object.assign({}, root.selectedRows, {[entry.modelData.url]: checked})
-                            indicator: Rectangle { x: root.theme.dp(3); y: (parent.height - height) / 2; width: root.theme.dp(18); height: root.theme.dp(16); radius: root.theme.dp(3); color: "transparent"; border.width: root.theme.dp(1.5); border.color: parent.visualFocus ? root.theme.accent : root.theme.playerLabel
+                            indicator: Rectangle { x: root.theme.dp(3); y: (parent.height - height) / 2; width: root.theme.dp(18); height: root.theme.dp(16); radius: root.theme.dp(3); color: "transparent"; border.width: root.theme.dp(1.5); border.pixelAligned: false; border.color: parent.visualFocus ? root.theme.accent : root.theme.playerLabel
                                 RedesignIcon { sourceSize: Qt.size(root.theme.dp(40), root.theme.dp(40)); anchors.fill: parent; anchors.margins: root.theme.dp(1); name: "check"; color: root.theme.accent; visible: parent.parent.checked }
                             }
                             contentItem: Item {}
                         }
                         RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); visible: root.fileMode; Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel }
                         Text {
+                            id: fileLabel
                             objectName: "trackAssignmentName_" + entry.index
                             Layout.fillWidth: root.fileMode; Layout.preferredWidth: root.fileMode ? -1 : root.fileNameColumnWidth
                             Layout.minimumWidth: 0; Layout.topMargin: root.fileMode ? 0 : root.theme.dp(4)
@@ -590,8 +598,14 @@ C.Dialog {
                             Layout.maximumWidth: Layout.preferredWidth
                             Layout.minimumWidth: 0; Layout.preferredHeight: root.theme.dp(1)
                             Layout.leftMargin: -root.theme.dp(3); Layout.topMargin: root.theme.dp(4)
-                            Row { anchors.fill: parent; spacing: root.theme.dp(8); clip: true
-                                Repeater { model: Math.ceil(parent.width / root.theme.dp(16)); Rectangle { width: root.theme.dp(8); height: root.theme.dp(1); color: root.lightTheme ? root.theme.border : "#373737" } }
+                            // Use the unused name-column space without moving the track column.
+                            RedesignSeparator {
+                                objectName: "trackAssignmentConnectorLine_" + entry.index
+                                x: Math.min(0, entry.connectorNameWidth - Math.ceil(fileLabel.width))
+                                width: Math.max(0, Math.floor(parent.width) - x)
+                                scaleFactor: root.scaleFactor
+                                color: root.lightTheme ? root.theme.border : "#373737"
+                                dashArray: "8 8"
                             }
                         }
                         RedesignButton {
@@ -604,8 +618,8 @@ C.Dialog {
                             text: qsTr("Select tracks for %1").arg(entry.modelData.name)
                             tooltipTextFormat: Text.PlainText
                             contentItem: RowLayout {
-                                spacing: root.theme.dp(13)
-                                RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel }
+                                spacing: root.theme.dp(14)
+                                RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel; Layout.leftMargin: -root.theme.dp(1) }
                                 Text { objectName: "trackAssignmentSelection_" + entry.index; Layout.fillWidth: true; text: root.tracks(entry.modelData.url).length ? root.tracks(entry.modelData.url).map(url => root.fileName(url)).join(", ") : qsTr("Select tracks"); textFormat: Text.PlainText; elide: Text.ElideMiddle; color: root.theme.playerHeading; font.pixelSize: root.theme.dp(14) }
                             }
                             onClicked: root.chooseRow(entry.modelData.url)

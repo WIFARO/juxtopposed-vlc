@@ -7,6 +7,13 @@ TestCase {
     id: testCase
     name: "JuxtopposedTrackAssignments"
     width: 1280; height: 900; visible: true; when: windowShown
+    // Scaled software grabs can contain physical pixels with DPR metadata set to 1.
+    Item {
+        id: pixelCaptureBounds
+        width: testCase.width * Screen.devicePixelRatio
+        height: testCase.height * Screen.devicePixelRatio
+        visible: false
+    }
     readonly property string first: "file:///show/Show_S01E01.mkv"
     readonly property string second: "file:///show/Show_S01E02.mkv"
     readonly property string english: "file:///show/Show_S01E01.en.srt"
@@ -110,8 +117,9 @@ TestCase {
         geometry(findChild(dialog,"trackAssignmentSave"),928,748,100,32)
         function pixel(item, x, y, color) {
             const point=item.mapToItem(testCase,x * data.scale,y * data.scale)
-            const image=grabImage(testCase), expected=Qt.color(color)
-            x=Math.round(point.x); y=Math.round(point.y)
+            const image=grabImage(pixelCaptureBounds), expected=Qt.color(color)
+            x=Math.floor(point.x * image.width / testCase.width)
+            y=Math.floor(point.y * image.height / testCase.height)
             compare(image.red(x,y),Math.round(expected.r*255))
             compare(image.green(x,y),Math.round(expected.g*255))
             compare(image.blue(x,y),Math.round(expected.b*255))

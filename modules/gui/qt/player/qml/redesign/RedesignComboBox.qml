@@ -73,6 +73,7 @@ C.ComboBox {
     }
     signal aboutToOpen()
     property color accentColor: "#d37918"
+    property color labelColor: theme.foreground
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     implicitHeight: theme.dp(34)
     font.pixelSize: theme.dp(14)
@@ -80,7 +81,7 @@ C.ComboBox {
     contentItem: Text {
         text: root.displayText; font: root.font
         topPadding: root.theme.dp(root.labelVerticalOffset); bottomPadding: -topPadding
-        color: root.theme.foreground
+        color: root.labelColor
         verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight
     }
     background: Rectangle {
