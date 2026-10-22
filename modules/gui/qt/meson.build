@@ -196,6 +196,7 @@ moc_headers = files(
     'widgets/native/mlfolderseditor.hpp',
     'widgets/native/searchlineedit.hpp',
     'widgets/native/viewblockingrectangle.hpp',
+    'widgets/native/softwarebackdropblur.hpp',
 )
 
 if host_system == 'windows'
@@ -608,6 +609,8 @@ qt_plugin_sources = files(
     'widgets/native/searchlineedit.cpp',
     'widgets/native/searchlineedit.hpp',
     'widgets/native/viewblockingrectangle.cpp',
+    'widgets/native/softwarebackdropblur.cpp',
+    'widgets/native/softwarebackdropblur.hpp',
     'util/video_backdrop_region.hpp',
     'util/video_backdrop_reporter.hpp',
     'widgets/native/viewblockingrectangle.hpp',
@@ -1551,9 +1554,9 @@ if qt6_dep.found()
         endif
         vlc_tests += {
             'name': 'test_qt_backdrop_blur',
-            'sources': [files('tests/test_backdrop_blur.cpp', 'util/textureproviderobserver.cpp', 'widgets/native/viewblockingrectangle.cpp'), shaders_processed, shader_targets],
+            'sources': [files('tests/test_backdrop_blur.cpp', 'util/textureproviderobserver.cpp', 'widgets/native/viewblockingrectangle.cpp', 'widgets/native/softwarebackdropblur.cpp'), shaders_processed, shader_targets],
             'moc_sources': files('tests/test_backdrop_blur.cpp'),
-            'moc_headers': files('util/textureproviderobserver.hpp', 'widgets/native/viewblockingrectangle.hpp'),
+            'moc_headers': files('util/textureproviderobserver.hpp', 'widgets/native/viewblockingrectangle.hpp', 'widgets/native/softwarebackdropblur.hpp'),
             'suite': ['qt'],
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],

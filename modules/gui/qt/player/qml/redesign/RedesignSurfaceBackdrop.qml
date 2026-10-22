@@ -42,6 +42,7 @@ Item {
         cornerRadius: root.cornerRadius
     }
     Widgets.BackdropBlur {
+        z: GraphicsInfo.api === GraphicsInfo.Software ? -2 : 0
         visible: MainCtx.backdropBlurEnabled
         anchors.fill: parent
         sourceItem: root.sourceItem

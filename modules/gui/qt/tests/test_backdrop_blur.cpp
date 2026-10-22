@@ -6,6 +6,7 @@
 #include <QQmlEngine>
 #include <QQuickWindow>
 #include <QSignalSpy>
+#include <QScreen>
 #include <QTest>
 #include <QtPlugin>
 #include <cmath>
@@ -13,6 +14,7 @@
 #include "../plugins.hpp"
 #include "util/textureproviderobserver.hpp"
 #include "widgets/native/viewblockingrectangle.hpp"
+#include "widgets/native/softwarebackdropblur.hpp"
 
 class BackdropContext : public QObject
 {
@@ -63,7 +65,7 @@ private slots:
     void initTestCase()
     {
         if (expectedApi == QSGRendererInterface::Null)
-            QSKIP("Pixel checks require a shader renderer; select opengl or d3d11.");
+            QSKIP("Pixel checks require an explicit renderer; select software, opengl or d3d11.");
     }
 
     void init()
@@ -84,6 +86,8 @@ Window {
     color: shadowTest ? "white" : testAlphaWindow ? "transparent" : "black"
     property bool shadowTest: false
     property int pattern: 0
+    property bool edgePatch: false
+    property bool clipBlur: false
     Item {
         id: underlay
         visible: !shadowTest
@@ -96,14 +100,18 @@ Window {
             height: pattern === 3 ? 256 : 512
             color: pattern === 4 ? Qt.rgba(1, 0, 0, 0.6) : "white"; visible: pattern !== 2
         }
+        Rectangle { x: 116; y: 200; width: 12; height: 112; color: "white"; visible: edgePatch }
         VideoHole { anchors.fill: parent; visible: pattern === 2 }
     }
-    Widgets.BackdropBlur {
-        objectName: "surface"
-        visible: !shadowTest
-        x: 128; y: 128; width: 256; height: 256
-        sourceItem: underlay
-        radius: 25; cornerRadius: 10
+    Item {
+        width: clipBlur ? 260 : 512; height: 512; clip: clipBlur
+        Widgets.BackdropBlur {
+            objectName: "surface"
+            visible: !shadowTest
+            x: 128; y: 128; width: 256; height: 256
+            sourceItem: underlay
+            radius: 25; cornerRadius: 10
+        }
     }
     Item {
         id: shadowCard
@@ -188,6 +196,8 @@ Window {
 
     void referenceMenuShadow()
     {
+        if (expectedApi == QSGRendererInterface::Software)
+            QSKIP("This fixture checks the GPU shadow; software shadows use the image provider.");
         root->setProperty("shadowTest", true);
         auto *shadow = root->findChild<QQuickItem *>("referenceMenuShadow");
         auto *card = root->findChild<QQuickItem *>("shadowCard");
@@ -317,6 +327,51 @@ Window {
         QCOMPARE(surface->property("ready").toBool(), false);
     }
 
+    void parentClipAndHideRestoreUnderlay()
+    {
+        root->setProperty("pattern", 1);
+        root->setProperty("clipBlur", true);
+        QTRY_VERIFY(([&] {
+            const auto image = window->grabWindow();
+            return !image.isNull() && pixel(image, 240, 256).red() > 150
+                && pixel(image, 272, 256).red() == 0;
+        })());
+        root->setProperty("clipBlur", false);
+        QTRY_VERIFY(([&] {
+            const auto image = window->grabWindow();
+            return !image.isNull() && pixel(image, 272, 256).red() > 40;
+        })());
+        surface->setVisible(false);
+        QTRY_VERIFY(([&] {
+            const auto image = window->grabWindow();
+            return !image.isNull() && pixel(image, 240, 256).red() == 255
+                && pixel(image, 272, 256).red() == 0;
+        })());
+    }
+
+    void partialUpdatesDoNotAccumulate()
+    {
+        // Capture the actual presented window, not grabWindow(), which can
+        // repaint the whole scene and hide partial-damage dependency failures.
+        QTest::qWait(100);
+        const auto presented = [this] { return window->screen()->grabWindow(window->winId()).toImage(); };
+        const auto original = presented();
+        QVERIFY(!original.isNull());
+        const int baseline = pixel(original, 136, 256).red();
+        for (int i = 0; i < 4; ++i) {
+            root->setProperty("edgePatch", true);
+            QTRY_VERIFY(([&] {
+                const auto image = presented();
+                return !image.isNull() && pixel(image, 136, 256).red() > baseline + 15;
+            })());
+            root->setProperty("edgePatch", false);
+            QTRY_VERIFY(([&] {
+                const auto image = presented();
+                return !image.isNull() && qAbs(pixel(image, 136, 256).red() - baseline) <= 1;
+            })());
+        }
+    }
+
     void rejectsRecursiveAndOtherWindowSources()
     {
         surface->setProperty("sourceItem", QVariant::fromValue(window->contentItem()));
@@ -336,15 +391,16 @@ int main(int argc, char **argv)
     if (!qEnvironmentVariableIsSet("QT_QPA_PLATFORM"))
         qputenv("QT_QPA_PLATFORM", "offscreen");
 #endif
-    QQuickWindow::setSceneGraphBackend("rhi");
     const auto api = qEnvironmentVariable("VLC_TEST_GRAPHICS_API");
-    expectedApi = api == "opengl" ? QSGRendererInterface::OpenGL :
+    QQuickWindow::setSceneGraphBackend(api == "software" ? "software" : "rhi");
+    expectedApi = api == "software" ? QSGRendererInterface::Software : api == "opengl" ? QSGRendererInterface::OpenGL :
                   api == "d3d11" ? QSGRendererInterface::Direct3D11 : QSGRendererInterface::Null;
     QQuickWindow::setGraphicsApi(expectedApi);
     QGuiApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
     qmlRegisterSingletonType<BackdropContext>("VLC.MainInterface", 1, 0, "MainCtx",
         [](QQmlEngine *engine, QJSEngine *) -> QObject * { return new BackdropContext(engine); });
+    qmlRegisterType<SoftwareBackdropBlur>("VLC.Widgets", 1, 0, "SoftwareBackdropBlur");
     qmlRegisterType<TextureProviderObserver>("VLC.Util", 1, 0, "TextureProviderObserver");
     qmlRegisterType<ViewBlockingRectangle>("BackdropTest", 1, 0, "VideoHole");
     TestBackdropBlur test;

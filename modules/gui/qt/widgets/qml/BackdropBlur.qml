@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import QtQuick
 import QtQuick.Window
+import VLC.Widgets 1.0
 
 // sourceItem must contain the content below the surface, excluding the surface
 // itself. Transparent pixels remain transparent over separately composed video.
@@ -11,8 +12,10 @@ Item {
     property real cornerRadius: 10
     readonly property real padding: Math.ceil(3 * radius)
     property rect captureRect
-    readonly property bool ready: !!effectLoader.item && effectLoader.item.ready
-    readonly property bool available: GraphicsInfo.shaderType === GraphicsInfo.RhiShader
+    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
+    readonly property bool ready: software ? !!softwareLoader.item
+        : !!effectLoader.item && effectLoader.item.ready
+    readonly property bool available: (software || GraphicsInfo.shaderType === GraphicsInfo.RhiShader)
         && !!sourceItem && sourceItem.Window.window === root.Window.window && !sourceContainsSurface()
 
     function sourceContainsSurface() {
@@ -43,9 +46,19 @@ Item {
     }
 
     Loader {
+        id: softwareLoader
+        anchors.fill: parent
+        active: root.software && root.visible && root.available && root.radius > 0 && root.width > 0 && root.height > 0
+        sourceComponent: SoftwareBackdropBlur {
+            radius: root.radius
+            cornerRadius: root.cornerRadius
+        }
+    }
+
+    Loader {
         id: effectLoader
         anchors.fill: parent
-        active: root.visible && root.available && root.radius > 0 && root.width > 0 && root.height > 0
+        active: !root.software && root.visible && root.available && root.radius > 0 && root.width > 0 && root.height > 0
         sourceComponent: Item {
             readonly property bool ready: blur.ready
             ShaderEffectSource {

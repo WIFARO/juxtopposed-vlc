@@ -428,6 +428,7 @@ libqt_plugin_la_SOURCES = \
 	widgets/native/qvlcframe.hpp \
 	widgets/native/searchlineedit.cpp widgets/native/searchlineedit.hpp \
 	widgets/native/viewblockingrectangle.cpp widgets/native/viewblockingrectangle.hpp \
+	widgets/native/softwarebackdropblur.cpp widgets/native/softwarebackdropblur.hpp \
 	widgets/native/doubleclickignoringitem.hpp
 
 # Meta-object compilation
@@ -596,7 +597,8 @@ nodist_libqt_plugin_la_SOURCES = \
 	widgets/native/navigation_attached.moc.cpp \
 	widgets/native/mlfolderseditor.moc.cpp \
 	widgets/native/searchlineedit.moc.cpp \
-	widgets/native/viewblockingrectangle.moc.cpp
+	widgets/native/viewblockingrectangle.moc.cpp \
+	widgets/native/softwarebackdropblur.moc.cpp
 
 nodist_libqt_plugin_la_SOURCES += \
 	dialogs/extended/ui_equalizer.h \
@@ -1980,8 +1982,8 @@ check_PROGRAMS += test_dcomp_backdrop
 TESTS += test_dcomp_backdrop
 endif
 
-test_backdrop_blur_SOURCES = tests/test_backdrop_blur.cpp util/textureproviderobserver.cpp util/textureproviderobserver.hpp widgets/native/viewblockingrectangle.cpp widgets/native/viewblockingrectangle.hpp
-nodist_test_backdrop_blur_SOURCES = tests/test_backdrop_blur.moc util/textureproviderobserver.moc.cpp widgets/native/viewblockingrectangle.moc.cpp shaders/shaders.cpp
+test_backdrop_blur_SOURCES = tests/test_backdrop_blur.cpp util/textureproviderobserver.cpp util/textureproviderobserver.hpp widgets/native/viewblockingrectangle.cpp widgets/native/viewblockingrectangle.hpp widgets/native/softwarebackdropblur.cpp widgets/native/softwarebackdropblur.hpp
+nodist_test_backdrop_blur_SOURCES = tests/test_backdrop_blur.moc util/textureproviderobserver.moc.cpp widgets/native/viewblockingrectangle.moc.cpp widgets/native/softwarebackdropblur.moc.cpp shaders/shaders.cpp
 BUILT_SOURCES += tests/test_backdrop_blur.moc
 CLEANFILES += tests/test_backdrop_blur.moc
 test_backdrop_blur_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DTOP_SRCDIR=\"$(abs_top_srcdir)\"
