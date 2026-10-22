@@ -16,6 +16,8 @@ C.Menu {
     property var profiles: []
     readonly property string profileRows: JSON.stringify(profiles)
     property string selectedProfile: ""
+    property Item triggerItem
+    property bool pointerPressPending: false
     readonly property string profileName: profiles.find(profile => profile.id === selectedProfile)?.name || qsTr("Default Profile")
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     signal actionRequested(string action)
@@ -42,7 +44,39 @@ C.Menu {
     popupType: C.Popup.Item
     background: MenuSurface { shown: root.visible }
     delegate: MenuRow { }
-    onAboutToShow: currentIndex = 0
+    onAboutToShow: currentIndex = pointerPressPending ? -1 : 0
+    onOpened: {
+        // Qt can select a row while transferring focus to the popup.
+        if (pointerPressPending) {
+            currentIndex = -1
+            contentItem.forceActiveFocus()
+        }
+        pointerPressPending = false
+    }
+    contentItem: ListView {
+        implicitHeight: contentHeight
+        model: root.contentModel
+        interactive: Window.window ? contentHeight + root.topPadding + root.bottomPadding > root.height : false
+        clip: true
+        currentIndex: root.currentIndex
+        C.ScrollIndicator.vertical: C.ScrollIndicator { }
+        TapHandler {
+            parent: root.triggerItem
+            acceptedButtons: Qt.LeftButton
+            // Observe the trigger without taking its click.
+            gesturePolicy: TapHandler.DragThreshold
+            onPressedChanged: {
+                if (pressed) root.pointerPressPending = true
+                else Qt.callLater(() => root.pointerPressPending = false)
+            }
+        }
+        Keys.onPressed: event => {
+            if (event.key !== Qt.Key_Home && event.key !== Qt.Key_End) return
+            root.currentIndex = event.key === Qt.Key_Home ? 0 : root.count - 1
+            root.itemAt(root.currentIndex).forceActiveFocus()
+            event.accepted = true
+        }
+    }
 
     function activate(action) { dismiss(); actionRequested(action) }
 

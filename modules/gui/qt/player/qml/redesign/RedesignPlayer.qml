@@ -578,6 +578,7 @@ FocusScope {
     RedesignMenu {
         id: mediaMenu
         parent: view
+        triggerItem: view.mainMenuTrigger
         videoBackdropContent: rootPlayer.menuBackdropContent
         scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
         recentModel: recentMenuModel.item

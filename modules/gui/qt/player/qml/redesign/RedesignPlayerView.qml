@@ -11,6 +11,7 @@ FocusScope {
     property bool presentationOnly: false
     property string playerLayout: ""
     readonly property alias layoutModel: chromeLayout
+    readonly property alias mainMenuTrigger: mainMenuButton
     readonly property real controlsHeight: chrome.controlsHeight
     readonly property bool layoutReady: !chrome.applying && JSON.stringify(chrome.renderedLayout) === JSON.stringify(chromeLayout.layout)
     readonly property var chromeItems: chrome.allControls

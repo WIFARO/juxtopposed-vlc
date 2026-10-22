@@ -24,6 +24,7 @@ TestCase {
     RedesignMenu {
         id: menu
         parent: testCase
+        triggerItem: menuButton
         x: 20; y: 20
         recentModel: recentFiles
         profiles: [{id: "movies", name: "Movies"}, {id: "music", name: "Music"}]
@@ -129,6 +130,41 @@ TestCase {
         compare(actions.count, 1)
         compare(actions.signalArguments[0][0], "directory")
         tryCompare(menu, "visible", false)
+    }
+    function test_openingHighlightFollowsInputMethod() {
+        menu.dismiss()
+        tryCompare(menu, "visible", false)
+        mouseClick(menuButton)
+        tryCompare(menu, "opened", true)
+        compare(menu.currentIndex, -1)
+        verify(!menu.itemAt(0).highlighted)
+        keyClick(Qt.Key_End)
+        compare(menu.currentIndex, menu.count - 1)
+        keyClick(Qt.Key_Home)
+        compare(menu.currentIndex, 0)
+        keyClick(Qt.Key_Escape)
+        tryCompare(menu, "visible", false)
+        mouseClick(menuButton)
+        tryCompare(menu, "opened", true)
+        keyClick(Qt.Key_Down)
+        compare(menu.currentIndex, 0)
+        verify(menu.itemAt(0).highlighted)
+        keyClick(Qt.Key_Escape)
+        tryCompare(menu, "visible", false)
+        testCase.forceActiveFocus()
+        keyClick(Qt.Key_Tab)
+        tryCompare(menuButton, "visualFocus", true)
+        keyClick(Qt.Key_Space)
+        tryCompare(menu, "opened", true)
+        compare(menu.currentIndex, 0)
+        verify(menu.itemAt(0).highlighted)
+        keyClick(Qt.Key_Return)
+        compare(actions.signalArguments[0][0], "file")
+        tryCompare(menu, "visible", false)
+        mouseClick(menuButton)
+        tryCompare(menu, "opened", true)
+        compare(menu.currentIndex, -1)
+        verify(!menu.itemAt(0).highlighted)
     }
     function test_keyboardHomeEnd() {
         keyClick(Qt.Key_End)
