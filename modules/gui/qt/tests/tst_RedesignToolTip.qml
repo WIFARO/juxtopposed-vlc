@@ -11,6 +11,8 @@ TestCase {
     width: 600; height: 400
     visible: true; when: windowShown
     property real originalWindowWidth: 0
+    property real originalWindowHeight: 0
+    property bool hintPreference: true
     RedesignButton { id: button; x: 20; y: 100; text: "Playback settings" }
     SignalSpy { id: closedSpy; target: findChild(button, "redesignToolTip"); signalName: "closed" }
     Window {
@@ -20,18 +22,82 @@ TestCase {
         visible: false
         RedesignButton { id: offscreenButton; text: "Audio" }
     }
+    Component { id: mainMenuPopup; RedesignMenu { triggerItem: button } }
+    Component { id: actionMenuPopup; RedesignActionMenu { entries: [{action: "first", label: "First"}] } }
+    Component { id: trackPopup; RedesignTrackPopup { placementArea: testCase } }
+    function test_popupCancelsTriggerHint_data() {
+        return [
+            {tag: "menu-pending", component: mainMenuPopup, mode: "menu", shown: false},
+            {tag: "menu-shown", component: mainMenuPopup, mode: "menu", shown: true},
+            {tag: "actions-pending", component: actionMenuPopup, mode: "action", shown: false},
+            {tag: "actions-shown", component: actionMenuPopup, mode: "action", shown: true},
+            {tag: "tracks-pending", component: trackPopup, mode: "track", shown: false},
+            {tag: "tracks-shown", component: trackPopup, mode: "track", shown: true}
+        ]
+    }
+    function test_popupCancelsTriggerHint(data) {
+        testCase.height = 900
+        testCase.Window.window.height = 900
+        const popup = createTemporaryObject(data.component, testCase)
+        verify(popup !== null)
+        const activate = () => {
+            if (data.mode === "track") popup.toggleFrom(button, "audio")
+            else if (data.mode === "menu") popup.toggleFrom(button, testCase)
+            else popup.toggleFrom(button)
+        }
+        button.clicked.connect(activate)
+        try {
+            const tip = findChild(button, "redesignToolTip")
+            tip.delay = 200
+            mouseMove(button, button.width / 2, button.height / 2)
+            if (data.shown) tryCompare(tip, "opened", true, 2000)
+            else { wait(20); compare(tip.opened, false) }
+            mouseClick(button)
+            tryCompare(popup, "opened", true)
+            tryCompare(tip, "visible", false)
+            wait(tip.delay + 100)
+            verify(!tip.visible, "The trigger hint must not cover its open popup.")
+            popup.close()
+            tryCompare(popup, "visible", false)
+            mouseMove(testCase, 500, 850)
+            mouseMove(button, button.width / 2, button.height / 2)
+            tryCompare(tip, "opened", true, 2000)
+        } finally {
+            button.clicked.disconnect(activate)
+            popup.close()
+        }
+    }
+    function test_popupRestoresTheTriggerHintBinding() {
+        const popup = createTemporaryObject(actionMenuPopup, testCase)
+        verify(popup !== null)
+        button.tooltipEnabled = Qt.binding(() => testCase.hintPreference)
+        popup.toggleFrom(button)
+        tryCompare(popup, "opened", true)
+        compare(button.tooltipEnabled, false)
+        hintPreference = false
+        popup.close()
+        tryCompare(popup, "visible", false)
+        compare(button.tooltipEnabled, false)
+        hintPreference = true
+        compare(button.tooltipEnabled, true)
+    }
     function init() {
         originalWindowWidth = testCase.Window.window.width
+        originalWindowHeight = testCase.Window.window.height
+        button.tooltipEnabled = true; hintPreference = true
         testCase.Window.window.visibility = Window.Windowed
         button.scaleFactor = 1; button.lightTheme = false
         button.text = "Playback settings"; button.tooltipTextFormat = Text.AutoText
         button.x = 20; button.y = 100
         const tip = findChild(button, "redesignToolTip")
+        tip.delay = 650
         tip.close(); mouseMove(testCase, 400, 300)
     }
     function cleanup() {
         findChild(button, "redesignToolTip").close()
         testCase.Window.window.width = originalWindowWidth
+        testCase.height = 400
+        testCase.Window.window.height = originalWindowHeight
         testCase.Window.window.visibility = Window.Windowed
     }
     function test_fileNamesCanRequestPlainText() {

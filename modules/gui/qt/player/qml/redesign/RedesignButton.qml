@@ -11,6 +11,7 @@ T.Button {
     property string iconName
     property string selectedIconName: iconName
     property int tooltipTextFormat: Text.AutoText
+    property bool tooltipEnabled: true
     property string caption
     property bool leftAligned: false
     property bool accent: false
@@ -45,7 +46,7 @@ T.Button {
         theme: root.theme
         text: root.text
         contentTextFormat: root.tooltipTextFormat
-        visible: root.text.length > 0 && (root.hovered || root.visualFocus)
+        visible: root.tooltipEnabled && !root.pressed && root.text.length > 0 && (root.hovered || root.visualFocus)
     }
 
     background: Rectangle {

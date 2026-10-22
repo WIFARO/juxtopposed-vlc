@@ -251,7 +251,7 @@ FocusScope {
         lightTheme: !VLCStyle.palette.isDark
         accentColor: MainCtx.redesignAccent
         playerLayout: MainCtx.redesignPlayerPreferences.layout
-        customMenuOpen: customChoice.visible
+        customMenuOpen: customChoice.visible || mediaMenu.visible
         customControlStates: ({
             speed: {enabled: Player.ratechangable},
             forward10: {enabled: view.seekable}, backward10: {enabled: view.seekable},

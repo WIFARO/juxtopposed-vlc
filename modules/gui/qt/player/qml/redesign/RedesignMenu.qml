@@ -18,6 +18,15 @@ C.Menu {
     property string selectedProfile: ""
     property Item triggerItem
     property bool pointerPressPending: false
+    // Cancel a pending hint while this button owns an open popup.
+    Binding {
+        target: root.triggerItem && root.triggerItem.tooltipEnabled !== undefined ? root.triggerItem : null
+        property: "tooltipEnabled"
+        value: false
+        when: root.visible && !!target
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     readonly property string profileName: profiles.find(profile => profile.id === selectedProfile)?.name || qsTr("Default Profile")
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     signal actionRequested(string action)
@@ -147,8 +156,17 @@ C.Menu {
     }
     component MenuDivider: C.MenuSeparator {
         padding: 0
+        verticalPadding: 0
         implicitHeight: root.theme.dp(1)
-        contentItem: Rectangle { implicitHeight: root.theme.dp(1); color: root.theme.border }
+        contentItem: Item {
+            implicitHeight: root.theme.dp(1)
+            Rectangle {
+                x: -root.theme.dp(0.5); y: -root.theme.dp(0.5)
+                width: parent.width + root.theme.dp(1); height: root.theme.dp(1)
+                radius: height / 2; antialiasing: true
+                color: root.lightTheme ? root.theme.border : "#222222"
+            }
+        }
     }
 
     MenuRow { text: qsTr("Open File(s)"); glyph: "menu-file"; hint: "Ctrl + O"; onTriggered: root.activate("file") }

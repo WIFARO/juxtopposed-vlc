@@ -12,6 +12,15 @@ C.Menu {
     property var entries: []
     property string checkedAction: ""
     property Item buttonAnchor: null
+    // Cancel a pending hint while this button owns an open popup.
+    Binding {
+        target: root.buttonAnchor && root.buttonAnchor.tooltipEnabled !== undefined ? root.buttonAnchor : null
+        property: "tooltipEnabled"
+        value: false
+        when: root.visible && !!target
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     readonly property real windowHeight: parent && parent.Window.window ? parent.Window.window.height : implicitHeight + 2 * margins
     readonly property real spaceAbove: buttonAnchor ? Math.max(0, Math.min(windowHeight,
         buttonAnchor.mapToItem(buttonAnchor.Window.window.contentItem, 0, 0).y) - margins) : 0

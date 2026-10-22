@@ -125,6 +125,16 @@ TestCase {
         verify(menu.opened)
     }
 
+    function test_dividerSpansTheReferenceCard() {
+        const divider = menu.itemAt(7)
+        compare(divider.width, menu.availableWidth)
+        compare(divider.height, 1)
+        compare(divider.availableHeight, 1)
+        compare(divider.contentItem.height, 1)
+        compare(divider.contentItem.width, divider.availableWidth)
+        verify(divider.contentItem.width > 300)
+    }
+
     function test_orderAndSize() {
         compare(menu.width, 375)
         compare(menu.count, 13)

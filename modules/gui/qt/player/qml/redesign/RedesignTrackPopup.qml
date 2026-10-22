@@ -20,6 +20,15 @@ C.Popup {
     property bool lightTheme: false
     property string page: "subtitles"
     property Item placementArea: parent
+    // Cancel a pending hint while this button owns an open popup.
+    Binding {
+        target: root.parent && root.parent.tooltipEnabled !== undefined ? root.parent : null
+        property: "tooltipEnabled"
+        value: false
+        when: root.visible && !!target
+        restoreMode: Binding.RestoreBindingOrValue
+    }
+
     property real bottomLimit: placementArea ? placementArea.height - theme.dp(54) : 0
     property var videoTracks
     property var audioTracks
