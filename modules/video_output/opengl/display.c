@@ -335,6 +335,21 @@ static void PictureRender (vout_display_t *vd, picture_t *pic,
     VLC_UNUSED(date);
     vout_display_sys_t *sys = vd->sys;
 
+    /* The importer reads crop coordinates from the picture. Keep the cached
+     * decoder picture unchanged when applying the user's display crop. */
+    picture_t *cropped = NULL;
+    if (pic->format.i_x_offset != vd->source->i_x_offset
+        || pic->format.i_y_offset != vd->source->i_y_offset
+        || pic->format.i_visible_width != vd->source->i_visible_width
+        || pic->format.i_visible_height != vd->source->i_visible_height)
+    {
+        cropped = picture_Clone(pic);
+        if (cropped == NULL)
+            return;
+        video_format_CopyCrop(&cropped->format, vd->source);
+        pic = cropped;
+    }
+
     if (vlc_gl_MakeCurrent (sys->gl) == VLC_SUCCESS)
     {
         if (sys->stereo.changed)
@@ -365,6 +380,8 @@ static void PictureRender (vout_display_t *vd, picture_t *pic,
         vlc_gl_ReleaseCurrent (sys->gl);
         sys->is_dirty = true;
     }
+    if (cropped != NULL)
+        picture_Release(cropped);
 }
 
 static void PictureDisplay (vout_display_t *vd, picture_t *pic)
