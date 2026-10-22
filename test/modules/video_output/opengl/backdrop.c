@@ -102,6 +102,53 @@ static void Clipped(struct vlc_gl_backdrop *b, int width, int height,
     assert(changed>1000 && outside>1000);
     ++checks;
 }
+
+static void EdgeGaussian(struct vlc_gl_backdrop *b, double sigma, bool clipped)
+{
+    const int width = 513, height = 385, radius = ceil(3 * sigma);
+    Pattern(width, height, 0, false); Read(before, width, height);
+    struct vlc_window_backdrop_region r = {
+        clipped ? -20.5 : 12.25, clipped ? -10.25 : 20.75,
+        width - 35.5, height - 50.25, sigma, 14,
+    };
+    vlc_gl_backdrop_Draw(b, width, height, &r, 1); Read(after, width, height);
+    double weights[2 * radius + 1], total = 0;
+    for (int i = -radius; i <= radius; ++i)
+    { weights[i + radius] = exp(-i * i / (2 * sigma * sigma)); total += weights[i + radius]; }
+    for (int i = 0; i <= 2 * radius; ++i) weights[i] /= total;
+    double *horizontal = malloc(width * height * sizeof(*horizontal)); assert(horizontal);
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+        {
+            double value = 0;
+            for (int i = -radius; i <= radius; ++i)
+                value += before[(y * width + VLC_CLIP(x + i, 0, width - 1)) * 4] * weights[i + radius];
+            horizontal[y * width + x] = value;
+        }
+    double error = 0, sum = 0;
+    for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+        {
+            double value = 0;
+            for (int i = -radius; i <= radius; ++i)
+                value += horizontal[VLC_CLIP(y + i, 0, height - 1) * width + x] * weights[i + radius];
+            const double px = fabs(x + .5 - r.x - r.width / 2.) - r.width / 2. + r.corner_radius;
+            const double py = fabs(height - y - .5 - r.y - r.height / 2.) - r.height / 2. + r.corner_radius;
+            const double distance = hypot(fmax(px, 0), fmax(py, 0)) + fmin(fmax(px, py), 0) - r.corner_radius;
+            const double t = VLC_CLIP(distance + .5, 0, 1), alpha = 1 - t * t * (3 - 2 * t);
+            const unsigned char *original = before + (y * width + x) * 4;
+            const unsigned char *actual = after + (y * width + x) * 4;
+            if (alpha == 0) assert(!memcmp(original, actual, 4));
+            const double expected = alpha * value + (1 - alpha) * original[0];
+            for (int c = 0; c < 3; ++c)
+            { double delta = fabs(actual[c] - expected); error = fmax(error, delta); sum += delta; }
+        }
+    free(horizontal);
+    fprintf(stderr, "Edge Gaussian %.1f clipped=%d: max %.3f mean %.3f\n",
+            sigma, clipped, error, sum / (width * height * 3));
+    assert(error <= 5 && sum / (width * height * 3) <= 1);
+    ++checks;
+}
 static void State(struct vlc_gl_backdrop *b)
 {
     Pattern(512,384,0,false); Read(before,512,384);
@@ -195,6 +242,7 @@ int main(void)
     fprintf(stderr,"OpenGL version: %s\n",v->GetString(GL_VERSION));
     struct vlc_gl_backdrop *b=vlc_gl_backdrop_New(gl); assert(b);
     Gaussian(b,25); Gaussian(b,37.5); Gaussian(b,50);
+    EdgeGaussian(b,25,false); EdgeGaussian(b,37.5,false); EdgeGaussian(b,50,true);
     Clipped(b,512,384,(struct vlc_window_backdrop_region){64,32,384,320,25,14});
     Clipped(b,513,383,(struct vlc_window_backdrop_region){64.25,32.5,383.5,319.25,25,14});
     Clipped(b,512,384,(struct vlc_window_backdrop_region){-50,-20,200,200,25,14});

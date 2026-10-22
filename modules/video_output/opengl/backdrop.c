@@ -365,18 +365,25 @@ void vlc_gl_backdrop_Draw(struct vlc_gl_backdrop *b, unsigned width, unsigned he
         {
             const struct target *input = ready ? &b->pyramid[ready-1] : &b->source;
             struct target *output = &b->pyramid[ready];
-            if (!Target(b, output, (input->width+1)/2, (input->height+1)/2)) goto done;
+            unsigned scale = 1u << (ready + 1);
+            /* Preserve an extruded edge texel at every level and keep the
+             * grid aligned to source pixels, including odd display sizes. */
+            if (!Target(b, output, (width+scale-1)/scale+2,
+                        (height+scale-1)/scale+2)) goto done;
             v->BindFramebuffer(GL_FRAMEBUFFER, output->framebuffer);
             v->Viewport(0, 0, output->width, output->height);
-            Draw(b, &b->copy, input->texture, full);
+            float start = ready ? -1.f : -2.f;
+            const GLfloat padded[] = {start/input->width, start/input->height,
+                2.f*output->width/input->width, 2.f*output->height/input->height};
+            Draw(b, &b->copy, input->texture, padded);
             ++ready;
         }
         const struct target *input = level ? &b->pyramid[level-1] : &b->source;
-        double sx = (double)width/input->width, sy = (double)height/input->height;
-        int x0 = fmax(0, floor((left - 3*radius - 2*sx)/sx));
-        int y0 = fmax(0, floor((bottom - 3*radius - 2*sy)/sy));
-        int x1 = fmin(input->width, ceil((right + 3*radius + 2*sx)/sx));
-        int y1 = fmin(input->height, ceil((top + 3*radius + 2*sy)/sy));
+        double sx = 1u << level, sy = sx, origin = level ? -sx : 0;
+        int x0 = fmax(0, floor((left - 3*radius - 2*sx - origin)/sx));
+        int y0 = fmax(0, floor((bottom - 3*radius - 2*sy - origin)/sy));
+        int x1 = fmin(input->width, ceil((right + 3*radius + 2*sx - origin)/sx));
+        int y1 = fmin(input->height, ceil((top + 3*radius + 2*sy - origin)/sy));
         struct region_targets *targets = &b->regions[i];
         if (!Target(b, &targets->horizontal, x1-x0, y1-y0)
             || !Target(b, &targets->vertical, x1-x0, y1-y0)) goto done;
@@ -390,7 +397,7 @@ void vlc_gl_backdrop_Draw(struct vlc_gl_backdrop *b, unsigned width, unsigned he
         Weights(b, radius/sy, 0, 1.f/(y1-y0));
         Draw(b, &b->blur, targets->horizontal.texture, full);
         int l = floor(left), btm = floor(bottom), rr = ceil(right), tt = ceil(top);
-        const GLfloat mask_uv[] = {(float)((l/sx-x0)/(x1-x0)), (float)((btm/sy-y0)/(y1-y0)),
+        const GLfloat mask_uv[] = {(float)(((l-origin)/sx-x0)/(x1-x0)), (float)(((btm-origin)/sy-y0)/(y1-y0)),
             (float)((rr-l)/sx/(x1-x0)), (float)((tt-btm)/sy/(y1-y0))};
         v->BindFramebuffer(GL_FRAMEBUFFER, s.draw);
         v->Viewport(l, btm, rr-l, tt-btm);
