@@ -48,6 +48,7 @@
 #include <vlc_dialog.h>
 #include "opengl/renderer.h"
 #include "opengl/vout_helper.h"
+#include "opengl/backdrop.h"
 
 /**
  * Forward declarations
@@ -107,6 +108,7 @@ typedef struct vout_display_sys_t
 
     vlc_gl_t *gl;
     vout_display_opengl_t *vgl;
+    struct vlc_gl_backdrop_window backdrop;
 
     picture_t *current;
     bool has_first_frame;
@@ -300,6 +302,7 @@ static void Close(vout_display_t *vd)
         if (sys->vgl != NULL)
         {
             vlc_gl_MakeCurrent(sys->gl);
+            vlc_gl_backdrop_window_Close(&sys->backdrop);
             vout_display_opengl_Delete (sys->vgl);
             vlc_gl_ReleaseCurrent(sys->gl);
         }
@@ -545,7 +548,11 @@ static void OpenglSwap (vlc_gl_t *gl)
     vout_display_opengl_SetOutputSize(sys->vgl, sys->cfg.display.width, sys->cfg.display.height);
 
     if (sys->has_first_frame)
+    {
         vout_display_opengl_Display (sys->vgl);
+        vlc_gl_backdrop_window_Draw(&sys->backdrop, sys->gl, vd->cfg->window,
+                                    sys->cfg.display.width, sys->cfg.display.height);
+    }
     else
         glClear (GL_COLOR_BUFFER_BIT);
     vlc_gl_Swap(sys->gl);

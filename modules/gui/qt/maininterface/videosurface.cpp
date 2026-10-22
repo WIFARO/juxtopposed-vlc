@@ -75,9 +75,10 @@ void VideoSurfaceProvider::enable(vlc_window_t* voutWindow)
     m_voutWindow = voutWindow;
     {
         QMutexLocker lock(&m_nativeBackdropLock);
-        // Wayland puts video below the UI on a separate native surface. Other
-        // compositors already apply the regions when they compose that surface.
-        if (voutWindow->type == VLC_WINDOW_TYPE_WAYLAND)
+        // Wayland and Cocoa put video below the UI on a separate native surface.
+        // Their video outputs apply the regions after rendering the picture.
+        if (voutWindow->type == VLC_WINDOW_TYPE_WAYLAND
+            || voutWindow->type == VLC_WINDOW_TYPE_NSOBJECT)
         {
             m_nativeBackdropWindow = voutWindow;
             const auto state = backdropRegions();

@@ -46,6 +46,7 @@
 
 #include "opengl/renderer.h"
 #include "opengl/vout_helper.h"
+#include "opengl/backdrop.h"
 
 /**
  * Protocol declaration that drawable-nsobject should follow
@@ -106,6 +107,7 @@ typedef struct vout_display_sys_t {
 
     vlc_gl_t *gl;
     vout_display_opengl_t *vgl;
+    struct vlc_gl_backdrop_window backdrop;
 
     vout_display_place_t place;
     vout_display_cfg_t cfg;
@@ -344,7 +346,14 @@ static void Close(vout_display_t *vd)
 {
     vout_display_sys_t *sys = vd->sys;
 
+    /* Stop and drain OS render callbacks before deleting their GL resources. */
+    if (sys->gl && sys->gl->sys) {
+        VLCVideoLayerView *view = (__bridge VLCVideoLayerView *)sys->gl->sys;
+        [(VLCCAOpenGLLayer *)view.layer vlcClose];
+    }
+
     if (sys->vgl && !vlc_gl_MakeCurrent(sys->gl)) {
+        vlc_gl_backdrop_window_Close(&sys->backdrop);
         vout_display_opengl_Delete(sys->vgl);
         vlc_gl_ReleaseCurrent(sys->gl);
     }
@@ -544,6 +553,8 @@ static int Open (vout_display_t *vd,
                     vout_display_opengl_SetOutputSize(sys->vgl, sys->cfg.display.width, sys->cfg.display.height);
 
                     vout_display_opengl_Display(sys->vgl);
+                    vlc_gl_backdrop_window_Draw(&sys->backdrop, sys->gl, vd->cfg->window,
+                                                sys->cfg.display.width, sys->cfg.display.height);
 
                 };
             }
@@ -796,6 +807,7 @@ shouldInheritContentsScale:(CGFloat)newScale
     @synchronized (self) {
         atomic_store(&_is_ready, false);
         _gl = NULL;
+        self.render = nil;
     }
 }
 

@@ -25,7 +25,19 @@
 #ifndef GL_PIXEL_UNPACK_BUFFER_BINDING
 # define GL_PIXEL_UNPACK_BUFFER_BINDING 0x88EF
 #endif
-struct target { GLuint texture, framebuffer; GLsizei width, height; };
+#ifndef GL_RGBA16F
+# define GL_RGBA16F 0x881A
+#endif
+#ifndef GL_RGBA32F
+# define GL_RGBA32F 0x8814
+#endif
+#ifndef GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE
+# define GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE 0x8212
+#endif
+#ifndef GL_BACK_LEFT
+# define GL_BACK_LEFT 0x0402
+#endif
+struct target { GLuint texture, framebuffer; GLsizei width, height; GLint format; };
 struct region_targets { struct target horizontal, vertical; };
 struct program { GLuint id; GLint uv, step, weights, rect, radius; };
 struct vlc_gl_backdrop
@@ -38,6 +50,7 @@ struct vlc_gl_backdrop
     GLuint buffer, array;
     bool separate_framebuffers, srgb;
     GLint max_texture;
+    GLint target_format;
     void (APIENTRY *CopyTexSubImage2D)(GLenum, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei);
     void (APIENTRY *GetBooleanv)(GLenum, GLboolean *);
     GLboolean (APIENTRY *IsEnabled)(GLenum);
@@ -63,7 +76,7 @@ static void DeleteTarget(struct vlc_gl_backdrop *b, struct target *t)
 static bool Target(struct vlc_gl_backdrop *b, struct target *t, GLsizei w, GLsizei h)
 {
     const opengl_vtable_t *v = &b->api.vt;
-    if (t->width == w && t->height == h)
+    if (t->width == w && t->height == h && t->format == b->target_format)
         return true;
     DeleteTarget(b, t);
     if (w < 1 || h < 1 || w > b->max_texture || h > b->max_texture)
@@ -74,7 +87,8 @@ static bool Target(struct vlc_gl_backdrop *b, struct target *t, GLsizei w, GLsiz
     v->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     v->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     v->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    v->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    v->TexImage2D(GL_TEXTURE_2D, 0, b->target_format, w, h, 0, GL_RGBA,
+                 b->target_format == GL_RGBA ? GL_UNSIGNED_BYTE : GL_FLOAT, NULL);
     v->GenFramebuffers(1, &t->framebuffer);
     v->BindFramebuffer(GL_FRAMEBUFFER, t->framebuffer);
     v->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t->texture, 0);
@@ -84,7 +98,7 @@ static bool Target(struct vlc_gl_backdrop *b, struct target *t, GLsizei w, GLsiz
         DeleteTarget(b, t);
         return false;
     }
-    t->width = w; t->height = h;
+    t->width = w; t->height = h; t->format = b->target_format;
     return true;
 }
 
@@ -102,7 +116,7 @@ static struct program Program(struct vlc_gl_backdrop *b, vlc_gl_t *gl,
     const char *fragment[] = {version,
         modern ? "in vec2 uv; out vec4 outputColor;\n#define SAMPLE texture\n#define COLOR outputColor\n"
                : "varying vec2 uv;\n#define SAMPLE texture2D\n#define COLOR gl_FragColor\n",
-        "uniform sampler2D image;\n", body};
+        b->api.is_gles ? "uniform highp sampler2D image;\n" : "uniform sampler2D image;\n", body};
     struct program p = {0};
     p.id = vlc_gl_BuildProgram(VLC_OBJECT(gl), v, ARRAY_SIZE(vertex), vertex,
                                ARRAY_SIZE(fragment), fragment);
@@ -327,6 +341,16 @@ void vlc_gl_backdrop_Draw(struct vlc_gl_backdrop *b, unsigned width, unsigned he
     Save(b, &s);
     GLboolean srgb = b->srgb && b->IsEnabled(GL_FRAMEBUFFER_SRGB);
     if (srgb) v->Disable(GL_FRAMEBUFFER_SRGB);
+    /* Cocoa can present extended-range floating-point pixels. Keep those
+     * values through every intermediate, rather than clipping them to SDR. */
+    GLint red_bits = 8;
+    if (b->separate_framebuffers && v->GetFramebufferAttachmentParameteriv)
+        v->GetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER,
+            s.draw ? GL_COLOR_ATTACHMENT0 : b->api.is_gles ? GL_BACK : GL_BACK_LEFT,
+            GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE, &red_bits);
+    else
+        v->GetIntegerv(GL_RED_BITS, &red_bits);
+    b->target_format = red_bits > 16 ? GL_RGBA32F : red_bits > 8 ? GL_RGBA16F : GL_RGBA;
     if (b->count != count)
     {
         for (size_t i = 0; i < b->count; ++i)
@@ -412,4 +436,29 @@ void vlc_gl_backdrop_Draw(struct vlc_gl_backdrop *b, unsigned width, unsigned he
 done:
     if (srgb) v->Enable(GL_FRAMEBUFFER_SRGB);
     Restore(b, &s);
+}
+
+void vlc_gl_backdrop_window_Draw(struct vlc_gl_backdrop_window *state, vlc_gl_t *gl,
+                                vlc_window_t *window, unsigned width, unsigned height)
+{
+    vlc_window_backdrops_t *snapshot = vlc_window_HoldBackdrops(window);
+    size_t count;
+    const struct vlc_window_backdrop_region *regions =
+        vlc_window_GetBackdropRegions(snapshot, &count);
+    if (count && !state->renderer && !state->failed)
+    {
+        state->renderer = vlc_gl_backdrop_New(gl);
+        state->failed = !state->renderer;
+        if (state->failed)
+            msg_Warn(gl, "Could not create native video backdrop renderer");
+    }
+    if (count && state->renderer)
+        vlc_gl_backdrop_Draw(state->renderer, width, height, regions, count);
+    vlc_window_ReleaseBackdrops(snapshot);
+}
+
+void vlc_gl_backdrop_window_Close(struct vlc_gl_backdrop_window *state)
+{
+    vlc_gl_backdrop_Delete(state->renderer);
+    *state = (struct vlc_gl_backdrop_window) {0};
 }

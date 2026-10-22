@@ -28,6 +28,12 @@
 #ifndef GL_PIXEL_UNPACK_BUFFER_BINDING
 # define GL_PIXEL_UNPACK_BUFFER_BINDING 0x88EF
 #endif
+#ifndef GL_RGBA16F
+# define GL_RGBA16F 0x881A
+#endif
+#ifndef GL_RGBA32F
+# define GL_RGBA32F 0x8814
+#endif
 const char vlc_module_name[] = "test_gl_backdrop";
 static void *GetSymbol(vlc_gl_t *gl, const char *name)
 { (void)gl; return eglGetProcAddress(name); }
@@ -211,6 +217,130 @@ static void State(struct vlc_gl_backdrop *b)
     ++checks;
 }
 
+static unsigned missing_function_requests;
+static void *MissingSymbol(vlc_gl_t *gl, const char *name)
+{
+    if (!strcmp(name, "glCopyTexSubImage2D"))
+    { ++missing_function_requests; return NULL; }
+    return GetSymbol(gl, name);
+}
+
+static void WindowBackdrops(vlc_gl_t *gl, struct vlc_gl_backdrop *reference)
+{
+    const vlc_window_owner_t owner = {0};
+    vlc_window_t *window = vlc_window_New(VLC_OBJECT(gl), "dummy", &owner, NULL);
+    assert(window);
+    /* The core snapshot API must also work for a Cocoa video window. No OS
+     * drawable is needed for this EGL test of the shared final render pass. */
+    window->type = VLC_WINDOW_TYPE_NSOBJECT;
+    struct vlc_gl_backdrop_window state = {0};
+    const unsigned width = 513, height = 385;
+    Pattern(width, height, 0, false); Read(before, width, height);
+    vlc_gl_backdrop_window_Draw(&state, gl, window, width, height);
+    Read(after, width, height);
+    assert(!state.renderer && !state.failed && !memcmp(before, after, width * height * 4));
+    ++checks;
+
+    struct vlc_window_backdrop_region regions[] = {
+        {12.25, 305, 140, 100, 25, 14},
+        {-20.5, -10.25, 277.5, 234.75, 37.5, 14},
+    };
+    for (size_t count = 1; count <= ARRAY_SIZE(regions); ++count)
+    {
+        assert(vlc_window_SetBackdrops(window, regions, count) == VLC_SUCCESS);
+        Pattern(width, height, 0, false);
+        vlc_gl_backdrop_Draw(reference, width, height, regions, count);
+        Read(isolated, width, height);
+        Pattern(width, height, 0, false);
+        vlc_gl_backdrop_window_Draw(&state, gl, window, width, height);
+        Read(after, width, height);
+        assert(state.renderer && !state.failed && !memcmp(isolated, after, width * height * 4));
+        ++checks;
+    }
+    assert(vlc_window_SetBackdrops(window, NULL, 0) == VLC_SUCCESS);
+    Pattern(width, height, 0, false);
+    vlc_gl_backdrop_window_Draw(&state, gl, window, width, height);
+    Read(after, width, height);
+    assert(!memcmp(before, after, width * height * 4));
+    vlc_gl_backdrop_window_Close(&state);
+    assert(!state.renderer && !state.failed);
+    ++checks;
+
+    assert(vlc_window_SetBackdrops(window, regions, 1) == VLC_SUCCESS);
+    const struct vlc_gl_operations missing_ops = {.get_proc_address = MissingSymbol};
+    gl->ops = &missing_ops;
+    vlc_gl_backdrop_window_Draw(&state, gl, window, width, height);
+    assert(state.failed && !state.renderer && missing_function_requests == 1);
+    vlc_gl_backdrop_window_Draw(&state, gl, window, width, height);
+    Read(after, width, height);
+    assert(missing_function_requests == 1 && !memcmp(before, after, width * height * 4));
+    gl->ops = &ops;
+    vlc_gl_backdrop_window_Close(&state);
+    vlc_window_Delete(window);
+    ++checks;
+}
+
+static void FloatingPoint(struct vlc_gl_backdrop *b, GLint format)
+{
+    const unsigned width = 513, height = 385;
+    GLuint texture, framebuffer;
+    v->GenTextures(1, &texture);
+    v->BindTexture(GL_TEXTURE_2D, texture);
+    v->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    v->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    float *pixels = malloc(width * height * 4 * sizeof(*pixels)); assert(pixels);
+    float *result = malloc(width * height * 4 * sizeof(*result)); assert(result);
+    for (unsigned y = 0; y < height; ++y)
+        for (unsigned x = 0; x < width; ++x)
+        {
+            float *p = pixels + (y * width + x) * 4;
+            p[0] = ((x / 8 + y / 8) % 2) ? 2 : 4;
+            p[1] = .1234130859375f; p[2] = -.25f; p[3] = 1;
+        }
+    v->TexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, GL_RGBA, GL_FLOAT, pixels);
+    if (v->GetError() != GL_NO_ERROR)
+    {
+        assert(api.is_gles);
+        fprintf(stderr, "Floating-point target unavailable in this GLES context\n");
+        goto done;
+    }
+    v->GenFramebuffers(1, &framebuffer);
+    v->BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    v->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture, 0);
+    if (v->CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        assert(api.is_gles);
+        v->BindFramebuffer(GL_FRAMEBUFFER, 0);
+        v->DeleteFramebuffers(1, &framebuffer);
+        fprintf(stderr, "Floating-point target not renderable in this GLES context\n");
+        goto done;
+    }
+    const struct vlc_window_backdrop_region region = {32, 32, 400, 300, 25, 14};
+    vlc_gl_backdrop_Draw(b, width, height, &region, 1);
+    v->ReadPixels(0, 0, width, height, GL_RGBA, GL_FLOAT, result);
+    assert(v->GetError() == GL_NO_ERROR);
+    const float *center = result + ((height / 2) * width + width / 2) * 4;
+    fprintf(stderr, "Floating-point 0x%x backdrop center: %.6f %.6f %.6f\n",
+            (unsigned)format, center[0], center[1], center[2]);
+    const float tolerance = format == GL_RGBA32F ? .0001f : .01f;
+    assert(fabsf(center[0] - 3) < tolerance && fabsf(center[1] - pixels[1]) < tolerance
+           && fabsf(center[2] - pixels[2]) < tolerance);
+    for (unsigned y = 0; y < height; ++y)
+        for (unsigned x = 0; x < width; ++x)
+        {
+            const double py = height - y - .5;
+            if (x < 30 || x > 434 || py < 30 || py > 334)
+                assert(!memcmp(pixels + (y * width + x) * 4,
+                               result + (y * width + x) * 4, 4 * sizeof(*pixels)));
+        }
+    v->BindFramebuffer(GL_FRAMEBUFFER, 0);
+    v->DeleteFramebuffers(1, &framebuffer);
+    ++checks;
+done:
+    v->DeleteTextures(1, &texture);
+    free(pixels); free(result);
+}
+
 int main(void)
 {
     EGLDisplay display=eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -225,8 +355,9 @@ int main(void)
     const EGLint ca[]={EGL_CONTEXT_CLIENT_VERSION,es?2:3,EGL_NONE};
     const EGLint core[]={EGL_CONTEXT_MAJOR_VERSION_KHR,3,EGL_CONTEXT_MINOR_VERSION_KHR,3,
         EGL_CONTEXT_OPENGL_PROFILE_MASK_KHR,EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT_KHR,EGL_NONE};
+    const EGLint legacy[]={EGL_NONE};
     EGLContext context=eglCreateContext(display,config,EGL_NO_CONTEXT,
-        !es&&getenv("VLC_TEST_GL_CORE")?core:ca);
+        !es&&getenv("VLC_TEST_GL_LEGACY")?legacy:!es&&getenv("VLC_TEST_GL_CORE")?core:ca);
     assert(context!=EGL_NO_CONTEXT);
     const EGLint sa[]={EGL_WIDTH,640,EGL_HEIGHT,480,EGL_NONE};
     EGLSurface surface=eglCreatePbufferSurface(display,config,sa); assert(surface!=EGL_NO_SURFACE);
@@ -243,6 +374,8 @@ int main(void)
     struct vlc_gl_backdrop *b=vlc_gl_backdrop_New(gl); assert(b);
     Gaussian(b,25); Gaussian(b,37.5); Gaussian(b,50);
     EdgeGaussian(b,25,false); EdgeGaussian(b,37.5,false); EdgeGaussian(b,50,true);
+    WindowBackdrops(gl,b);
+    FloatingPoint(b,GL_RGBA16F); FloatingPoint(b,GL_RGBA32F);
     Clipped(b,512,384,(struct vlc_window_backdrop_region){64,32,384,320,25,14});
     Clipped(b,513,383,(struct vlc_window_backdrop_region){64.25,32.5,383.5,319.25,25,14});
     Clipped(b,512,384,(struct vlc_window_backdrop_region){-50,-20,200,200,25,14});

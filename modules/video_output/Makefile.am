@@ -70,6 +70,7 @@ libwindow_macosx_plugin_la_OBJCFLAGS = $(AM_OBJCFLAGS) \
 	-fobjc-arc -fobjc-exceptions
 
 libvout_macosx_plugin_la_SOURCES = video_output/macosx.m \
+    $(OPENGL_BACKDROP_SOURCES) \
 	$(OPENGL_VOUT_COMMONSOURCES)
 libvout_macosx_plugin_la_OBJCFLAGS = $(AM_OBJCFLAGS) -fobjc-arc
 libvout_macosx_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) -DHAVE_GL_CORE_SYMBOLS -DGL_SILENCE_DEPRECATION
@@ -78,6 +79,7 @@ libvout_macosx_plugin_la_LDFLAGS = $(AM_LDFLAGS) $(vout_RPATH) \
 	-Wl,-framework,OpenGL,-framework,Cocoa
 
 libcaopengllayer_plugin_la_SOURCES = video_output/caopengllayer.m \
+    $(OPENGL_BACKDROP_SOURCES) \
 	$(OPENGL_VOUT_COMMONSOURCES)
 libcaopengllayer_plugin_la_OBJCFLAGS = $(AM_OBJCFLAGS) -fobjc-arc
 libcaopengllayer_plugin_la_CPPFLAGS = $(AM_CPPFLAGS)  -DHAVE_GL_CORE_SYMBOLS -DGL_SILENCE_DEPRECATION
