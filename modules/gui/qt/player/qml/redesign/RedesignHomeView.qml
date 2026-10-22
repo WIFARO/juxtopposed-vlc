@@ -132,18 +132,20 @@ Flickable {
                                             surroundColor: button.down || button.selected ? root.theme.selected : button.hovered ? root.theme.hover : root.theme.panel
                                         }
                                         Text {
+                                            objectName: "homeTitle_" + section.modelData.key + "_" + entry.index
                                             x: root.expanded ? 0 : cover.width + root.theme.dp(10)
-                                            y: root.expanded ? cover.height + root.theme.dp(20) : (parent.height - height) / 2
+                                            y: root.expanded ? cover.height + root.theme.dp(35) - baselineOffset : (parent.height - height) / 2
                                             width: Math.max(0, parent.width - x - (root.expanded ? 0 : root.theme.dp(28)))
                                             text: entry.displayTitle; elide: Text.ElideRight
-                                            color: button.hovered || button.visualFocus ? root.theme.bright : root.expanded ? root.theme.foreground : root.theme.playerLabel
+                                            color: button.hovered || button.visualFocus ? root.theme.bright : root.expanded ? root.theme.playerHeading : root.theme.playerLabel
                                             font.pixelSize: root.theme.dp(root.expanded ? 16 : 14)
                                         }
                                         Text {
+                                            objectName: "homeArtist_" + section.modelData.key + "_" + entry.index
                                             visible: root.expanded && section.modelData.key === "listening" && !!entry.model.main_artist
-                                            x: 0; y: cover.height + root.theme.dp(50); width: parent.width
+                                            x: 0; y: cover.height + root.theme.dp(64) - baselineOffset; width: parent.width
                                             text: entry.model.main_artist || ""; elide: Text.ElideRight
-                                            color: root.theme.foreground; font.pixelSize: root.theme.dp(16)
+                                            color: root.theme.playerLabel; font.pixelSize: root.theme.dp(16)
                                         }
                                     }
                                 }
