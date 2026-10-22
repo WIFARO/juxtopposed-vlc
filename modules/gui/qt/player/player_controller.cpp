@@ -1671,12 +1671,14 @@ void PlayerControllerPrivate::readAudioWaveform()
     const auto generation = m_audioWaveformGeneration;
     const auto cachedKey = m_audioWaveformCacheKey;
     const auto cachedPeaks = m_audioWaveformCachePeaks;
-    m_audioWaveformWorkers.start([this, request, source, generation, media, selectedId, url, cachedKey, cachedPeaks] {
+    m_audioWaveformWorkers.start([this, request, source, generation, media, selectedId, cachedKey, cachedPeaks] {
         QVariantList peaks;
         QString key;
         auto* previous = vlc_interrupt_set(request->interrupt);
+        // Use the same path as VLC for local files and UNC shares.
+        const auto path = vlc::wrap_cptr(vlc_uri2path(source.uri.constData()));
         // Even a file metadata check can wait on a network share.
-        const QFileInfo info(url.toLocalFile());
+        const QFileInfo info(path ? QString::fromUtf8(path.get()) : QString());
         if (!vlc_killed() && info.isFile()) {
             key = QString::fromUtf8(source.uri) + QLatin1Char('|') + QString::number(source.audioIndex)
                 + QLatin1Char('|') + QString::number(source.duration) + QLatin1Char('|') + QString::number(info.size())

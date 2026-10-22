@@ -105,7 +105,7 @@ C.Pane {
                     visualizationModel: Player.audioVisualization
                     showWaveform: Player.audioWaveformEnabled
                     waveformState: Player.audioWaveformState
-                    waveformAvailable: String(Player.url).startsWith("file:///") && Player.lengthSeconds > 0
+                    waveformAvailable: String(Player.url).startsWith("file:") && Player.lengthSeconds > 0
                     onStatisticsRequested: enabled => root.statisticsRequested(enabled)
                     onSubtitleTimelineRequested: enabled => root.preferenceStore.stage("qt-subtitle-timeline", enabled)
                     onReverseRequested: reversed => Player.rate = (reversed ? -1 : 1) * Math.abs(Player.rate)
