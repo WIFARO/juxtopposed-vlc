@@ -31,6 +31,10 @@ ColumnLayout {
         return position <= middle ? minimum + position / middle * (normal - minimum)
             : normal + (position - middle) / (1 - middle) * (maximum - normal)
     }
+    component AppearanceSlider: RedesignSettingSlider {
+        tickWidth: 2; tickHeight: 8; tickRadius: 1; ticksUseFullTrack: true
+        tickColor: theme.sliderTick; screenBlendTicks: !lightTheme
+    }
 
     RedesignTrackDefaults { Layout.fillWidth: true; subtitles: true; backend: root.backend; scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     Rectangle { Layout.fillWidth: true; Layout.leftMargin: -theme.dp(24); Layout.rightMargin: -theme.dp(20); Layout.topMargin: theme.dp(4); height: theme.dp(1); color: theme.border }
@@ -129,7 +133,7 @@ ColumnLayout {
             }
         }
     }
-    RedesignSettingSlider {
+    AppearanceSlider {
         id: fontSizeSlider
         objectName: "subtitleFontSizeSetting"
         Layout.fillWidth: true; Layout.topMargin: theme.dp(25)
@@ -142,10 +146,10 @@ ColumnLayout {
         readonly property real normal: root.pixels ? 30 : 100
         valueToPosition: value => root.sliderPosition(value, from, normal, to, 0.6)
         positionToValue: position => Math.round(root.sliderValue(position, from, normal, to, 0.6))
-        ticks: [0, .2, .4, .6, .8, 1].map(position => root.sliderValue(position, from, normal, to, 0.6))
+        ticks: [.2, .4, .6, .8].map(position => root.sliderValue(position, from, normal, to, 0.6))
         onMoved: value => root.backend.stage(root.pixels ? "sub-text-size-pixels" : "sub-text-scale", value)
     }
-    RedesignSettingSlider {
+    AppearanceSlider {
         objectName: "subtitleOutlineThicknessSetting"
         Layout.fillWidth: true; Layout.topMargin: theme.dp(36)
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
@@ -156,17 +160,17 @@ ColumnLayout {
         currentValue: { root.backend.revision; return Number(root.backend.value("freetype-outline-thickness")) }
         valueToPosition: value => root.sliderPosition(value, 0, 4, 50, 2 / 3)
         positionToValue: position => Math.round(root.sliderValue(position, 0, 4, 50, 2 / 3))
-        ticks: [0, .2, .4, .6, .8, 1].map(position => root.sliderValue(position, 0, 4, 50, 2 / 3))
+        ticks: [1 / 3, 2 / 3].map(position => root.sliderValue(position, 0, 4, 50, 2 / 3))
         onMoved: value => root.backend.stage("freetype-outline-thickness", value)
     }
-    RedesignSettingSlider {
+    AppearanceSlider {
         objectName: "subtitleBackgroundOpacitySetting"
         Layout.fillWidth: true; Layout.topMargin: theme.dp(36)
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         labelColor: theme.playerLabel
         label: qsTr("Background Opacity"); displayValueAsText: true
         valueLabel: Math.round(currentValue) + " %"
-        from: 0; to: 100; stepSize: 1; ticks: [0, 20, 40, 60, 80, 100]
+        from: 0; to: 100; stepSize: 1; ticks: [10, 20, 30, 40, 50, 60, 70, 80, 90]
         scaleLabelsVisible: false; sliderTopMargin: 6; sliderLeftMargin: -4
         currentValue: {
             root.backend.revision
