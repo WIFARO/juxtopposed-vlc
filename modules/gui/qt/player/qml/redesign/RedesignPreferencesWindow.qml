@@ -79,6 +79,13 @@ RedesignSettingsDialog {
         id: resetDialog
         parent: content
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+        videoBackdropContent: Component {
+            RedesignSurfaceBackdrop {
+                sourceItem: root.background ? root.background.parent : null
+                scaleFactor: root.scaleFactor
+                nativeVideo: false
+            }
+        }
         title: qsTr("Reset all settings")
         message: qsTr("This action replaces all VLC settings with the default settings. After this action, close VLC. Start VLC again.")
         confirmText: qsTr("Reset"); destructive: true

@@ -269,6 +269,7 @@ Item {
         objectName: "playerPresetDeleteDialog"
         parent: C.Overlay.overlay
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+        videoBackdropContent: root.videoBackdropContent
         title: root.applicationProfile ? qsTr("Delete Profile") : qsTr("Delete Preset")
         message: qsTr("Delete “%1”?").arg(root.contextName)
         confirmText: qsTr("Delete"); destructive: true
