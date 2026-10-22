@@ -672,6 +672,8 @@ libqt_plugin_la_LIBADD += $(QT_X11_LIBS) $(XCB_RENDER_LIBS) $(XCB_COMPOSITE_LIBS
 libqt_plugin_la_SOURCES += \
 	maininterface/compositor_x11.cpp \
 	maininterface/compositor_x11.hpp \
+	maininterface/compositor_x11_backdrop.cpp \
+	maininterface/compositor_x11_backdrop.hpp \
 	maininterface/compositor_x11_renderclient.cpp \
 	maininterface/compositor_x11_renderclient.hpp \
 	maininterface/compositor_x11_renderwindow.cpp \
@@ -2132,6 +2134,19 @@ TESTS += test_ml_model
 if HAVE_X
 if HAVE_QT_XCB
 if HAVE_XCB
+
+test_x11_video_backdrop_SOURCES = tests/test_x11_video_backdrop.cpp \
+	maininterface/compositor_x11_backdrop.cpp maininterface/compositor_x11_backdrop.hpp \
+	maininterface/compositor_x11_utils.hpp util/video_backdrop_region.hpp
+nodist_test_x11_video_backdrop_SOURCES = tests/test_x11_video_backdrop.moc
+BUILT_SOURCES += tests/test_x11_video_backdrop.moc
+CLEANFILES += tests/test_x11_video_backdrop.moc
+test_x11_video_backdrop_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) $(XCB_CFLAGS) $(XCB_RENDER_CFLAGS) $(XCB_COMPOSITE_CFLAGS)
+test_x11_video_backdrop_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_x11_video_backdrop_LDADD = $(QT_QTEST_COMMON_ldadd) $(XCB_RENDER_LIBS) $(XCB_LIBS)
+test_x11_video_backdrop_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_x11_video_backdrop
+TESTS += test_x11_video_backdrop
 
 test_x11_surface_size_SOURCES = \
 	tests/test_x11_surface_size.cpp \

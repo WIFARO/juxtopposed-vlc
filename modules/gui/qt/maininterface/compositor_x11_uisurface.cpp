@@ -283,7 +283,10 @@ void CompositorX11UISurface::updateSizes()
     m_onscreenSize = windowSize * dpr;
 
     if (m_backingStore)
+    {
         m_backingStore->resize(m_onscreenSize);
+        emit sizeChanged(m_onscreenSize);
+    }
 
     // Behave like SizeRootObjectToView.
     if (m_rootItem)

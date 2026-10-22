@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <QQuickItem>
 #include <QTest>
+#include <QSignalSpy>
+#include <QResizeEvent>
 
 #include "../maininterface/compositor_x11_uisurface.hpp"
 
@@ -29,12 +31,33 @@ private slots:
         mainWindow.resize(restoredSize);
         vlc::CompositorX11UISurface surface(&mainWindow);
         surface.create();
+        QSignalSpy sizes(&surface, &vlc::CompositorX11UISurface::sizeChanged);
         auto* root = new QQuickItem;
 
         // No expose or resize event has reached the new QML surface yet.
         surface.setContent(root);
         QCOMPARE(root->size(), QSizeF(restoredSize));
         QCOMPARE(surface.getOffscreenWindow()->size(), restoredSize);
+        QVERIFY(!sizes.isEmpty());
+        QCOMPARE(sizes.last().at(0).toSize(), restoredSize * surface.devicePixelRatio());
+    }
+
+    void softwareResizeReportsPhysicalSize()
+    {
+        QWindow mainWindow;
+        mainWindow.resize(960, 540);
+        vlc::CompositorX11UISurface surface(&mainWindow);
+        surface.create();
+        QSignalSpy sizes(&surface, &vlc::CompositorX11UISurface::sizeChanged);
+        auto* root = new QQuickItem;
+        surface.setContent(root);
+        const QSize next(800, 600);
+        mainWindow.resize(next);
+        QResizeEvent event(next, QSize(960, 540));
+        QCoreApplication::sendEvent(&mainWindow, &event);
+        QCOMPARE(root->size(), QSizeF(next));
+        QVERIFY(!sizes.isEmpty());
+        QCOMPARE(sizes.last().at(0).toSize(), next * surface.devicePixelRatio());
     }
 };
 

@@ -638,6 +638,7 @@ if (x11_dep.found() and
     xcb_xfixes_dep.found())
     qt_plugin_sources += files(
         'maininterface/compositor_x11.cpp',
+        'maininterface/compositor_x11_backdrop.cpp',
         'maininterface/compositor_x11_renderclient.cpp',
         'maininterface/compositor_x11_renderwindow.cpp',
         'maininterface/compositor_x11_uisurface.cpp',
@@ -1687,6 +1688,16 @@ if qt6_dep.found()
             'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
         }
         if x11_dep.found() and xcb_dep.found() and qt_features_xcb
+            if xcb_render_dep.found()
+                vlc_tests += {
+                    'name': 'test_qt_x11_video_backdrop',
+                    'sources': files('tests/test_x11_video_backdrop.cpp', 'maininterface/compositor_x11_backdrop.cpp'),
+                    'moc_sources': files('tests/test_x11_video_backdrop.cpp'),
+                    'suite': ['qt'],
+                    'include_directories': qt_include_dir,
+                    'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep, xcb_dep, xcb_render_dep],
+                }
+            endif
             vlc_tests += {
                 'name': 'test_qt_x11_surface_size',
                 'sources': files(

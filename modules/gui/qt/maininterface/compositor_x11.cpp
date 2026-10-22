@@ -240,7 +240,7 @@ bool CompositorX11::makeMainInterface(MainCtx* mainCtx, std::function<void (QQui
     m_renderWindow->setInterfaceWindow(m_qmlView.get());
     m_renderWindow->setVideoWindow(m_videoWidget->windowHandle());
 
-    m_renderWindow->startRendering();
+    m_renderWindow->startRendering(m_videoSurfaceProvider.get());
 
     return true;
 }

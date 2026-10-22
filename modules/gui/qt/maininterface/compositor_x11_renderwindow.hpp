@@ -40,15 +40,18 @@
 #include "compositor_x11_utils.hpp"
 #include "compositor_common.hpp"
 #include "compositor_accessibility.hpp"
+#include "util/video_backdrop_region.hpp"
 
 class QWidget;
 class QSocketNotifier;
 class QAccessibleInterface;
+class VideoBackdropProvider;
 
 namespace vlc {
 
 class CompositorX11RenderClient;
 class CompositorX11UISurface;
+class X11VideoBackdrop;
 
 /**
  * @brief The RenderTask class does the actual rendering into the window
@@ -84,6 +87,7 @@ public slots:
 
     void onAcrylicChanged(bool enabled);
     void onExtendedFrameChanged(bool enabled);
+    void onBackdropRegionsChanged(const VideoBackdropState &);
 
 signals:
     void requestRefreshInternal(unsigned int requestId, QPrivateSignal priv);
@@ -112,6 +116,7 @@ private:
     bool m_hasAcrylic = false;
     bool m_hasExtendedFrame = false;
     bool m_visible = true;
+    std::unique_ptr<X11VideoBackdrop> m_backdrop;
 };
 
 /**
@@ -160,7 +165,7 @@ public:
 
     bool init();
 
-    bool startRendering();
+    bool startRendering(VideoBackdropProvider *);
     void stopRendering();
 
     void setVideoPosition(const QPoint& position, bool signalChange = true);

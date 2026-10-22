@@ -36,6 +36,8 @@
 #include "compositor_x11_renderclient.hpp"
 #include "compositor_x11_uisurface.hpp"
 #include "compositor_x11_utils.hpp"
+#include "compositor_x11_backdrop.hpp"
+#include "videobackdrop.hpp"
 
 #include <vlc_cxx_helpers.hpp>
 
@@ -64,6 +66,7 @@ RenderTask::RenderTask(qt_intf_t *intf, xcb_connection_t* conn, xcb_drawable_t w
     , m_pictureLock(pictureLock)
     , m_drawingarea(m_conn)
     , m_wid(wid)
+    , m_backdrop(std::make_unique<X11VideoBackdrop>(conn, wid))
 {
     assert(conn);
     assert(m_intf);
@@ -114,6 +117,7 @@ void RenderTask::render(unsigned int requestId)
                                      0,0,0,0,
                                      m_videoPosition.x(),m_videoPosition.y(),
                                      m_videoPosition.width(), m_videoPosition.height());
+                m_backdrop->render(pic, m_videoPosition, drawingarea, m_interfaceSize);
             }
         }
 
@@ -206,6 +210,12 @@ void RenderTask::onAcrylicChanged(bool enabled)
 void RenderTask::onExtendedFrameChanged(bool enabled)
 {
     m_hasExtendedFrame = enabled;
+}
+
+void RenderTask::onBackdropRegionsChanged(const VideoBackdropState &state)
+{
+    m_backdrop->setRegions(state);
+    requestRefresh();
 }
 
 
@@ -417,7 +427,7 @@ bool CompositorX11RenderWindow::init()
     return true;
 }
 
-bool CompositorX11RenderWindow::startRendering()
+bool CompositorX11RenderWindow::startRendering(VideoBackdropProvider *backdrop)
 {
     assert(m_interfaceWindow);
 
@@ -439,12 +449,16 @@ bool CompositorX11RenderWindow::startRendering()
     connect(this, &CompositorX11RenderWindow::videoSurfaceChanged, m_renderTask, &RenderTask::onVideoSurfaceChanged, Qt::BlockingQueuedConnection);
     connect(this, &CompositorX11RenderWindow::hasExtendedFrameChanged, m_renderTask, &RenderTask::onExtendedFrameChanged, Qt::BlockingQueuedConnection);
     connect(this, &CompositorX11RenderWindow::acrylicChanged, m_renderTask, &RenderTask::onAcrylicChanged);
+    connect(backdrop, &VideoBackdropProvider::backdropRegionsChanged,
+            m_renderTask, &RenderTask::onBackdropRegionsChanged, Qt::QueuedConnection);
     //pass initial values
     m_renderTask->onInterfaceSurfaceChanged(m_interfaceClient.get());
     m_renderTask->onVideoSurfaceChanged(m_videoClient.get());
     m_renderTask->onWindowSizeChanged(size() * devicePixelRatio());
+    m_renderTask->onInterfaceSizeChanged(m_interfaceWindow->size() * m_interfaceWindow->devicePixelRatio());
     m_renderTask->onAcrylicChanged(m_hasAcrylic);
     m_renderTask->onExtendedFrameChanged(m_hasExtendedFrame);
+    m_renderTask->onBackdropRegionsChanged(backdrop->backdropRegions());
 
     //use the same thread as the rendering thread, neither tasks are blocking.
     m_damageObserver->moveToThread(m_renderThread);
