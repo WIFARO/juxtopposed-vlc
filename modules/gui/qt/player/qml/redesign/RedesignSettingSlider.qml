@@ -33,6 +33,8 @@ ColumnLayout {
     property real tickHeight: 7
     property real tickRadius: 0
     property bool ticksUseFullTrack: false
+    property bool showTickEndpoints: true
+    property bool screenBlendTicks: false
     property string tickSuffix
     property bool positiveTickSign: false
     property real trackHeight: 16
@@ -147,6 +149,7 @@ ColumnLayout {
             x: slider.leftPadding; y: slider.topPadding + slider.availableHeight / 2 - height / 2
             width: slider.availableWidth; height: theme.dp(root.trackHeight); radius: theme.dp(root.trackRadius); color: theme.field
             Rectangle {
+                id: sliderFill
                 readonly property real inset: theme.dp(root.trackInset)
                 readonly property real span: Math.max(0, parent.width - 2 * inset)
                 readonly property real origin: {
@@ -165,13 +168,26 @@ ColumnLayout {
             Repeater {
                 model: root.ticks
                 Rectangle {
+                    required property int index
                     required property real modelData
+                    objectName: "settingTickMark_" + index
+                    visible: root.showTickEndpoints || (modelData > Math.min(root.from, root.to) && modelData < Math.max(root.from, root.to))
                     width: theme.dp(root.tickWidth); height: theme.dp(root.tickHeight); radius: theme.dp(root.tickRadius)
                     x: root.ticksUseFullTrack
                         ? theme.dp(root.trackInset) + root.visualPositionFor(modelData) * (parent.width - 2 * theme.dp(root.trackInset)) - width / 2
                         : theme.dp(root.trackInset) + sliderHandle.width / 2 + root.visualPositionFor(modelData) * (parent.width - 2 * theme.dp(root.trackInset) - sliderHandle.width)
                     anchors.verticalCenter: parent.verticalCenter
-                    color: root.tickColor
+                    color: {
+                        if (!root.screenBlendTicks) return root.tickColor
+                        // The Figma marks use Screen over the filled or empty track.
+                        const center = x + width / 2
+                        const base = sliderFill.width > 0 && center >= sliderFill.x && center <= sliderFill.x + sliderFill.width
+                            ? root.fillColor : theme.field
+                        const ink = root.tickColor
+                        return Qt.rgba(1 - (1 - base.r) * (1 - ink.r),
+                            1 - (1 - base.g) * (1 - ink.g),
+                            1 - (1 - base.b) * (1 - ink.b), 1)
+                    }
                 }
             }
         }

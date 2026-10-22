@@ -36,6 +36,7 @@ QtObject {
     readonly property bool originalAccent: accentColor.toString() === "#d37918"
     readonly property real accentFillOpacity: lightTheme ? 0.35 : accentColor.toString() === "#185dd3" ? 0.30 : 0.24
     readonly property color progress: originalAccent ? lightTheme ? "#d8ba9a" : "#371f06" : tintAccent(field, accentFillOpacity)
+    readonly property color sliderTick: lightTheme ? Qt.darker(field, 1.12) : originalAccent ? "#1a1611" : tintAccent(field, 0.1)
     readonly property color subtitleCue: lightTheme ? "#a3a3a3" : "#202020"
     readonly property color subtitleCueProgress: originalAccent ? lightTheme ? "#a27b53" : "#4e3823" : tintAccent(subtitleCue, accentFillOpacity)
     readonly property color danger: "#d33718"

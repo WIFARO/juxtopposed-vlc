@@ -48,6 +48,19 @@ TestCase {
         backend: store; expanded: true; compact: true
         lightTheme: testCase.light; accentColor: "#19a234"
     }
+    Component {
+        id: sourceTickSlider
+        RedesignSettingSlider {
+            x: 20; y: 20; width: 700; z: 10
+            label: "Source ticks"; from: -20; to: 20
+            ticks: [-20, -10, 0, 10, 20]
+            tickWidth: 2; tickHeight: 8; tickRadius: 1
+            ticksUseFullTrack: true; showTickEndpoints: false
+            tickColor: "#1a1611"; screenBlendTicks: true
+            LayoutMirroring.enabled: testCase.mirrored
+            LayoutMirroring.childrenInherit: true
+        }
+    }
 
     function init() {
         light = false; mirrored = false
@@ -138,6 +151,31 @@ TestCase {
             verify(Math.abs(store.gain - step) < 0.00001)
             keyClick(decrease); keyClick(decrease)
             verify(Math.abs(store.gain + step) < 0.00001)
+        }
+    }
+    function test_sourceTickPaint_data() {
+        return [
+            {tag: "positive", gain: 15, rtl: false},
+            {tag: "negative", gain: -15, rtl: false},
+            {tag: "positive-rtl", gain: 15, rtl: true},
+            {tag: "negative-rtl", gain: -15, rtl: true},
+        ]
+    }
+    function test_sourceTickPaint(data) {
+        mirrored = data.rtl
+        const control = createTemporaryObject(sourceTickSlider, testCase, {currentValue: data.gain})
+        verify(control)
+        waitForRendering(control)
+        for (const index of [0, 4]) {
+            verify(!findChild(control, "settingTickMark_" + index).visible)
+            verify(findChild(control, "settingTick_" + index).visible)
+        }
+        for (const index of [1, 3]) {
+            const tick = findChild(control, "settingTickMark_" + index)
+            const value = index === 1 ? -10 : 10
+            const filled = data.gain * value > 0
+            // Solid centers sampled from the original browser-rendered Figma SVG.
+            checkPixel(tick, true, 0.5, filled ? "#4b3217" : "#221e19")
         }
     }
 }

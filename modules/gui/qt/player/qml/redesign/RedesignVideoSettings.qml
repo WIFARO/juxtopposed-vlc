@@ -159,6 +159,8 @@ ColumnLayout {
         visible: root.backend.describe(optionName).kind !== undefined
         currentValue: Number(root.current(optionName))
         valueFieldVisible: false; scaleLabelsVisible: false; sliderTopMargin: 8
+        tickWidth: 2; tickHeight: 8; tickRadius: 1; ticksUseFullTrack: true
+        tickColor: theme.sliderTick; screenBlendTicks: !lightTheme; showTickEndpoints: false
         onMoved: value => root.backend.stage(optionName, value)
     }
     component FilterSwitch: RedesignSwitchRow {
@@ -339,9 +341,9 @@ ColumnLayout {
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         settings: ColumnLayout {
             spacing: theme.dp(19)
-            FilterSlider { objectName: "videoHue"; label: qsTr("Hue"); optionName: "hue"; from: -180; to: 180; decimals: 1; stepSize: 1 }
-            FilterSlider { objectName: "videoBrightness"; label: qsTr("Brightness"); optionName: "brightness"; from: 0; to: 2; decimals: 2; stepSize: .01 }
-            FilterSlider { objectName: "videoContrast"; label: qsTr("Contrast"); optionName: "contrast"; from: 0; to: 2; decimals: 2; stepSize: .01 }
+            FilterSlider { objectName: "videoHue"; label: qsTr("Hue"); optionName: "hue"; from: -180; to: 180; decimals: 1; stepSize: 1; ticks: [0] }
+            FilterSlider { objectName: "videoBrightness"; label: qsTr("Brightness"); optionName: "brightness"; from: 0; to: 2; decimals: 2; stepSize: .01; ticks: [1] }
+            FilterSlider { objectName: "videoContrast"; label: qsTr("Contrast"); optionName: "contrast"; from: 0; to: 2; decimals: 2; stepSize: .01; ticks: [1] }
             FilterSlider { objectName: "videoSaturation"; label: qsTr("Saturation"); optionName: "saturation"; from: 0; to: 3; decimals: 2; stepSize: .01; ticks: [0, 1, 2, 3] }
             FilterSlider { objectName: "videoGamma"; label: qsTr("Gamma"); optionName: "gamma"; from: .01; to: 10; decimals: 2; stepSize: .01; ticks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }
             FilterSlider { objectName: "videoSharpen"; label: qsTr("Sharpen Sigma"); optionName: "sharpen-sigma"; from: 0; to: 2; decimals: 2; stepSize: .01; ticks: [0, .5, 1, 1.5, 2] }

@@ -168,6 +168,8 @@ ColumnLayout {
         from: 0.25; to: 2; stepSize: 0.05
         inputFrom: 0.03125; inputTo: 31.25
         ticks: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
+        tickWidth: 2; tickHeight: 8; tickRadius: 1; ticksUseFullTrack: true
+        tickColor: theme.sliderTick; screenBlendTicks: !lightTheme; showTickEndpoints: false
         valueFieldHeight: 32; valueFieldOutline: false
         sliderTopMargin: 12
         sliderLeftMargin: -4

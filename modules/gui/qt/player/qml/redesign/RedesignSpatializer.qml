@@ -62,7 +62,7 @@ ColumnLayout {
                     valueLabel: Number(currentValue).toLocaleString(Qt.locale(), 'f', 1)
                     ticks: Array.from({length: Math.max(0, Math.ceil(to - from - 0.0001) - 1)}, (_, index) => from + index + 1); scaleLabelsVisible: false; sliderTopMargin: 5
                     tickWidth: 2; tickHeight: 8; tickRadius: 1; ticksUseFullTrack: true
-                    tickColor: root.lightTheme ? Qt.darker(theme.field, 1.12) : theme.originalAccent ? "#1a1611" : theme.tintAccent(theme.field, 0.1)
+                    tickColor: theme.sliderTick; screenBlendTicks: !lightTheme
                     onMoved: value => root.backend.stage(modelData.name, value / 10)
                 }
             }
