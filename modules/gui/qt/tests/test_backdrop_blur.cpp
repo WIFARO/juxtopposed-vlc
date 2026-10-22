@@ -120,7 +120,9 @@ Window {
         x: 128; y: 128; width: 256; height: 200
         Widgets.RoundedRectangleShadow {
             objectName: "referenceMenuShadow"
-            anchors.alignWhenCentered: false
+            anchors.centerIn: undefined
+            x: (shadowCard.width - width) / 2 + xOffset
+            y: (shadowCard.height - height) / 2 + yOffset
             blurRadius: 7.5; yOffset: 8; radius: 10
             color: Qt.rgba(0, 0, 0, 0.46)
             exclusionRect: Qt.rect(blurRadius * compensationFactor,
@@ -216,7 +218,7 @@ Window {
         QVERIFY(pixel(image, 130, 130).red() < 254);
         QVERIFY(pixel(image, 256, 370).red() >= 254);
         const qreal ratio = qreal(image.width()) / window->width();
-        for (int y : {329, 337, 345, 353})
+        for (int y : {328, 329, 337, 345, 353})
         {
             // A long straight edge is a Gaussian step: sigma7.5, offset8,
             // opacity0.46, as specified by the menu SVG's drop-shadow filter.
@@ -244,6 +246,34 @@ Window {
             return !image.isNull() && pixel(image, 208, 228).red() == 255;
         })());
         QVERIFY(pixel(image, 208, 340).red() < 250);
+
+        shadow->setProperty("hollow", false);
+        window->resize(768, 900);
+        // Match the menu's odd dimensions as well as an even-sized card.
+        // A half-pixel displacement must not cut the first shadow row in half.
+        for (const QSize size : {QSize(257, 201), QSize(375, 285), QSize(375, 585)})
+        {
+            QSignalSpy resizedFrame(window, &QQuickWindow::frameSwapped);
+            card->setSize(size);
+            shadow->setProperty("exclusionRect", QRectF(22.5, 14.5, size.width(), size.height()));
+            window->requestUpdate();
+            QTRY_VERIFY(!resizedFrame.isEmpty());
+            image = window->grabWindow();
+            QVERIFY(!image.isNull());
+            const qreal dpr = qreal(image.width()) / window->width();
+            const int bottom = 128 + size.height();
+            // At fractional scale the boundary can cross a physical pixel.
+            // Compare the first full outside pixel with the Gaussian step.
+            const int physicalY = qCeil(bottom * dpr);
+            const double sampleY = (physicalY + 0.5) / dpr;
+            const double alpha = 0.46 * 0.5 * std::erfc((sampleY - bottom - 8) / (std::sqrt(2.) * 7.5));
+            const double expected = 255 * (1 - alpha);
+            const int actual = image.pixelColor(int((128 + size.width() / 2) * dpr), physicalY).red();
+            QCOMPARE(shadow->position(), QPointF(-22.5, -14.5));
+            QVERIFY2(qAbs(actual - expected) < 3,
+                     qPrintable(QString("size=%1x%2 actual=%3 expected=%4")
+                         .arg(size.width()).arg(size.height()).arg(actual).arg(expected)));
+        }
     }
 
     void transparentVideoHole()

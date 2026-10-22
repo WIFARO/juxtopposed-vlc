@@ -23,7 +23,10 @@ Item {
         }
     }
     Widgets.RoundedRectangleShadow {
-        anchors.alignWhenCentered: false
+        // Centred anchors round the centre of odd-sized surfaces.
+        anchors.centerIn: undefined
+        x: (root.width - width) / 2 + xOffset
+        y: (root.height - height) / 2 + yOffset
         visible: root.menuShadow && GraphicsInfo.shaderType === GraphicsInfo.RhiShader
         blurRadius: 7.5 * root.scaleFactor
         yOffset: 8 * root.scaleFactor
