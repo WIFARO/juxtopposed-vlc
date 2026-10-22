@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import QtQuick
+import QtQuick.Window
 import QtTest
 import "../player/qml/redesign"
 
@@ -29,6 +30,7 @@ TestCase {
         editor.saving = false; editor.cancel(); editor.presetId = ""
         player.playerLayout = ""; player.layoutModel.reload()
         player.scaleFactor = 1; player.lightTheme = false; player.fullscreen = false; player.showFullscreenControls = true
+        testCase.x = 0; testCase.y = 0
         testCase.width = 1920; testCase.height = 1080
         player.customControlStates = ({})
         saved.clear()
@@ -59,6 +61,70 @@ TestCase {
             verify(outline !== null)
             compare(outline.width, row[1]); compare(outline.height, row[2])
             fuzzyCompare(outline.mapToItem(editor, 0, 0).y, row[3], 0.6)
+        }
+    }
+    Component { id: sceneOutlineReference; Image { z: 100000; sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio) } }
+    function test_outlinePaintMatchesSceneVector_data() {
+        return [1, 1.125, 1.25, 1.5, 2].map(scale => ({tag: String(scale), scale: scale}))
+            .concat([{tag: "light", scale: 1.125, light: true}, {tag: "translated", scale: 1.125, translated: true}])
+    }
+    function test_outlinePaintMatchesSceneVector(data) {
+        player.lightTheme = !!data.light
+        player.scaleFactor = data.scale
+        editor.begin()
+        tryVerify(() => item("customizeOutline_menu") !== null)
+        const outline = item("customizeOutline_menu")
+        let scene = testCase
+        while (scene.parent) scene = scene.parent
+        tryCompare(outline, "width", 28 * data.scale)
+        verify(waitForPolish(player))
+        scene.Window.window.update()
+        verify(waitForRendering(scene))
+        if (data.translated) {
+            testCase.x = 0.25; testCase.y = 0.5
+            scene.Window.window.update()
+            verify(waitForRendering(scene))
+        }
+        const origin = outline.mapToItem(scene, 0, 0)
+        // Paint the original 28px source rect directly in scene coordinates.
+        // This oracle has no knowledge of the production image's raster bounds.
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + scene.width
+            + '" height="' + scene.height + '" viewBox="0 0 ' + scene.width + ' ' + scene.height + '">'
+            + '<g transform="translate(' + origin.x + ' ' + origin.y + ') scale(' + data.scale + ')">'
+            + '<rect x="0.5" y="0.5" width="27" height="27" fill="none" stroke="' + outline.stroke + '" stroke-dasharray="4 4"/></g></svg>'
+        scene.Window.window.update()
+        verify(waitForRendering(scene))
+        const actual = grabImage(scene)
+        let reference = null
+        try {
+            outline.visible = false
+            reference = sceneOutlineReference.createObject(scene, {width: scene.width, height: scene.height,
+                source: "data:image/svg+xml;utf8," + encodeURIComponent(svg)})
+            verify(reference !== null)
+            tryCompare(reference, "status", Image.Ready)
+            scene.Window.window.update()
+            verify(waitForRendering(scene))
+            const expected = grabImage(scene)
+            const ratio = actual.width / scene.width
+            const left = Math.floor(origin.x * ratio), top = Math.floor(origin.y * ratio)
+            const right = Math.ceil((origin.x + outline.width) * ratio)
+            const bottom = Math.ceil((origin.y + outline.height) * ratio)
+            for (let y = top; y < bottom; ++y) for (let x = left; x < right; ++x) {
+                verify(Math.abs(actual.red(x, y) - expected.red(x, y)) <= 1
+                    && Math.abs(actual.green(x, y) - expected.green(x, y)) <= 1
+                    && Math.abs(actual.blue(x, y) - expected.blue(x, y)) <= 1,
+                    "Outline differs from the scene vector at " + x + "," + y
+                        + ": " + actual.red(x, y) + "," + actual.green(x, y) + "," + actual.blue(x, y)
+                        + " expected " + expected.red(x, y) + "," + expected.green(x, y) + "," + expected.blue(x, y))
+            }
+        } finally {
+            if (reference) { reference.visible = false; reference.destroy(); wait(0) }
+            outline.visible = true
+            testCase.x = 0; testCase.y = 0
+            player.scaleFactor = 1
+            verify(waitForPolish(player))
+            scene.Window.window.update()
+            verify(waitForRendering(scene))
         }
     }
     function outlineMatches(id, x, y, w, h, scale) {

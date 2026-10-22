@@ -202,16 +202,37 @@ Item {
     }
     Keys.onEscapePressed: root.cancel()
 
-    component Outline: RedesignSvg {
+    component Outline: Item {
         id: outline
         property color stroke: root.theme.playerLabel
         readonly property real unit: root.theme.dp(1)
-        // Keep the dash phase continuous through the corners, as in the design.
-        svg: width > unit && height > unit ? '<svg xmlns="http://www.w3.org/2000/svg" width="'
-            + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">'
-            + '<rect x="' + unit / 2 + '" y="' + unit / 2 + '" width="' + (width - unit)
-            + '" height="' + (height - unit) + '" fill="none" stroke="' + stroke.toString()
-            + '" stroke-width="' + unit + '" stroke-dasharray="' + unit * 4 + ' ' + unit * 4 + '"/></svg>' : ""
+        readonly property real pixelRatio: Screen.devicePixelRatio
+        readonly property point sceneOrigin: {
+            // Observe every translation that can move the overlay on the pixel grid.
+            for (let ancestor = outline; ancestor; ancestor = ancestor.parent) {
+                ancestor.x; ancestor.y
+            }
+            return mapToItem(null, 0, 0)
+        }
+        // Rasterize once on the display grid. Keep the vector at its original
+        // fractional position instead of resizing a rounded image back onto it.
+        RedesignSvg {
+            id: outlinePaint
+            x: Math.floor(outline.sceneOrigin.x * outline.pixelRatio) / outline.pixelRatio - outline.sceneOrigin.x
+            y: Math.floor(outline.sceneOrigin.y * outline.pixelRatio) / outline.pixelRatio - outline.sceneOrigin.y
+            width: Math.ceil((outline.sceneOrigin.x + outline.width) * outline.pixelRatio) / outline.pixelRatio
+                - outline.sceneOrigin.x - x
+            height: Math.ceil((outline.sceneOrigin.y + outline.height) * outline.pixelRatio) / outline.pixelRatio
+                - outline.sceneOrigin.y - y
+            // Keep the dash phase continuous through the corners, as in the design.
+            svg: outline.width > outline.unit && outline.height > outline.unit
+                ? '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height
+                    + '" viewBox="0 0 ' + width + ' ' + height + '">'
+                    + '<rect x="' + (outline.unit / 2 - x) + '" y="' + (outline.unit / 2 - y)
+                    + '" width="' + (outline.width - outline.unit) + '" height="' + (outline.height - outline.unit)
+                    + '" fill="none" stroke="' + outline.stroke.toString() + '" stroke-width="' + outline.unit
+                    + '" stroke-dasharray="' + outline.unit * 4 + ' ' + outline.unit * 4 + '"/></svg>' : ""
+        }
     }
     component PointerArea: MouseArea {
         id: pointerArea
