@@ -1269,7 +1269,7 @@ static vlc_render_subpicture *RenderSPUs(vout_thread_sys_t *sys,
     struct vlc_subtitle_area area;
     vout_display_window_GetSubtitleArea(sys->display->cfg->window, &area);
     vout_display_place_t bounds;
-    const bool has_bounds = vlc_subtitle_area_GetBounds(area,
+    const bool has_bounds = !ignore_osd && vlc_subtitle_area_GetBounds(area,
         sys->display->cfg->display.width, sys->display->cfg->display.height,
         sys->display->place, spu_frame, window_coordinates, &bounds);
     return spu_RenderWithArea(sys->spu,
@@ -1281,7 +1281,7 @@ static vlc_render_subpicture *RenderSPUs(vout_thread_sys_t *sys,
 
 static int PrerenderPicture(vout_thread_sys_t *sys, picture_t *filtered,
                             picture_t **out_pic,
-                            vlc_render_subpicture **out_subpic)
+                            vlc_render_subpicture **out_subpic, bool do_snapshot)
 {
     vout_display_t *vd = sys->display;
 
@@ -1308,7 +1308,6 @@ static int PrerenderPicture(vout_thread_sys_t *sys, picture_t *filtered,
      * vd_does_blending=true), and if we can fallback to blending the subpicture
      * ourselves (blending_before_converter=true).
      */
-    const bool do_snapshot = vout_snapshot_IsRequested(sys->snapshot);
     const bool vd_does_blending = !do_snapshot &&
                                    vd->info.subpicture_chromas &&
                                    *vd->info.subpicture_chromas != 0;
@@ -1410,6 +1409,11 @@ static int PrerenderPicture(vout_thread_sys_t *sys, picture_t *filtered,
         vout_snapshot_Set(sys->snapshot, vd->source, snap_pic);
         if (snap_pic != todisplay)
             picture_Release(snap_pic);
+        /* A snapshot has no interface insets or OSD. Keep this independent
+         * picture out of the live display, which still needs both. */
+        *out_pic = todisplay;
+        *out_subpic = NULL;
+        return VLC_SUCCESS;
     }
 
     /* Render the direct buffer */
@@ -1466,9 +1470,23 @@ static int RenderPicture(vout_thread_sys_t *sys,
     vlc_clock_Unlock(sys->clock);
     vlc_queuedmutex_lock(&sys->display_lock);
 
+    if (vout_snapshot_IsRequested(sys->snapshot))
+    {
+        picture_t *snapshot_picture;
+        vlc_render_subpicture *snapshot_subpic;
+        picture_Hold(filtered);
+        if (PrerenderPicture(sys, filtered, &snapshot_picture,
+                             &snapshot_subpic, true) == VLC_SUCCESS)
+        {
+            picture_Release(snapshot_picture);
+            if (snapshot_subpic != NULL)
+                vlc_render_subpicture_Delete(snapshot_subpic);
+        }
+    }
+
     picture_t *todisplay;
     vlc_render_subpicture *subpic;
-    int ret = PrerenderPicture(sys, filtered, &todisplay, &subpic);
+    int ret = PrerenderPicture(sys, filtered, &todisplay, &subpic, false);
     if (ret != VLC_SUCCESS)
     {
         vlc_queuedmutex_unlock(&sys->display_lock);

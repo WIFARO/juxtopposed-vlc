@@ -104,6 +104,7 @@ check_PROGRAMS = \
 	test_src_video_output_osd \
 	test_src_video_output_spu \
 	test_src_video_output_subtitle_area \
+	test_src_video_output_subtitle_snapshot \
 	test_modules_lua_extension \
 	test_modules_misc_medialibrary \
 	test_modules_misc_media_tracks \
@@ -460,6 +461,8 @@ test_src_video_output_SOURCES = \
 	src/video_output/video_output.h \
 	src/video_output/video_output_scenarios.c
 test_src_video_output_LDADD = $(LIBVLCCORE) $(LIBVLC)
+test_src_video_output_subtitle_snapshot_SOURCES = src/video_output/subtitle_snapshot.c
+test_src_video_output_subtitle_snapshot_LDADD = $(LIBVLCCORE) $(LIBVLC)
 test_src_video_output_subtitle_area_SOURCES = src/video_output/subtitle_area.c
 test_src_video_output_subtitle_area_LDADD = $(LIBVLCCORE)
 test_src_video_output_filter_format_SOURCES = src/video_output/filter_format.c

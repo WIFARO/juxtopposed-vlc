@@ -600,6 +600,15 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_video_output_subtitle_snapshot',
+    'sources': files('video_output/subtitle_snapshot.c'),
+    'suite': ['src', 'test_src'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['demux_mock', 'rawvideo', 'blend'],
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+}
+
+vlc_tests += {
     'name': 'test_src_video_output_subtitle_area',
     'sources': files('video_output/subtitle_area.c'),
     'suite': ['src', 'test_src'],
