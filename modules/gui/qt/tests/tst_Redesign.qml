@@ -1106,6 +1106,7 @@ TestCase {
         compare(findChild(player, "redesignViewport").parent, mini.videoArea)
         compare(player.videoItem, video)
         player.artist = "Artist"
+        verify(waitForRendering(mini))
         mouseClick(findChild(mini, "miniPlayerFolderButton"))
         compare(folderSpy.count, 1)
         mouseClick(findChild(mini, "miniPlayerArtistButton"))

@@ -31,6 +31,7 @@ Rectangle {
     property real draggedX: 0
     property real draggedY: 0
     property real minimumY: theme.dp(46)
+    readonly property color metadataColor: lightTheme ? theme.foreground : "#969696"
     readonly property alias videoArea: videoHost
     readonly property real seekY: seek.y
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
@@ -86,6 +87,24 @@ Rectangle {
     component MiniButton: RedesignButton {
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
     }
+    component MetadataButton: MiniButton {
+        id: metadataButton
+        property string label
+        Layout.fillWidth: true
+        Layout.minimumWidth: Math.min(implicitWidth, metadataRow.labelSpace / (artistButton.visible ? 2 : 1))
+        Layout.maximumWidth: implicitWidth
+        implicitWidth: Math.round(root.theme.dp(48) + labelMetrics.advanceWidth)
+        caption: label; captionFontSize: 16; captionSpacing: 8
+        captionMaximumWidth: Math.max(0, width - root.theme.dp(48))
+        leftAligned: true; contentLeftMargin: 8
+        foreground: root.metadataColor; iconForeground: root.theme.foreground
+        TextMetrics {
+            id: labelMetrics
+            text: metadataButton.label
+            font.family: metadataButton.font.family
+            font.pixelSize: root.theme.dp(16)
+        }
+    }
     Item {
         id: videoHost
         objectName: "miniPlayerVideoHost"
@@ -132,7 +151,7 @@ Rectangle {
     RedesignPlayerSeekBar {
         id: seek
         objectName: "miniPlayerSeekBar"
-        x: theme.dp(8); y: videoHost.y + videoHost.height + theme.dp(4)
+        x: theme.dp(8); y: Math.ceil(videoHost.y + videoHost.height) + theme.dp(4)
         width: parent.width - theme.dp(16); height: theme.dp(16)
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         enabled: root.seekable
@@ -152,41 +171,35 @@ Rectangle {
     }
     Text {
         objectName: "miniPlayerTitle"
-        x: theme.dp(16); y: videoHost.height + theme.dp(54)
+        x: theme.dp(16); y: parent.height - theme.dp(62) - baselineOffset
         width: parent.width - theme.dp(32)
         text: root.mediaTitle; elide: Text.ElideRight
-        color: theme.foreground; font.pixelSize: theme.dp(16)
+        color: root.metadataColor; font.pixelSize: theme.dp(16)
         MoveHandler {}
     }
     RowLayout {
-        x: theme.dp(8); y: videoHost.height + theme.dp(92)
-        width: parent.width - theme.dp(16); height: theme.dp(36)
-        spacing: 0
-        MiniButton {
+        id: metadataRow
+        readonly property real labelSpace: Math.max(0, width - queueButton.width - spacing * (artistButton.visible ? 3 : 2))
+        anchors.left: parent.left; anchors.right: parent.right
+        anchors.leftMargin: theme.dp(8); anchors.rightMargin: theme.dp(13)
+        y: parent.height - theme.dp(46)
+        height: theme.dp(36); spacing: theme.dp(4)
+        MetadataButton {
             id: folder
             objectName: "miniPlayerFolderButton"
+            iconName: "folder"; label: root.folderTitle
             text: qsTr("Open media folder"); enabled: root.canBrowseMedia && root.folderTitle.length > 0
-            Layout.fillWidth: true; Layout.preferredWidth: 1
             onClicked: root.folderRequested()
-            contentItem: RowLayout {
-                spacing: root.theme.dp(6)
-                RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "folder"; color: root.theme.foreground }
-                Text { Layout.fillWidth: true; text: root.folderTitle; elide: Text.ElideRight; color: root.theme.foreground; font.pixelSize: root.theme.dp(14) }
-            }
         }
-        MiniButton {
+        MetadataButton {
             id: artistButton
             objectName: "miniPlayerArtistButton"
+            iconName: "artist"; label: root.artist
             text: qsTr("Find artist"); visible: root.artist.length > 0
             enabled: root.canBrowseMedia
-            Layout.fillWidth: true; Layout.preferredWidth: 1
             onClicked: root.artistRequested()
-            contentItem: RowLayout {
-                spacing: root.theme.dp(6)
-                RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "artist"; color: root.theme.foreground }
-                Text { Layout.fillWidth: true; text: root.artist; elide: Text.ElideRight; color: root.theme.foreground; font.pixelSize: root.theme.dp(14) }
-            }
         }
+        Item { Layout.fillWidth: true }
         MiniButton { id: queueButton; objectName: "miniPlayerQueueButton"; iconName: "lists"; text: qsTr("Play queue"); onClicked: root.queueRequested() }
     }
 }
