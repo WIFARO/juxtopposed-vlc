@@ -42,14 +42,14 @@ RowLayout {
         TextMetrics { id: offMetrics; font: stateText.font; text: qsTr("OFF") }
         background: Rectangle {
             radius: root.theme.dp(6); color: toggle.checked ? root.theme.progress : root.theme.field
-            border.color: toggle.visualFocus ? root.theme.accent : root.theme.background
+            border.width: toggle.visualFocus ? 1 : 0; border.color: root.theme.accent
         }
         contentItem: Item {
             Rectangle {
                 visible: !toggle.checked
                 x: root.theme.dp(32); y: root.theme.dp(3)
                 width: parent.width - x - root.theme.dp(3); height: parent.height - root.theme.dp(6)
-                radius: root.theme.dp(3); color: root.theme.background
+                radius: root.theme.dp(3); color: root.lightTheme ? root.theme.background : "#191919"
             }
             Rectangle {
                 x: toggle.checked ? parent.width - width - root.theme.dp(3) : root.theme.dp(3)
