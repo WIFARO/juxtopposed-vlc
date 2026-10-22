@@ -315,8 +315,9 @@ TestCase {
         last.forceActiveFocus()
         tryVerify(() => last.mapToItem(palette, 0, 0).y >= -1
                   && last.mapToItem(palette, 0, last.height).y <= palette.height + 1)
-        const first = palette.itemAtIndex(0)
-        first.forceActiveFocus()
+        // Scrolling to the last row can release the first delegate.
+        for (let n = 0; n < 5; ++n) keyClick(Qt.Key_Up)
+        compare(palette.currentIndex, 0)
         tryVerify(() => Math.abs(palette.contentY) < 1)
     }
     function test_smallPaletteArrowKeysReachLastRow() {

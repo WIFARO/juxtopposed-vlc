@@ -14,7 +14,8 @@ Item {
     readonly property var allControls: Object.assign({}, controls, extras)
     property var renderedLayout: model.defaults()
     readonly property bool custom: JSON.stringify(renderedLayout) !== JSON.stringify(model.defaults())
-    readonly property real controlsHeight: theme.dp(custom && renderedLayout.zones.above.length ? 108 : 54)
+    property bool reserveEditingRow: true
+    readonly property real controlsHeight: theme.dp((model.editing && reserveEditingRow) || (custom && renderedLayout.zones.above.length) ? 108 : 54)
     property var originalParents: ({})
     property bool ready: false
     property bool applying: false

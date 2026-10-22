@@ -741,7 +741,9 @@ FocusScope {
         readonly property bool artworkVisible: audioArtwork.visible && audioArtwork.ready
         readonly property color artworkFill: root.lightTheme ? theme.background : "#191919"
         color: artworkVisible ? Qt.rgba(artworkFill.r, artworkFill.g, artworkFill.b,
-            root.chromeOpacity * (theme.transparencyEnabled ? 0.95 : 1)) : root.chromeBackground
+            root.chromeOpacity * (theme.transparencyEnabled ? 0.95 : 1))
+            : chromeLayout.editing || chrome.custom
+                ? Qt.rgba(artworkFill.r, artworkFill.g, artworkFill.b, root.chromeOpacity) : root.chromeBackground
         visible: !root.minimalView && !root.libraryExpanded && (!root.fullscreen || root.showFullscreenControls || chromeLayout.editing)
             && (!root.autoHideActive || (bottomHover.hovered && (!root.fullscreen || root._toolbarRevealed)) || toolbar.activeFocus || revealTimer.running || root.controlsLocked)
         Loader {
@@ -754,7 +756,13 @@ FocusScope {
         Rectangle {
             width: parent.width; height: theme.dp(1)
             color: root.lightTheme ? theme.border : "#222222"
-            visible: toolbar.artworkVisible
+            visible: toolbar.artworkVisible || root.controlsHeight > theme.dp(54)
+        }
+        Rectangle {
+            y: parent.height - theme.dp(54)
+            width: parent.width; height: theme.dp(1)
+            color: root.lightTheme ? theme.border : "#222222"
+            visible: root.controlsHeight > theme.dp(54)
         }
         RowLayout {
             id: originalToolbar
@@ -924,6 +932,8 @@ FocusScope {
     RedesignPlayerChrome {
         id: chrome
         theme: root.theme; model: chromeLayout
+        // Keep room for the palette on short windows and large display scales.
+        reserveEditingRow: root.height >= theme.dp(600)
         headerHost: header; footerHost: toolbar
         extraControlComponent: Component {
             RedesignExtraControl {

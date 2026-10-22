@@ -200,7 +200,6 @@ Item {
         target: root.model
         function onEditingChanged() { if (root.opened && !root.model.editing && !root.saving) panel.close() }
     }
-    Rectangle { anchors.fill: parent; color: "#66000000"; visible: root.opened; z: -1 }
     Keys.onEscapePressed: root.cancel()
 
     component Outline: Item {
@@ -297,7 +296,7 @@ Item {
     BarDrop {
         id: upperDrop
         width: parent.width; height: root.theme.dp(54)
-        y: parent.height - root.player.controlsHeight - (root.model.layout.zones.above.length ? 0 : height)
+        y: parent.height - Math.max(root.player.controlsHeight, root.theme.dp(108))
         bar: "above"
         Outline { anchors.fill: parent; anchors.margins: root.theme.dp(6); visible: root.opened && root.dragging; stroke: upperDrop.containsDrag ? root.theme.accent : root.theme.playerLabel }
     }
