@@ -81,7 +81,7 @@ Item {
         contentItem: RowLayout {
             anchors.fill: parent; anchors.leftMargin: root.theme.dp(16); anchors.rightMargin: root.theme.dp(16)
             Text { Layout.fillWidth: true; text: root.selectedName; color: root.theme.foreground; font.pixelSize: root.theme.dp(14); elide: Text.ElideRight }
-            RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "chevron-down"; rotation: dropdown.visible ? 0 : 180; color: root.theme.foreground }
+            RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: dropdown.visible ? "chevron-down" : "chevron-up"; color: root.theme.foreground }
         }
         onClicked: dropdown.visible ? dropdown.close() : dropdown.open()
     }

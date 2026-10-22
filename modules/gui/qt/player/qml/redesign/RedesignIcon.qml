@@ -159,6 +159,7 @@ Item {
     "lists-active": "\n<g id=\"name=lists, direction=default, state=active, value=default, EQ=default, two-tone=no\">\n<g id=\"Frame\">\n<path id=\"Vector\" d=\"M8 12H20\" stroke=\"COLOR\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<path id=\"Vector_2\" d=\"M4 12H5\" stroke=\"COLOR\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<path id=\"Vector_3\" d=\"M8 7H20\" stroke=\"COLOR\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<path id=\"Vector_4\" d=\"M4 7H5\" stroke=\"COLOR\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<path id=\"Vector_5\" d=\"M8 17H20\" stroke=\"COLOR\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<path id=\"Vector_6\" d=\"M4 17H5\" stroke=\"COLOR\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n</g>\n</g>\n",
     "queue": "<g id=\"name=queue, direction=default, state=default, value=default, EQ=default, two-tone=yes\">\n<g id=\"Frame 1\">\n<path id=\"Vector 22\" d=\"M5 14H19\" stroke=\"COLOR\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<path id=\"Vector 23\" d=\"M5 19H19\" stroke=\"COLOR\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<rect id=\"Rectangle 26\" x=\"3.75\" y=\"4.75\" width=\"16.5\" height=\"4.5\" rx=\"2.25\" stroke=\"DETAIL\" stroke-width=\"1.5\"/>\n</g>\n</g>\n",
     "chevron-down": '<path d="M7 10L12 15L17 10" stroke="COLOR" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+    "chevron-up": '<path d="M7 14L12 9L17 14" stroke="COLOR" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
     "chevron-right": "\n<g id=\"name=chevron, direction=right, state=default, value=default, EQ=default, two-tone=no\">\n<g id=\"Frame\">\n<path id=\"Vector 27\" d=\"M10 7L15 12L10 17\" stroke=\"COLOR\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n</g>\n</g>\n",
     "info": "\n<g id=\"name=info, direction=default, state=default, value=default, EQ=default, two-tone=no\">\n<g id=\"Frame 1\">\n<circle id=\"Ellipse 9\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"COLOR\" stroke-width=\"1.5\"/>\n<path id=\"Vector 98\" d=\"M12 11V17\" stroke=\"COLOR\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<path id=\"Vector 99\" d=\"M12 7V7.0001\" stroke=\"COLOR\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n</g>\n</g>\n",
     "tuning": '<path d="M5 3v18M12 3v18M19 3v18M3 8h4M10 16h4M17 10h4" stroke="COLOR" stroke-width="1.5" stroke-linecap="round"/>',
@@ -217,7 +218,7 @@ Item {
     Rectangle {
         visible: root.name === "sidebar"
         x: root.width * 6 / 24; y: root.height * 6 / 24
-        width: root.width * (2 + 4 * root.sidebarReveal) / 24
+        width: root.width * (2 + 5 * root.sidebarReveal) / 24
         height: root.height * 12 / 24
         radius: root.width * 0.5 / 24
         color: root.color

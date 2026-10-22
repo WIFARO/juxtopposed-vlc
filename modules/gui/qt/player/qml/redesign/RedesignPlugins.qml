@@ -131,7 +131,7 @@ ColumnLayout {
                 Layout.preferredWidth: theme.dp(14); Layout.preferredHeight: theme.dp(14)
                 RedesignIcon {
                     anchors.fill: parent
-                    name: "chevron-down"; rotation: root.sortDescending ? 0 : 180; color: theme.accent
+                    name: root.sortDescending ? "chevron-down" : "chevron-up"; color: theme.accent
                 }
             }
         }
