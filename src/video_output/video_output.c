@@ -970,6 +970,11 @@ static void ChangeFilters(vout_thread_sys_t *vout)
      * the display still accepts. User crop and aspect overrides are separate. */
     es_format_t fmt_display;
     es_format_InitFromVideo(&fmt_display, vout_GetDisplayInputFormat(sys->display));
+    /* A previous orientation converter can leave its output SAR in the
+     * display source. Target the current decoder SAR when rebuilding the
+     * filters, so a new rotation does not retain the old proportions. */
+    fmt_display.video.i_sar_num = sys->filter.src_fmt.i_sar_num;
+    fmt_display.video.i_sar_den = sys->filter.src_fmt.i_sar_den;
     if (!es_format_IsSimilar(p_fmt_current, &fmt_display)) {
         es_format_LogDifferences(vlc_object_logger(&vout->obj),
                 "current", &fmt_display, "new", p_fmt_current);
