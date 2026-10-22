@@ -3349,6 +3349,8 @@ QVariantList RedesignPreferences::shortcutCatalog() const
         else if (entry.name == QLatin1String("key-stop")) row.title = qtr("Stop playback");
         else if (entry.name == QLatin1String("key-next")) row.title = qtr("Next track");
         else if (entry.name == QLatin1String("key-prev")) row.title = qtr("Previous track");
+        else if (entry.name == QLatin1String("key-program-sid-next")) row.title = qtr("Next program / Service ID");
+        else if (entry.name == QLatin1String("key-program-sid-prev")) row.title = qtr("Previous program / Service ID");
         shortcuts.append(row);
     }
     std::sort(shortcuts.begin(), shortcuts.end(), [](const Shortcut& a, const Shortcut& b) {

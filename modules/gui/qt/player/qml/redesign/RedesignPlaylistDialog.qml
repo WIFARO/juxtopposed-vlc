@@ -24,7 +24,9 @@ C.Dialog {
     signal coverRequested()
     signal saveRequested(string name, var urls, url cover)
     title: qsTr("New Playlist")
-    anchors.centerIn: parent
+    readonly property real pixelRatio: parent ? parent.Screen.devicePixelRatio : 1
+    x: parent ? Math.round((parent.width - width) * pixelRatio / 2) / pixelRatio : 0
+    y: parent ? Math.round((parent.height - height) * pixelRatio / 2) / pixelRatio : 0
     width: Math.min(theme.dp(713), parent ? parent.width - theme.dp(32) : theme.dp(713))
     height: Math.min(theme.dp(589), parent ? parent.height - theme.dp(32) : theme.dp(589))
     padding: 0; spacing: 0
@@ -140,6 +142,7 @@ C.Dialog {
                         color: root.theme.settingsHeading; placeholderTextColor: root.lightTheme ? root.theme.foreground : "#404040"
                         selectionColor: root.theme.accent; selectedTextColor: root.theme.field
                         font.pixelSize: root.theme.dp(14); leftPadding: root.theme.dp(14)
+                        topPadding: root.theme.dp(6.5); bottomPadding: root.theme.dp(5.5)
                         readOnly: root.busy; selectByMouse: true
                         Accessible.name: qsTr("Playlist name")
                         onActiveFocusChanged: if (activeFocus) root.revealOnFocus(this)
@@ -180,9 +183,10 @@ C.Dialog {
                     }
                 }
             }
-            Rectangle {
+            RedesignSeparator {
                 x: root.theme.dp(20); width: parent.width - root.theme.dp(40)
-                height: root.theme.dp(1); color: root.lightTheme ? root.theme.border : "#222222"
+                scaleFactor: root.scaleFactor
+                color: root.lightTheme ? root.theme.border : "#222222"
             }
             Item {
                 width: parent.width
@@ -209,7 +213,11 @@ C.Dialog {
                 Rectangle { anchors.fill: parent; radius: root.theme.dp(6); color: root.theme.field }
                 RedesignSvg {
                     anchors.fill: parent
-                    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '"><rect x="1" y="1" width="' + Math.max(0, width - 2) + '" height="' + Math.max(0, height - 2) + '" rx="5" fill="none" stroke="' + (fileDrop.containsDrag ? root.theme.accent : root.lightTheme ? root.theme.border : "#2d2d2d") + '" stroke-width="2" stroke-dasharray="4 4"/></svg>'
+                    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height
+                        + '" viewBox="0 0 ' + width / root.scaleFactor + ' ' + height / root.scaleFactor
+                        + '"><rect x="1" y="1" width="' + Math.max(0, width / root.scaleFactor - 2)
+                        + '" height="' + Math.max(0, height / root.scaleFactor - 2)
+                        + '" rx="5" fill="none" stroke="' + (fileDrop.containsDrag ? root.theme.accent : root.lightTheme ? root.theme.border : "#2d2d2d") + '" stroke-width="2" stroke-dasharray="4 4"/></svg>'
                 }
                 DropArea {
                     id: fileDrop

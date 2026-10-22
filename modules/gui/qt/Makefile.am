@@ -1328,6 +1328,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignSurfaceBackdrop.qml \
 	player/qml/redesign/RedesignSoftwareShadow.qml \
 	player/qml/redesign/RedesignDialogSurface.qml \
+	player/qml/redesign/RedesignSeparator.qml \
 	player/qml/redesign/RedesignSettingsDialog.qml \
 	player/qml/redesign/RedesignLibraryArtwork.qml \
 	player/qml/redesign/RedesignAudioArtwork.qml \

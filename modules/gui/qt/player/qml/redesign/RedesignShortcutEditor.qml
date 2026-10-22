@@ -33,11 +33,14 @@ C.Popup {
     signal cancelRequested()
     width: Math.max(0, Math.min(theme.dp(1048), parent ? parent.width - theme.dp(30) : theme.dp(1048)))
     height: Math.max(0, Math.min(theme.dp(800), parent ? parent.height - theme.dp(30) : theme.dp(800)))
-    x: parent ? (parent.width - width) / 2 : 0; y: parent ? (parent.height - height) / 2 : 0
+    readonly property real pixelRatio: parent ? parent.Screen.devicePixelRatio : 1
+    x: parent ? Math.round((parent.width - width) * pixelRatio / 2) / pixelRatio : 0
+    y: parent ? Math.round((parent.height - height) * pixelRatio / 2) / pixelRatio : 0
     padding: 0
     modal: true; focus: true
     closePolicy: C.Popup.NoAutoClose
     background: RedesignDialogSurface { theme: root.theme; videoBackdropContent: root.videoBackdropContent }
+    C.Overlay.modal: Rectangle { color: "#80000000" }
     onAboutToShow: { recordingName = ""; search.clear(); filter.currentIndex = 0 }
     onOpened: if (!recordingName.length) search.forceActiveFocus()
 
@@ -69,6 +72,7 @@ C.Popup {
                 objectName: "shortcutSearch"
                 width: parent.width - filter.width - theme.dp(10); height: parent.height
                 leftPadding: theme.dp(42); rightPadding: theme.dp(10)
+                topPadding: theme.dp(6.5); bottomPadding: theme.dp(5.5)
                 placeholderText: qsTr("Search Keyboard Shortcuts…"); Accessible.name: placeholderText
                 color: theme.foreground; placeholderTextColor: root.lightTheme ? theme.foreground : "#404040"
                 font.pixelSize: theme.dp(14); selectByMouse: true
@@ -77,14 +81,15 @@ C.Popup {
                     border.color: search.activeFocus ? theme.accent : "transparent"
                 }
                 RedesignIcon {
-                    x: theme.dp(10); anchors.verticalCenter: parent.verticalCenter
-                    width: theme.dp(20); height: width; name: "search"; color: theme.playerLabel
+                    x: theme.dp(8); anchors.verticalCenter: parent.verticalCenter
+                    width: theme.dp(24); height: width; name: "search"; color: theme.foreground
                 }
             }
             RedesignComboBox {
                 id: filter
                 objectName: "shortcutFilter"
                 leftPadding: theme.dp(12); labelVerticalOffset: 0.5
+                indicatorRightMargin: 8
                 anchors.right: parent.right
                 width: Math.min(theme.dp(200), parent.width * 0.35); height: parent.height
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
@@ -104,6 +109,10 @@ C.Popup {
             Item { width: parent.width * .088; height: 1 }
             Text { width: parent.width * .268; leftPadding: -theme.dp(6.5); rightPadding: -leftPadding; topPadding: theme.dp(0.5); bottomPadding: -topPadding; horizontalAlignment: Text.AlignHCenter; text: qsTr("Global Hotkey"); color: theme.playerLabel; font.pixelSize: theme.dp(14) }
         }
+        RedesignSeparator {
+            x: theme.dp(20); y: theme.dp(161); width: parent.width - theme.dp(40); z: 1
+            scaleFactor: root.scaleFactor; color: root.lightTheme ? theme.border : "#222222"
+        }
         ListView {
             id: list
             objectName: "shortcutList"
@@ -122,7 +131,11 @@ C.Popup {
                 Item {
                     visible: row.groupStart
                     width: parent.width; height: theme.dp(61)
-                    Rectangle { width: parent.width; height: theme.dp(1); color: root.lightTheme ? theme.border : "#222222" }
+                    RedesignSeparator {
+                        visible: row.index > 0
+                        width: parent.width; scaleFactor: root.scaleFactor
+                        color: root.lightTheme ? theme.border : "#222222"
+                    }
                     Text {
                         y: theme.dp(20); height: theme.dp(30); width: parent.width
                         topPadding: -theme.dp(0.5); bottomPadding: -topPadding

@@ -135,15 +135,10 @@ C.Dialog {
                 Accessible.role: Accessible.AlertMessage
             }
             Item { width: 1; height: root.theme.dp(20) }
-            Item {
+            RedesignSeparator {
                 x: root.theme.dp(20); width: parent.width - root.theme.dp(40)
-                height: root.theme.dp(1)
-                RedesignSvg {
-                    y: -root.theme.dp(1); width: parent.width; height: root.theme.dp(2)
-                    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height
-                        + '" viewBox="0 -1 ' + width / root.scaleFactor + ' 2"><path d="M0 0H' + width / root.scaleFactor
-                        + '" stroke="' + (root.lightTheme ? root.theme.border : "#222222") + '"/></svg>'
-                }
+                scaleFactor: root.scaleFactor
+                color: root.lightTheme ? root.theme.border : "#222222"
             }
             Item {
                 width: parent.width; height: Math.max(root.theme.dp(99), nameHelp.y + nameHelp.height + root.theme.dp(23))

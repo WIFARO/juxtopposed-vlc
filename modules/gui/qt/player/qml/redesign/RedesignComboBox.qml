@@ -16,6 +16,7 @@ C.ComboBox {
     property real choiceHeight: 34
     property real subsequentLabelOffset: 0
     property real labelVerticalOffset: 0
+    property real indicatorRightMargin: 16
     property real popupGap: 4
     property real popupBottomPadding: 2
     property Component videoBackdropContent
@@ -90,7 +91,7 @@ C.ComboBox {
     indicator: RedesignIcon {
         name: "chevron-down"; color: root.theme.foreground
         width: root.theme.dp(24); height: width
-        x: root.width - width - root.theme.dp(16); y: (root.height - height) / 2
+        x: root.width - width - root.theme.dp(root.indicatorRightMargin); y: (root.height - height) / 2
     }
     delegate: C.ItemDelegate {
         id: choiceDelegate
