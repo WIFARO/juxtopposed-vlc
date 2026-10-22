@@ -279,7 +279,7 @@ int RedesignFolderModel::rowCount(const QModelIndex& parent) const
 QHash<int, QByteArray> RedesignFolderModel::roleNames() const
 {
     return {{FileName, "fileName"}, {FileUrl, "fileUrl"}, {FileIsDir, "fileIsDir"},
-            {Thumbnail, "thumbnail"}, {Progress, "progress"}, {Title, "title"}, {Artist, "main_artist"}};
+            {Thumbnail, "thumbnail"}, {Progress, "progress"}, {Title, "title"}, {Artist, "main_artist"}, {Played, "played"}};
 }
 
 QVariant RedesignFolderModel::data(const QModelIndex& index, int role) const
@@ -291,6 +291,7 @@ QVariant RedesignFolderModel::data(const QModelIndex& index, int role) const
     case FileName: return file.fileName();
     case FileUrl: return QUrl::fromLocalFile(file.absoluteFilePath());
     case FileIsDir: return file.isDir();
+    case Played: return !file.isDir() && m_played.value(QUrl::fromLocalFile(file.absoluteFilePath()), false);
     case Qt::DisplayRole:
     case Title:
     case Artist:
@@ -348,8 +349,12 @@ void RedesignFolderModel::setPlayed(const QUrl& url, bool played)
     if (!m_watchRequested.contains(url) && !m_artworkRequested.contains(url)) return;
     const bool previous = m_played.value(url, false);
     m_played.insert(url, played);
-    if (previous != played && m_rowsByUrl.contains(url) && m_sortCriteria == "played" && !m_watchStatesPending)
-        scheduleSort();
+    const auto row = m_rowsByUrl.value(url, -1);
+    if (previous != played && row >= 0) {
+        emit dataChanged(index(row), index(row), {Played});
+        if (m_sortCriteria == "played" && !m_watchStatesPending)
+            scheduleSort();
+    }
 }
 
 void RedesignFolderModel::setWatchStatesPending(bool pending)

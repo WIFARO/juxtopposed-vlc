@@ -15,6 +15,35 @@ class TestRedesignFolderModel : public QObject
         QVERIFY(file.open(QIODevice::WriteOnly));
     }
 private slots:
+    void playedRoleUpdatesCaptionsWithoutChangingTitleOrder() {
+        QTemporaryDir directory, other;
+        touch(QDir(directory.path()).filePath("a.mp4"));
+        touch(QDir(directory.path()).filePath("b.mp4"));
+        touch(QDir(other.path()).filePath("a.mp4"));
+        RedesignFolderModel model;
+        QSignalSpy requested(&model, &RedesignFolderModel::artworkRequested);
+        model.setFolder(QUrl::fromLocalFile(directory.path()));
+        QTRY_COMPARE(model.count(), 2);
+        const auto url = model.get(0, "fileUrl").toUrl();
+        model.get(0, "thumbnail");
+        QTRY_COMPARE(requested.count(), 1);
+        QSignalSpy changed(&model, &RedesignFolderModel::dataChanged);
+        QSignalSpy reset(&model, &RedesignFolderModel::modelReset);
+        model.setPlayed(url, true);
+        QVERIFY(model.get(0, "played").toBool());
+        QCOMPARE(model.get(0, "fileUrl").toUrl(), url);
+        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed[0][2].value<QList<int>>(), QList<int>{model.roleNames().key("played")});
+        model.setPlayed(url, false);
+        QVERIFY(!model.get(0, "played").toBool());
+        QCOMPARE(changed.count(), 2);
+        QCOMPARE(reset.count(), 0);
+        QCOMPARE(requested.count(), 1);
+        model.setFolder(QUrl::fromLocalFile(other.path()));
+        QTRY_COMPARE(model.count(), 1);
+        model.setPlayed(url, true);
+        QVERIFY(!model.get(0, "played").toBool());
+    }
     void audioMetadataSortAndSearchKeepFileIdentity() {
         QTemporaryDir directory;
         QDir dir(directory.path());

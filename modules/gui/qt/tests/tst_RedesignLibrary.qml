@@ -46,6 +46,7 @@ TestCase {
     ListModel { id: emptyHomeItems }
     ListModel { id: playlistItems }
     ListModel { id: progressItems }
+    ListModel { id: captionItems }
     QtObject {
         id: settings
         property string saved: "[]"
@@ -149,6 +150,7 @@ TestCase {
         library.playlistOpen = false; library.playlistEditing = false; library.playlistBusy = false
         library.playlistEditMessage = ""; library.playlistKey = ""; library.dragDestination = -1
         library.mediaModel = folderItems
+        library.currentMediaUrl = ""
         playlistItems.clear()
         playlistItems.append({id: "first", title: "First"})
         playlistItems.append({id: "second", title: "Second"})
@@ -1171,6 +1173,57 @@ TestCase {
         tryCompare(findChild(library, "libraryViewMenu"), "opened", true)
         mouseClick(findChild(library, "libraryAction_list"))
         compare(library.grid, false)
+    }
+    function test_mediaCaptionColoursFollowStateAndKeepIdentityAfterReordering() {
+        captionItems.clear()
+        captionItems.append({title: "First", fileUrl: "file:///media/Video%20%231.mp4", mrl: "", fileIsDir: false, played: false, playcount: 0})
+        captionItems.append({title: "Watched", fileUrl: "file:///media/Video%20%232.mp4", mrl: "", fileIsDir: false, played: true, playcount: 0})
+        captionItems.append({title: "Library history", fileUrl: "", mrl: "https://example.invalid/stream?token=1", fileIsDir: false, played: false, playcount: 2})
+        library.mediaModel = captionItems
+        expandLibrary()
+        library.grid = true
+        testCase.forceActiveFocus()
+        mouseMove(testCase, 0, 0)
+        const first = findChild(library, "libraryTitle0")
+        tryCompare(first, "color", "#969696")
+        compare(findChild(library, "libraryTitle1").color, "#6b6b6b")
+        compare(findChild(library, "libraryTitle2").color, "#6b6b6b")
+        const artwork = findChild(library, "libraryArtwork0")
+        compare(first.mapToItem(artwork, 0, first.baselineOffset).y, artwork.height + 35)
+        library.currentMediaUrl = "file:///media/Video%20%231.mp4"
+        library.grid = false
+        tryCompare(first, "color", "#d37918")
+        const rowArtwork = findChild(library, "libraryArtwork0")
+        compare(first.mapToItem(rowArtwork, 0, first.baselineOffset).y, 21.5)
+        captionItems.move(0, 2, 1)
+        tryCompare(findChild(library, "libraryTitle2"), "text", "First")
+        compare(findChild(library, "libraryTitle2").color, "#d37918")
+        compare(findChild(library, "libraryTitle0").color, "#6b6b6b")
+        library.expanded = false
+        tryCompare(findChild(library, "libraryTitle2"), "color", "#8f8f8f")
+        library.currentMediaUrl = ""
+        tryCompare(findChild(library, "libraryTitle2"), "color", "#969696")
+        library.expanded = true
+        library.grid = false
+        library.currentMediaUrl = "https://example.invalid/stream?token=1"
+        tryCompare(findChild(library, "libraryTitle1"), "color", "#d37918")
+        library.currentMediaUrl = "https://example.invalid/stream?token=2"
+        tryCompare(findChild(library, "libraryTitle1"), "color", "#6b6b6b")
+    }
+    function test_mediaIdentity_data() {
+        return [
+            {tag: "drive-case", a: "file:///C:/Music/Song%20One.mp3", b: "file:///c:/music/song%20one.mp3", equal: true},
+            {tag: "network-case", a: "file://SERVER/Share/Music/Song.mp3", b: "file://server/share/music/song.mp3", equal: true},
+            {tag: "local-case", a: "file:///media/Song.mp3", b: "file:///media/song.mp3", equal: false},
+            {tag: "space", a: "file:///media/Song One.mp3", b: "file:///media/Song%20One.mp3", equal: true},
+            {tag: "literal-percent", a: "file:///media/Song%2520One.mp3", b: "file:///media/Song%20One.mp3", equal: false},
+            {tag: "literal-slash", a: "file:///media/a%2Fb.mp3", b: "file:///media/a/b.mp3", equal: false},
+            {tag: "dot-segment", a: "file:///media/old/../Song.mp3", b: "file:///media/Song.mp3", equal: true},
+            {tag: "stream-query", a: "https://example.invalid/music?token=1", b: "https://example.invalid/music?token=2", equal: false}
+        ]
+    }
+    function test_mediaIdentity(data) {
+        compare(library.mediaIdentity(Qt.resolvedUrl(data.a)) === library.mediaIdentity(Qt.resolvedUrl(data.b)), data.equal)
     }
     function test_expandedHomeUsesMediaCardsAndKeepsMoreThanThreeItems() {
         expandLibrary()

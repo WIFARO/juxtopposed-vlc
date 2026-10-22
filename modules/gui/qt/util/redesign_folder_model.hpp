@@ -40,7 +40,7 @@ class RedesignFolderModel : public QAbstractListModel
     Q_PROPERTY(bool audioMetadataEnabled READ audioMetadataEnabled WRITE setAudioMetadataEnabled NOTIFY audioMetadataEnabledChanged FINAL)
     Q_PROPERTY(bool audioMetadataPending READ audioMetadataPending NOTIFY audioMetadataPendingChanged FINAL)
 public:
-    enum Role { FileName = Qt::UserRole + 1, FileUrl, FileIsDir, Thumbnail, Progress, Title, Artist };
+    enum Role { FileName = Qt::UserRole + 1, FileUrl, FileIsDir, Thumbnail, Progress, Title, Artist, Played };
     explicit RedesignFolderModel(QObject* parent = nullptr);
     QUrl folder() const { return m_folder; }
     void setFolder(const QUrl& folder);

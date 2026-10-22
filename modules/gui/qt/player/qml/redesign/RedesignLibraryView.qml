@@ -10,6 +10,8 @@ Item {
     property bool lightTheme: false
     property Component videoBackdropContent
     property var mediaModel
+    property url currentMediaUrl
+    readonly property string currentMediaKey: mediaIdentity(currentMediaUrl)
     readonly property int libraryMediaCount: mediaView.count
     property int itemCount: libraryMediaCount
     property bool loading: false
@@ -54,6 +56,14 @@ Item {
     property string addLabel: playlistOpen ? qsTr("Add files") : category === 4 ? qsTr("Create playlist") : category === 3 ? qsTr("Add Network Stream") : qsTr("Add")
     property string emptyText: qsTr("Add a folder to your library to see your media here.")
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
+    RedesignLibraryPath { id: mediaPaths }
+    function mediaIdentity(value) {
+        const text = String(value || "")
+        const path = mediaPaths.split(text)
+        if (!path || !path.prefix.startsWith("file://")) return text
+        const normalized = mediaPaths.urlFor(path, path.parts.length)
+        return path.windows ? normalized.toLowerCase() : normalized
+    }
     signal homeActivated(string section, int index)
     signal homeEnqueueRequested(string section, int index)
     signal homeSectionRequested(string section)
@@ -501,6 +511,11 @@ Item {
                 readonly property string itemArtist: model.main_artist || ""
                 readonly property string displayTitle: itemTitle + ((!root.expanded || !root.grid) && itemArtist ? " - " + itemArtist : "")
                 readonly property string itemArtwork: root.artworkForItem(model)
+                readonly property url itemMediaUrl: model.fileUrl || model.mrl || model.url || ""
+                readonly property string mediaKey: root.mediaIdentity(itemMediaUrl)
+                readonly property bool isMedia: mediaKey.length > 0 && !model.fileIsDir && !root.showingFolders
+                readonly property bool isCurrent: isMedia && root.currentMediaKey.length > 0 && mediaKey === root.currentMediaKey
+                readonly property bool played: isMedia && (model.played === true || Number(model.playcount || 0) > 0)
                 function focusMediaItem() { mediaButton.forceActiveFocus(Qt.TabFocusReason) }
                 RedesignButton {
                     id: grip
@@ -586,18 +601,23 @@ Item {
                         Text {
                             objectName: "libraryTitle" + delegate.index
                             x: root.grid ? root.expanded ? 0 : theme.dp(4) : thumbnail.width + theme.dp(10)
-                            y: root.grid ? thumbnail.y + thumbnail.height + theme.dp(root.expanded ? 20 : 6) : (parent.height - height) / 2
+                            y: root.grid ? thumbnail.y + thumbnail.height + (root.expanded ? theme.dp(35) - baselineOffset : theme.dp(6))
+                                : parent.height / 2 + theme.dp(5.5) - baselineOffset
                             width: root.grid ? parent.width - (root.expanded ? 0 : theme.dp(8)) : Math.max(0, parent.width - x - theme.dp(26))
                             text: delegate.displayTitle; textFormat: Text.PlainText; elide: Text.ElideRight
-                            color: mediaButton.hovered || mediaButton.visualFocus ? theme.bright : root.expanded ? theme.foreground : theme.playerLabel
+                            color: delegate.isCurrent && root.expanded && !root.grid ? theme.accent
+                                : mediaButton.hovered || mediaButton.visualFocus ? theme.bright
+                                : delegate.isCurrent ? (root.expanded ? theme.playerHeading : theme.foreground)
+                                : delegate.played ? theme.playerLabel
+                                : root.expanded || delegate.isMedia ? theme.playerHeading : theme.playerLabel
                             font.pixelSize: theme.dp(root.expanded && root.grid ? 16 : 14)
                         }
                         Text {
                             objectName: "libraryArtist" + delegate.index
                             visible: root.expanded && root.grid && delegate.itemArtist.length > 0
-                            x: 0; y: thumbnail.height + theme.dp(50); width: parent.width
+                            x: 0; y: thumbnail.height + theme.dp(64) - baselineOffset; width: parent.width
                             text: delegate.itemArtist; textFormat: Text.PlainText; elide: Text.ElideRight
-                            color: theme.foreground; font.pixelSize: theme.dp(16)
+                            color: theme.playerLabel; font.pixelSize: theme.dp(16)
                         }
                     }
                     DragHandler {

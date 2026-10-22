@@ -8,6 +8,7 @@ import VLC.Dialogs
 
 RedesignLibraryView {
     id: root
+    currentMediaUrl: Player.isStarted ? Player.url : ""
     readonly property var emptyParentId: MediaLib.deserializeMlItemIdFromString("")
     property var selectedPlaylist
     property string playlistEditKey: ""
