@@ -475,7 +475,7 @@ void vout_ChangeWindowState(vout_thread_t *vout, unsigned st)
     vlc_mutex_unlock(&sys->window_lock);
 }
 
-void vout_InvalidateSubtitleArea(vout_thread_t *vout)
+void vout_Invalidate(vout_thread_t *vout)
 {
     vout_thread_sys_t *sys = VOUT_THREAD_TO_SYS(vout);
     assert(!sys->dummy);

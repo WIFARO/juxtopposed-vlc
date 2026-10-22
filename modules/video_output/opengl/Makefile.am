@@ -1,3 +1,5 @@
+OPENGL_BACKDROP_SOURCES = video_output/opengl/backdrop.c video_output/opengl/backdrop.h
+
 OPENGL_COMMONSOURCES = \
        video_output/opengl/filter.c \
        video_output/opengl/filter_priv.h \
@@ -88,6 +90,7 @@ endif
 
 ### OpenGL ###
 libgles2_plugin_la_SOURCES = video_output/opengl/display.c \
+    $(OPENGL_BACKDROP_SOURCES) \
     $(OPENGL_VOUT_COMMONSOURCES)
 libgles2_plugin_la_CFLAGS = $(AM_CFLAGS) $(GLES2_CFLAGS) -DUSE_OPENGL_ES2
 libgles2_plugin_la_LIBADD = libvlc_opengles.la $(GLES2_LIBS)
@@ -97,6 +100,7 @@ vout_PLUGINS += libgles2_plugin.la
 endif
 
 libgl_plugin_la_SOURCES = video_output/opengl/display.c \
+    $(OPENGL_BACKDROP_SOURCES) \
     $(OPENGL_VOUT_COMMONSOURCES)
 libgl_plugin_la_CFLAGS = $(AM_CFLAGS) $(GL_CFLAGS) $(OPENGL_COMMONCFLAGS)
 libgl_plugin_la_CPPFLAGS = $(AM_CPPFLAGS)

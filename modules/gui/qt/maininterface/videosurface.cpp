@@ -21,6 +21,7 @@
 #include <QThreadPool>
 #include <utility>
 #include <vlc_window.h>
+#include <vlc_window_backdrop.h>
 
 #include <QQuickRenderControl>
 #ifdef QT_DECLARATIVE_PRIVATE
@@ -33,6 +34,29 @@ VideoSurfaceProvider::VideoSurfaceProvider(bool threadedSurfaceUpdates, QObject*
     : VideoBackdropProvider(parent)
     , m_threadedSurfaceUpdates(threadedSurfaceUpdates)
 {
+    connect(this, &VideoBackdropProvider::backdropRegionsChanged, this,
+        [this](const VideoBackdropState& state) {
+            QMutexLocker lock(&m_nativeBackdropLock);
+            if (state.revision < m_nativeBackdrops.revision)
+                return;
+            m_nativeBackdrops = state;
+            publishNativeBackdrops();
+        }, Qt::DirectConnection);
+}
+
+void VideoSurfaceProvider::publishNativeBackdrops()
+{
+    if (!m_nativeBackdropWindow)
+        return;
+    QList<vlc_window_backdrop_region> regions;
+    regions.reserve(m_nativeBackdrops.regions.size());
+    for (const auto& region : m_nativeBackdrops.regions)
+    {
+        const auto rect = region.rect.translated(-m_nativeVideoOrigin);
+        regions.append({float(rect.x()), float(rect.y()), float(rect.width()),
+            float(rect.height()), float(region.blurRadius), float(region.cornerRadius)});
+    }
+    vlc_window_SetBackdrops(m_nativeBackdropWindow, regions.constData(), regions.size());
 }
 
 bool VideoSurfaceProvider::isEnabled()
@@ -49,6 +73,19 @@ void VideoSurfaceProvider::enable(vlc_window_t* voutWindow)
 {
     assert(voutWindow);
     m_voutWindow = voutWindow;
+    {
+        QMutexLocker lock(&m_nativeBackdropLock);
+        // Wayland puts video below the UI on a separate native surface. Other
+        // compositors already apply the regions when they compose that surface.
+        if (voutWindow->type == VLC_WINDOW_TYPE_WAYLAND)
+        {
+            m_nativeBackdropWindow = voutWindow;
+            const auto state = backdropRegions();
+            if (state.revision >= m_nativeBackdrops.revision)
+                m_nativeBackdrops = state;
+            publishNativeBackdrops();
+        }
+    }
     m_pressedButtons = 0;
     vlc_window_ReportSubtitleArea(m_voutWindow, m_subtitleArea.left(), m_subtitleArea.top(),
         m_subtitleArea.right(), m_subtitleArea.bottom());
@@ -57,6 +94,12 @@ void VideoSurfaceProvider::enable(vlc_window_t* voutWindow)
 
 void VideoSurfaceProvider::disable()
 {
+    {
+        QMutexLocker lock(&m_nativeBackdropLock);
+        if (m_nativeBackdropWindow)
+            vlc_window_SetBackdrops(m_nativeBackdropWindow, nullptr, 0);
+        m_nativeBackdropWindow = nullptr;
+    }
     setVideoEmbed(false);
     m_voutWindow = nullptr;
     m_pressedButtons = 0;
@@ -146,6 +189,12 @@ void VideoSurfaceProvider::onSurfacePropertiesChanged(const std::optional<QSizeF
                                                       const std::optional<QPointF>& position,
                                                       const std::optional<qreal>& scale)
 {
+    if (position)
+    {
+        QMutexLocker lock(&m_nativeBackdropLock);
+        m_nativeVideoOrigin = *position;
+        publishNativeBackdrops();
+    }
     emit surfacePropertiesChanged(size, position, scale);
     if (m_voutWindow && size)
         vlc_window_ReportSize(m_voutWindow, std::ceil(size->width()), std::ceil(size->height()));

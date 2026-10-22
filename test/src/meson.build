@@ -642,6 +642,13 @@ vlc_tests += {
 }
 
 vlc_tests += {
+    'name': 'test_src_video_output_window_backdrop',
+    'sources': files('video_output/window_backdrop.c'),
+    'suite': ['src', 'test_src'],
+    'link_with': [libvlc, libvlccore],
+}
+
+vlc_tests += {
     'name' : 'test_src_video_output_opengl',
     'sources' : files('video_output/opengl.c'),
     'suite' : ['src', 'test_src'],

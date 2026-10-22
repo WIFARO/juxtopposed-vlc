@@ -34,6 +34,7 @@
 #include "vout_helper.h"
 
 #include "renderer.h"
+#include "backdrop.h"
 
 /* Plugin callbacks */
 static int Open(vout_display_t *vd,
@@ -79,6 +80,8 @@ typedef struct vout_display_sys_t
     bool place_changed;
     bool is_dirty;
     bool restart_renderer;
+    struct vlc_gl_backdrop *backdrop;
+    bool backdrop_failed;
 
     struct {
         vlc_stereoscopic_mode_t mode;
@@ -234,6 +237,8 @@ static int Open(vout_display_t *vd,
 
     sys->gl = NULL;
     sys->is_dirty = false;
+    sys->backdrop = NULL;
+    sys->backdrop_failed = false;
 
     vlc_window_t *surface = vd->cfg->window;
     char *gl_name = var_InheritString(surface, MODULE_VARNAME);
@@ -321,6 +326,7 @@ static void Close(vout_display_t *vd)
     vlc_gl_t *gl = sys->gl;
 
     vlc_gl_MakeCurrent (gl);
+    vlc_gl_backdrop_Delete(sys->backdrop);
     vout_display_opengl_Delete (sys->vgl);
     vlc_gl_ReleaseCurrent (gl);
 
@@ -375,6 +381,25 @@ static void PictureRender (vout_display_t *vd, picture_t *pic,
 
         vout_display_opengl_Prepare (sys->vgl, pic, subpicture);
         vout_display_opengl_Display(sys->vgl);
+
+        if (vd->cfg->window->type == VLC_WINDOW_TYPE_WAYLAND)
+        {
+            vlc_window_backdrops_t *snapshot = vlc_window_HoldBackdrops(vd->cfg->window);
+            size_t count;
+            const struct vlc_window_backdrop_region *regions =
+                vlc_window_GetBackdropRegions(snapshot, &count);
+            if (count && !sys->backdrop && !sys->backdrop_failed)
+            {
+                sys->backdrop = vlc_gl_backdrop_New(sys->gl);
+                sys->backdrop_failed = !sys->backdrop;
+                if (sys->backdrop_failed)
+                    msg_Warn(vd, "Could not create native video backdrop renderer");
+            }
+            if (count && sys->backdrop)
+                vlc_gl_backdrop_Draw(sys->backdrop, vd->cfg->display.width,
+                                     vd->cfg->display.height, regions, count);
+            vlc_window_ReleaseBackdrops(snapshot);
+        }
 
         sys->vt.Flush();
         vlc_gl_ReleaseCurrent (sys->gl);

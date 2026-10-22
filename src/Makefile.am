@@ -127,6 +127,7 @@ pluginsinclude_HEADERS.h = \
 	../include/vlc_vout_display.h \
 	../include/vlc_vout_osd.h \
 	../include/vlc_window.h \
+	../include/vlc_window_backdrop.h \
 	../include/vlc_xlib.h \
 	../include/vlc_xml.h \
 	$(NULL)
@@ -372,6 +373,7 @@ libvlccore_la_SOURCES = \
 	video_output/video_window.c \
 	video_output/video_window.h \
 	video_output/subtitle_area.h \
+	video_output/window_internal.h \
 	video_output/window.c \
 	video_output/opengl.c \
 	video_output/vout_intf.c \

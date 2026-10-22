@@ -299,6 +299,20 @@ if opengl_dep.found() and (host_system == 'windows' or egl_dep.found())
     endforeach
 endif
 
+if host_system == 'linux' and opengl_dep.found() and egl_dep.found()
+    foreach api, api_flag : {'opengl': 'VLC_OPENGL', 'opengl_es2': 'VLC_OPENGL_ES2'}
+        vlc_tests += {
+            'name': 'test_modules_video_output_' + api + '_backdrop',
+            'enabled': api == 'opengl' or cc.has_header('GLES2/gl2.h'),
+            'sources': files('video_output/opengl/backdrop.c', '../../modules/video_output/opengl/backdrop.c'),
+            'suite': ['modules', 'test_modules'],
+            'link_with': [libvlc, libvlccore, libvlc_opengl],
+            'dependencies': [egl_dep, m_lib],
+            'c_args': ['-DVLC_TEST_OPENGL_API=' + api_flag] + (api == 'opengl_es2' ? ['-DUSE_OPENGL_ES2'] : []),
+        }
+    endforeach
+endif
+
 vlc_tests += {
     'name' : 'test_modules_video_output_opengl_filters',
     'sources' : files(

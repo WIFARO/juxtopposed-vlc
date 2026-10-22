@@ -30,9 +30,13 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include <vlc_common.h>
 #include <vlc_window.h>
+#include <vlc_window_backdrop.h>
+#include <vlc_atomic.h>
+#include "window_internal.h"
 #include <vlc_modules.h>
 #include "inhibit.h"
 #include "../libvlc.h"
@@ -49,7 +53,102 @@ typedef struct
     bool active;
     bool fullscreen;
     vlc_mutex_t lock;
+    vlc_window_backdrops_t *backdrops;
+    void (*invalidate_backdrops)(void *);
+    void *invalidate_opaque;
 } window_t;
+
+struct vlc_window_backdrops
+{
+    vlc_atomic_rc_t rc;
+    size_t count;
+    struct vlc_window_backdrop_region regions[];
+};
+
+void vlc_window_ReleaseBackdrops(vlc_window_backdrops_t *snapshot)
+{
+    if (snapshot != NULL && vlc_atomic_rc_dec(&snapshot->rc))
+        free(snapshot);
+}
+
+const struct vlc_window_backdrop_region *
+vlc_window_GetBackdropRegions(const vlc_window_backdrops_t *snapshot, size_t *count)
+{
+    *count = snapshot != NULL ? snapshot->count : 0;
+    return snapshot != NULL ? snapshot->regions : NULL;
+}
+
+vlc_window_backdrops_t *vlc_window_HoldBackdrops(vlc_window_t *window)
+{
+    window_t *w = container_of(window, window_t, wnd);
+    vlc_mutex_lock(&w->lock);
+    vlc_window_backdrops_t *snapshot = w->backdrops;
+    if (snapshot != NULL)
+        vlc_atomic_rc_inc(&snapshot->rc);
+    vlc_mutex_unlock(&w->lock);
+    return snapshot;
+}
+
+void vlc_window_SetBackdropInvalidator(vlc_window_t *window,
+                                     void (*invalidate)(void *), void *opaque)
+{
+    window_t *w = container_of(window, window_t, wnd);
+    vlc_mutex_lock(&w->lock);
+    w->invalidate_backdrops = invalidate;
+    w->invalidate_opaque = opaque;
+    vlc_mutex_unlock(&w->lock);
+}
+
+static bool BackdropEqual(const struct vlc_window_backdrop_region *a,
+                          const struct vlc_window_backdrop_region *b)
+{
+    return a->x == b->x && a->y == b->y && a->width == b->width
+        && a->height == b->height && a->blur_radius == b->blur_radius
+        && a->corner_radius == b->corner_radius;
+}
+
+int vlc_window_SetBackdrops(vlc_window_t *window,
+    const struct vlc_window_backdrop_region *regions, size_t count)
+{
+    if (count > (SIZE_MAX - sizeof(vlc_window_backdrops_t)) / sizeof(*regions)
+        || (count != 0 && regions == NULL))
+        return VLC_EINVAL;
+    for (size_t i = 0; i < count; ++i)
+    {
+        const struct vlc_window_backdrop_region *r = &regions[i];
+        if (!isfinite(r->x) || !isfinite(r->y) || !isfinite(r->width)
+            || !isfinite(r->height) || !isfinite(r->blur_radius)
+            || !isfinite(r->corner_radius) || r->width <= 0 || r->height <= 0
+            || r->blur_radius <= 0 || r->corner_radius < 0
+            || !isfinite(r->x + r->width) || !isfinite(r->y + r->height))
+            return VLC_EINVAL;
+    }
+    vlc_window_backdrops_t *snapshot = NULL;
+    if (count != 0)
+    {
+        snapshot = malloc(sizeof(*snapshot) + count * sizeof(*regions));
+        if (snapshot == NULL)
+            return VLC_ENOMEM;
+        vlc_atomic_rc_init(&snapshot->rc);
+        snapshot->count = count;
+        memcpy(snapshot->regions, regions, count * sizeof(*regions));
+    }
+    window_t *w = container_of(window, window_t, wnd);
+    vlc_mutex_lock(&w->lock);
+    vlc_window_backdrops_t *old = w->backdrops;
+    bool same = (old != NULL ? old->count : 0) == count;
+    for (size_t i = 0; same && i < count; ++i)
+        same = BackdropEqual(&old->regions[i], &regions[i]);
+    if (!same)
+    {
+        w->backdrops = snapshot;
+        if (w->invalidate_backdrops != NULL)
+            w->invalidate_backdrops(w->invalidate_opaque);
+    }
+    vlc_mutex_unlock(&w->lock);
+    vlc_window_ReleaseBackdrops(same ? snapshot : old);
+    return VLC_SUCCESS;
+}
 
 static int vlc_window_start(void *func, bool forced, va_list ap)
 {
@@ -87,11 +186,15 @@ vlc_window_t *vlc_window_New(vlc_object_t *obj, const char *module,
     w->inhibit_windowed = dss == 1;
     w->active = false;
     w->fullscreen = false;
+    w->backdrops = NULL;
+    w->invalidate_backdrops = NULL;
+    w->invalidate_opaque = NULL;
     vlc_mutex_init(&w->lock);
 
     w->module = vlc_module_load(vlc_object_logger(window), "vout window", module,
                                 false, vlc_window_start, window);
     if (!w->module) {
+        vlc_window_ReleaseBackdrops(w->backdrops);
         vlc_object_delete(window);
         return NULL;
     }
@@ -175,6 +278,7 @@ void vlc_window_Delete(vlc_window_t *window)
         window->ops->destroy(window);
 
     vlc_objres_clear(VLC_OBJECT(window));
+    vlc_window_ReleaseBackdrops(w->backdrops);
     vlc_object_delete(window);
 }
 

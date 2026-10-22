@@ -267,7 +267,7 @@ bool vout_IsEmpty( vout_thread_t *p_vout );
 void vout_SetSpuHighlight( vout_thread_t *p_vout, const vlc_spu_highlight_t * );
 
 /* Subtitle layout reserved by an embedded interface, independent of user offsets. */
-void vout_InvalidateSubtitleArea(vout_thread_t *);
+void vout_Invalidate(vout_thread_t *);
 struct vlc_render_subpicture *spu_RenderWithArea(spu_t *, const vlc_fourcc_t *,
         const video_format_t *, const video_format_t *, bool,
         const struct vout_display_place_t *, vlc_tick_t, vlc_tick_t, bool,

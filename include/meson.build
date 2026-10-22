@@ -126,6 +126,7 @@ install_headers(
     'vlc_vout_display.h',
     'vlc_vout_osd.h',
     'vlc_window.h',
+    'vlc_window_backdrop.h',
     'vlc_xlib.h',
     'vlc_xml.h',
     install_dir: plugins_header_path)

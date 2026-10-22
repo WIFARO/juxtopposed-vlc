@@ -105,6 +105,7 @@ check_PROGRAMS = \
 	test_src_video_output_osd \
 	test_src_video_output_spu \
 	test_src_video_output_subtitle_area \
+	test_src_video_output_window_backdrop \
 	test_src_video_output_subtitle_snapshot \
 	test_modules_lua_extension \
 	test_modules_misc_medialibrary \
@@ -881,3 +882,24 @@ test_src_network_http_rate_LDADD = $(LIBVLCCORE)
 
 test_modules_video_filter_rotate_SOURCES = modules/video_filter/rotate.c
 test_modules_video_filter_rotate_LDADD = $(LIBVLCCORE) $(LIBVLC)
+
+test_src_video_output_window_backdrop_SOURCES = src/video_output/window_backdrop.c
+test_src_video_output_window_backdrop_LDADD = $(LIBVLCCORE) $(LIBVLC)
+
+if HAVE_LINUX
+if HAVE_GL
+if HAVE_EGL
+check_PROGRAMS += test_modules_video_output_opengl_backdrop test_modules_video_output_opengl_es2_backdrop
+test_modules_video_output_opengl_backdrop_SOURCES = modules/video_output/opengl/backdrop.c \
+    ../modules/video_output/opengl/backdrop.c ../modules/video_output/opengl/backdrop.h
+test_modules_video_output_opengl_backdrop_CPPFLAGS = $(AM_CPPFLAGS) $(EGL_CFLAGS)
+test_modules_video_output_opengl_backdrop_LDADD = $(LIBVLCCORE) $(LIBVLC) ../modules/libvlc_opengl.la $(EGL_LIBS) $(LIBM)
+test_modules_video_output_opengl_es2_backdrop_SOURCES = $(test_modules_video_output_opengl_backdrop_SOURCES)
+test_modules_video_output_opengl_es2_backdrop_CPPFLAGS = $(AM_CPPFLAGS) $(EGL_CFLAGS) -DVLC_TEST_OPENGL_API=VLC_OPENGL_ES2
+if HAVE_GLES2
+test_modules_video_output_opengl_es2_backdrop_CPPFLAGS += -DUSE_OPENGL_ES2
+endif
+test_modules_video_output_opengl_es2_backdrop_LDADD = $(test_modules_video_output_opengl_backdrop_LDADD)
+endif
+endif
+endif

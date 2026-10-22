@@ -807,6 +807,10 @@ vout_OSDEpg
 vout_OSDSlider
 vout_OSDText
 vlc_window_New
+vlc_window_SetBackdrops
+vlc_window_HoldBackdrops
+vlc_window_ReleaseBackdrops
+vlc_window_GetBackdropRegions
 vlc_window_Delete
 vlc_window_Enable
 vlc_window_Disable

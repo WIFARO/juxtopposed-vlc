@@ -32,6 +32,7 @@
 #include <vlc_ancillary.h>
 #include "video_window.h"
 #include "subtitle_area.h"
+#include "window_internal.h"
 #include "vout_internal.h"
 
 #define DOUBLE_CLICK_TIME VLC_TICK_FROM_MS(300)
@@ -261,7 +262,7 @@ static void vout_display_window_SubtitleArea(vlc_window_t *window,
     vlc_mutex_lock(&state->lock);
     state->subtitle_area = area;
     vlc_mutex_unlock(&state->lock);
-    vout_InvalidateSubtitleArea(state->vout);
+    vout_Invalidate(state->vout);
 }
 
 void vout_display_window_GetSubtitleArea(vlc_window_t *window, struct vlc_subtitle_area *area)
@@ -414,6 +415,11 @@ void vout_display_ResizeWindow(struct vlc_window *window,
     vlc_window_SetSize(window, width, height);
 }
 
+static void InvalidateBackdrops(void *opaque)
+{
+    vout_Invalidate(opaque);
+}
+
 /**
  * Creates a video window, initially without any attached display.
  */
@@ -456,6 +462,8 @@ vlc_window_t *vout_display_window_New(vout_thread_t *vout)
     free(modlist);
     if (window == NULL)
         free(state);
+    else
+        vlc_window_SetBackdropInvalidator(window, InvalidateBackdrops, vout);
     return window;
 }
 
@@ -468,6 +476,7 @@ void vout_display_window_Delete(vlc_window_t *window)
     vout_display_window_t *state = window->owner.sys;
     vout_thread_t *vout = state->vout;
 
+    vlc_window_SetBackdropInvalidator(window, NULL, NULL);
     vlc_window_Delete(window);
     var_Destroy(vout, "window-fullscreen-output");
     var_Destroy(vout, "window-fullscreen");

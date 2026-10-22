@@ -92,6 +92,13 @@ protected:
     bool m_videoEmbed = false;
     bool m_threadedSurfaceUpdates = false;
 
+private:
+    void publishNativeBackdrops(); // m_nativeBackdropLock must be held
+    QMutex m_nativeBackdropLock;
+    vlc_window_t *m_nativeBackdropWindow = nullptr;
+    VideoBackdropState m_nativeBackdrops;
+    QPointF m_nativeVideoOrigin;
+
 };
 
 class VideoSurface : public ViewBlockingRectangle

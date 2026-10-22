@@ -44,7 +44,7 @@ endif
 vlc_modules += {
     'name' : 'gl',
     'sources' : [
-            files('display.c'),
+            files('display.c', 'backdrop.c'),
             opengl_vout_commonsources
         ],
     'link_with' : [libvlc_opengl],
@@ -101,7 +101,7 @@ endif
 vlc_modules += {
     'name' : 'gles2',
     'sources' : [
-            files('display.c'),
+            files('display.c', 'backdrop.c'),
             opengl_vout_commonsources
         ],
     'link_with' : [libvlc_opengles],
