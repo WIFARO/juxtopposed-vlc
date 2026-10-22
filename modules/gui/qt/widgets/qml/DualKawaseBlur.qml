@@ -89,6 +89,10 @@ Item {
                              backgroundColor.a > (1.0 - Number.EPSILON)) ? false // the result is opaque, no need for sg blending
                                                                          : _sourceIsTranslucent
 
+    // Backdrop effects replace the UI below them instead of adding a second
+    // translucent copy. Preserve the original pixels outside rounded corners.
+    property bool replaceSource: false
+
     // WARNING: If texture is not valid/ready, Qt generates a transparent texture to use as source.
     readonly property bool _sourceIsTranslucent: (!sourceTextureIsValid || sourceTextureProviderObserver.hasAlphaChannel)
 
@@ -238,6 +242,7 @@ Item {
 
         required property Item source
         readonly property int radius: root.radius
+        readonly property int preservePremultiplied: root.replaceSource ? 1 : 0
 
         property rect subRect // may not be necessary, but still needed to prevent warning
 
@@ -610,6 +615,7 @@ Item {
 
     UpsamplerShaderEffect {
         id: us2
+        blending: root.replaceSource ? false : root.blending
 
         // {us1/ds1}.size * 2, unless visual rect is used
         anchors.centerIn: useSubTexture ? undefined : parent
@@ -651,6 +657,12 @@ Item {
 
         readonly property size size: Qt.size(width, height)
         property alias cornerRadius: root.cornerRadius
+        readonly property int replaceSource: root.replaceSource ? 1 : 0
+        readonly property Item originalSource: root.replaceSource ? root.source : null
+        readonly property rect originalRect: useSubTexture && root.width > 0 && root.height > 0
+            ? Qt.rect(root.visualRect.x / root.width, root.visualRect.y / root.height,
+                      root.visualRect.width / root.width, root.visualRect.height / root.height)
+            : Qt.rect(0, 0, 1, 1)
 
         fragmentShader: root.postprocess ? "qrc:///shaders/DualKawaseBlur_upsample_postprocess.frag.qsb"
                                          : "qrc:///shaders/DualKawaseBlur_upsample.frag.qsb"

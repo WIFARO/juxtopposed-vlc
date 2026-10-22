@@ -31,6 +31,7 @@ layout(std140, binding = 0) uniform qt_buf {
 
     vec4 subRect; // unused, but Qt needs it as it used in first-pass vertex shader for sub-texturing (Qt bug?)
     int radius;
+    int preservePremultiplied;
 
 #ifdef POSTPROCESS
     vec4 tint;
@@ -40,10 +41,21 @@ layout(std140, binding = 0) uniform qt_buf {
     float noiseStrength;
     vec2 size;
     float cornerRadius;
+    int replaceSource;
+    vec4 originalRect;
 #endif
 };
 
 layout(binding = 1) uniform sampler2D source;
+#ifdef POSTPROCESS
+layout(binding = 2) uniform sampler2D originalSource;
+#endif
+
+vec4 filterSample(vec2 uv)
+{
+    vec4 pixel = texture(source, uv);
+    return preservePremultiplied != 0 ? pixel : fromPremult(pixel);
+}
 
 // "Dual Kawase"
 // SIGGRAPH 2015, "Bandwidth Efficient Rendering", Marius Bjorge (ARM)
@@ -54,19 +66,19 @@ layout(binding = 1) uniform sampler2D source;
 #define SAMPLE upsample
 vec4 upsample(vec2 uv, vec2 halfpixel)
 {
-    vec4 sum = fromPremult(texture(source, uv + vec2(-halfpixel.x * 2.0, 0.0)));
-    sum += fromPremult(texture(source, uv + vec2(-halfpixel.x, halfpixel.y))) * 2.0;
-    sum += fromPremult(texture(source, uv + vec2(0.0, halfpixel.y * 2.0)));
-    sum += fromPremult(texture(source, uv + vec2(halfpixel.x, halfpixel.y))) * 2.0;
-    sum += fromPremult(texture(source, uv + vec2(halfpixel.x * 2.0, 0.0)));
-    sum += fromPremult(texture(source, uv + vec2(halfpixel.x, -halfpixel.y))) * 2.0;
-    sum += fromPremult(texture(source, uv + vec2(0.0, -halfpixel.y * 2.0)));
-    sum += fromPremult(texture(source, uv + vec2(-halfpixel.x, -halfpixel.y))) * 2.0;
+    vec4 sum = filterSample(uv + vec2(-halfpixel.x * 2.0, 0.0));
+    sum += filterSample(uv + vec2(-halfpixel.x, halfpixel.y)) * 2.0;
+    sum += filterSample(uv + vec2(0.0, halfpixel.y * 2.0));
+    sum += filterSample(uv + vec2(halfpixel.x, halfpixel.y)) * 2.0;
+    sum += filterSample(uv + vec2(halfpixel.x * 2.0, 0.0));
+    sum += filterSample(uv + vec2(halfpixel.x, -halfpixel.y)) * 2.0;
+    sum += filterSample(uv + vec2(0.0, -halfpixel.y * 2.0));
+    sum += filterSample(uv + vec2(-halfpixel.x, -halfpixel.y)) * 2.0;
     sum = sum / 12.0;
 #ifdef POSTPROCESS
     return sum;
 #else
-    return toPremult(sum);
+    return preservePremultiplied != 0 ? sum : toPremult(sum);
 #endif
 }
 #endif
@@ -75,16 +87,16 @@ vec4 upsample(vec2 uv, vec2 halfpixel)
 #define SAMPLE downsample
 vec4 downsample(vec2 uv, vec2 halfpixel)
 {
-    vec4 sum = fromPremult(texture(source, uv)) * 4.0;
-    sum += fromPremult(texture(source, uv - halfpixel.xy));
-    sum += fromPremult(texture(source, uv + halfpixel.xy));
-    sum += fromPremult(texture(source, uv + vec2(halfpixel.x, -halfpixel.y)));
-    sum += fromPremult(texture(source, uv - vec2(halfpixel.x, -halfpixel.y)));
+    vec4 sum = filterSample(uv) * 4.0;
+    sum += filterSample(uv - halfpixel.xy);
+    sum += filterSample(uv + halfpixel.xy);
+    sum += filterSample(uv + vec2(halfpixel.x, -halfpixel.y));
+    sum += filterSample(uv - vec2(halfpixel.x, -halfpixel.y));
     sum = sum / 8.0;
 #ifdef POSTPROCESS
     return sum;
 #else
-    return toPremult(sum);
+    return preservePremultiplied != 0 ? sum : toPremult(sum);
 #endif
 }
 #endif
@@ -105,6 +117,9 @@ void main()
     vec4 result = SAMPLE(uv, halfpixel);
 
 #ifdef POSTPROCESS
+    if (preservePremultiplied != 0)
+        result = fromPremult(result);
+
     // Exclusion:
     vec4 exclColor = vec4(exclusionStrength, exclusionStrength, exclusionStrength, 0.0);
     result = exclude(result, exclColor);
@@ -123,15 +138,27 @@ void main()
     vec4 noise = vec4(r,r,r,r) * noiseStrength;
     result += noise;
 
+    vec2 localUV = qt_TexCoord0;
+    if (subRect.z > 0.0 && subRect.w > 0.0)
+        localUV = (localUV * vec2(textureSize(source, 0)) - subRect.xy) / subRect.zw;
+    float coverage = 1.0;
     if (cornerRadius > 0.0) {
-        vec2 localUV = qt_TexCoord0;
-        if (subRect.z > 0.0 && subRect.w > 0.0)
-            localUV = (localUV * vec2(textureSize(source, 0)) - subRect.xy) / subRect.zw;
         float r = min(cornerRadius, min(size.x, size.y) * 0.5);
         vec2 q = abs((localUV - 0.5) * size) - size * 0.5 + vec2(r);
         float distance = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - r;
         float aa = max(fwidth(distance), 0.0001);
-        result *= 1.0 - smoothstep(-aa * 0.5, aa * 0.5, distance);
+        coverage = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, distance);
+    }
+    if (replaceSource != 0) {
+        if (coverage <= 0.0)
+            discard;
+        if (coverage < 1.0) {
+            vec2 originalUV = originalRect.xy + localUV * originalRect.zw;
+            vec4 original = texture(originalSource, originalUV);
+            result = mix(original, result, coverage);
+        }
+    } else {
+        result *= coverage;
     }
 #endif
 

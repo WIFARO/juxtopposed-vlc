@@ -69,6 +69,7 @@ Item {
                 radius: Math.max(1, Math.round(0.5 + root.radius * eDPR / Math.sqrt(175 / 6)))
                 mode: DualKawaseBlur.Mode.FourPass
                 postprocess: true
+                replaceSource: true
                 cornerRadius: root.cornerRadius
                 visualRect: Qt.rect(root.padding, root.padding, root.width, root.height)
             }

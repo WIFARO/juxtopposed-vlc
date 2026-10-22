@@ -70,7 +70,7 @@ private slots:
     {
         engine = std::make_unique<QQmlEngine>();
         engine->rootContext()->setContextProperty("testAlphaWindow",
-            QByteArray(QTest::currentTestFunction()) == "transparentVideoHole");
+            QByteArray(QTest::currentTestFunction()).startsWith("transparent"));
         const QString sourceRoot = qEnvironmentVariable("VLC_TEST_SOURCE_ROOT", QStringLiteral(TOP_SRCDIR));
         const auto path = QUrl::fromLocalFile(QDir(sourceRoot).filePath("modules/gui/qt/widgets/qml"));
         QQmlComponent component(engine.get());
@@ -88,13 +88,13 @@ Window {
         id: underlay
         visible: !shadowTest
         anchors.fill: parent
-        Rectangle { anchors.fill: parent; color: "black" }
+        Rectangle { anchors.fill: parent; color: pattern === 4 ? "transparent" : "black" }
         Rectangle {
             x: pattern === 3 ? 0 : pattern === 1 ? 130 : 256
             y: pattern === 3 ? 256 : 0
             width: pattern === 3 ? 512 : pattern === 1 ? 126 : 256
             height: pattern === 3 ? 256 : 512
-            color: "white"; visible: pattern !== 2
+            color: pattern === 4 ? Qt.rgba(1, 0, 0, 0.6) : "white"; visible: pattern !== 2
         }
         VideoHole { anchors.fill: parent; visible: pattern === 2 }
     }
@@ -243,6 +243,35 @@ Window {
             const auto image = window->grabWindow();
             return !image.isNull() && pixel(image, 256, 256).alpha() == 0;
         })());
+    }
+
+    void transparentUiEdgesReplaceUnderlay()
+    {
+        root->setProperty("pattern", 4);
+        QImage image;
+        QTRY_VERIFY(([&] {
+            image = window->grabWindow();
+            return !image.isNull() && pixel(image, 257, 256).alpha() < 130
+                && pixel(image, 257, 256).red() > 250;
+        })());
+        const qreal ratio = qreal(image.width()) / window->width();
+        for (int x : {240, 257, 272})
+        {
+            const double expected = 153 * 0.5 * std::erfc(
+                (256 - x - 0.5 / ratio) / (std::sqrt(2.) * 25));
+            const auto actual = pixel(image, x, 256);
+            QVERIFY2(qAbs(actual.alpha() - expected) < 9,
+                qPrintable(QString("x=%1 alpha=%2 expected=%3")
+                    .arg(x).arg(actual.alpha()).arg(expected)));
+            QVERIFY(actual.red() > 250);
+            QCOMPARE(actual.green(), 0);
+            QCOMPARE(actual.blue(), 0);
+        }
+        // A replacement must keep the original UI outside its rounded mask.
+        QCOMPARE(pixel(image, 382, 129).alpha(), 153);
+        QCOMPARE(pixel(image, 382, 129).red(), 255);
+        QCOMPARE(pixel(image, 420, 256).alpha(), 153);
+        QCOMPARE(pixel(image, 100, 256).alpha(), 0);
     }
 
     void movementAndIdle()
