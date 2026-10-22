@@ -1,7 +1,8 @@
 # Libplacebo-based video outputs
 
+# Keep the minimum API in sync with Autotools and contrib.
 libplacebo_dep = dependency('libplacebo',
-                            version: '>= 2.72',
+                            version: '>= 4.192',
                             required: get_option('libplacebo'))
 
 if not libplacebo_dep.found()
@@ -9,8 +10,8 @@ if not libplacebo_dep.found()
     subdir_done()
 endif
 libplacebo_utils = static_library('vlc_libplacebo_utils',
-                                files('utils.c'),
-                                dependencies: [libplacebo_dep],
+                                files('utils.c', 'backdrop.c'),
+                                dependencies: [libplacebo_dep, m_lib],
                                 include_directories: [vlc_include_dirs])
 
 vlc_modules += {

@@ -35,6 +35,7 @@
 
 #include "utils.h"
 #include "instance.h"
+#include "backdrop.h"
 
 #include <libplacebo/renderer.h>
 #include <libplacebo/utils/upload.h>
@@ -47,6 +48,8 @@ typedef struct vout_display_sys_t
     pl_renderer renderer;
     pl_tex plane_tex[4];
     pl_tex fbo;
+    struct vlc_placebo_backdrop *backdrop;
+    bool backdrop_failed;
 
     // Pool of textures for the subpictures
     struct pl_overlay *overlays;
@@ -190,10 +193,12 @@ static void Close(vout_display_t *vd)
     pl_gpu gpu = sys->pl->gpu;
 
     if (vlc_placebo_MakeCurrent(sys->pl) == VLC_SUCCESS) {
+        pl_gpu_finish(gpu);
         for (int i = 0; i < 4; i++)
             pl_tex_destroy(gpu, &sys->plane_tex[i]);
         for (int i = 0; i < sys->num_overlays; i++)
             pl_tex_destroy(gpu, &sys->overlay_tex[i]);
+        vlc_placebo_backdrop_Delete(sys->backdrop);
         pl_renderer_destroy(&sys->renderer);
         vlc_placebo_ReleaseCurrent(sys->pl);
     }
@@ -231,6 +236,10 @@ static void PictureRender(vout_display_t *vd, picture_t *pic,
         return; // Probably benign error, ignore it
     }
     sys->fbo = frame.fbo;
+    vlc_window_backdrops_t *backdrops = NULL;
+    const struct vlc_window_backdrop_region *backdrop_regions = NULL;
+    size_t num_backdrops = 0;
+    pl_tex render_target = frame.fbo;
 
 #if PL_API_VER >= 199
     bool need_vflip = false;
@@ -242,12 +251,7 @@ static void PictureRender(vout_display_t *vd, picture_t *pic,
         .num_planes = pic->i_planes,
         .color      = vlc_placebo_ColorSpace(vd->fmt),
         .repr       = vlc_placebo_ColorRepr(vd->fmt),
-        .crop = {
-            .x0 = pic->format.i_x_offset,
-            .y0 = pic->format.i_y_offset,
-            .x1 = pic->format.i_x_offset + pic->format.i_visible_width,
-            .y1 = pic->format.i_y_offset + pic->format.i_visible_height,
-        },
+        .crop = vlc_placebo_PictureCrop(pic, vd->source),
     };
 
     vlc_placebo_frame_DoviMetadata(&img, pic, &sys->dovi_metadata);
@@ -289,6 +293,27 @@ static void PictureRender(vout_display_t *vd, picture_t *pic,
 
     struct pl_frame target;
     pl_frame_from_swapchain(&target, &frame);
+    backdrops = vlc_window_HoldBackdrops(vd->cfg->window);
+    backdrop_regions = vlc_window_GetBackdropRegions(backdrops, &num_backdrops);
+    if (num_backdrops > 0)
+    {
+        if (!sys->backdrop)
+            sys->backdrop = vlc_placebo_backdrop_New(sys->pl->log, gpu);
+        pl_tex texture = sys->backdrop
+            ? vlc_placebo_backdrop_Target(sys->backdrop, frame.fbo) : NULL;
+        if (texture)
+            render_target = target.planes[0].texture = texture;
+        else if (!sys->backdrop_failed)
+            msg_Warn(vd, "Cannot prepare the video blur");
+        if (!texture)
+            sys->backdrop_failed = true;
+    }
+    else
+    {
+        vlc_placebo_backdrop_Delete(sys->backdrop);
+        sys->backdrop = NULL;
+        sys->backdrop_failed = false;
+    }
     if (vd->cfg->icc_profile) {
         target.profile.data = vd->cfg->icc_profile->data;
         target.profile.len = vd->cfg->icc_profile->size;
@@ -423,7 +448,7 @@ static void PictureRender(vout_display_t *vd, picture_t *pic,
     // pl_rect2d_normalize(&norm);
     // if (!pl_rect2d_eq(norm, full)) {
         // TODO: make background color configurable?
-        pl_tex_clear(gpu, frame.fbo, (float[4]){ 0.0, 0.0, 0.0, 0.0 });
+        pl_tex_clear(gpu, render_target, (float[4]){ 0.0, 0.0, 0.0, 0.0 });
     // }
 
     switch (sys->lut_mode) {
@@ -444,7 +469,26 @@ static void PictureRender(vout_display_t *vd, picture_t *pic,
         goto done;
     }
 
+    /* Work on the final display, after scaling, color management and overlays.
+     * Decoder pictures and saved snapshots retain their original pixels. */
+    if (render_target != frame.fbo)
+    {
+        const bool success = vlc_placebo_backdrop_Render(sys->backdrop, frame.fbo,
+            backdrop_regions, num_backdrops, frame.flipped);
+        if (!success)
+        {
+            if (!sys->backdrop_failed)
+                msg_Warn(vd, "Cannot draw the video blur");
+            target.planes[0].texture = frame.fbo;
+            pl_tex_clear(gpu, frame.fbo, (float[4]) {0, 0, 0, 0});
+            if (!pl_render_image(sys->renderer, &img, &target, &sys->params))
+                failed = true;
+        }
+        sys->backdrop_failed = !success;
+    }
+
 done:
+    vlc_window_ReleaseBackdrops(backdrops);
 
     if (failed)
         pl_tex_clear(gpu, frame.fbo, (float[4]){ 1.0, 0.0, 0.0, 1.0 });

@@ -58,6 +58,10 @@ int vlc_placebo_PlaneComponents(const video_format_t *, struct pl_plane[4]);
 // then all addresses of the picture_t must lie within `buf`'s mapped memory.
 int vlc_placebo_PlaneData(const picture_t *, struct pl_plane_data[4]);
 
+/* PlaneData uploads the picture's visible rectangle. Express the current
+ * display crop relative to that uploaded rectangle, rather than coded origin. */
+struct pl_rect2df vlc_placebo_PictureCrop(const picture_t *, const video_format_t *);
+
 // See if a given FourCC is physically supported by a given GPU
 bool vlc_placebo_FormatSupported(pl_gpu, vlc_fourcc_t);
 

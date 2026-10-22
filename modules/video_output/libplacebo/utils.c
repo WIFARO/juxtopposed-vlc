@@ -334,13 +334,23 @@ int vlc_placebo_PlaneData(const picture_t *pic, struct pl_plane_data data[4])
         data[i].row_stride = pic->p[i].i_pitch;
 
         const size_t pixels_offset =
-                ((pic->format.i_y_offset + p->w_denom - 1) / p->w_denom) * pic->p[i].i_pitch +
-                ((pic->format.i_x_offset + p->h_denom - 1) / p->h_denom) * pic->p[i].i_pixel_pitch;
+                ((pic->format.i_y_offset + p->h_denom - 1) / p->h_denom) * pic->p[i].i_pitch +
+                ((pic->format.i_x_offset + p->w_denom - 1) / p->w_denom) * pic->p[i].i_pixel_pitch;
 
         data[i].pixels = pic->p[i].p_pixels + pixels_offset;
     }
 
     return desc->num_planes;
+}
+
+struct pl_rect2df vlc_placebo_PictureCrop(const picture_t *pic,
+                                       const video_format_t *source)
+{
+    const float x = (int64_t)source->i_x_offset - pic->format.i_x_offset;
+    const float y = (int64_t)source->i_y_offset - pic->format.i_y_offset;
+    return (struct pl_rect2df) {
+        x, y, x + source->i_visible_width, y + source->i_visible_height,
+    };
 }
 
 bool vlc_placebo_FormatSupported(pl_gpu gpu, vlc_fourcc_t fcc)

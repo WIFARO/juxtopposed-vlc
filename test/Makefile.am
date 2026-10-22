@@ -910,3 +910,18 @@ test_modules_video_output_wayland_shm_backdrop_SOURCES = modules/video_output/wa
     ../modules/video_output/wayland/shm_backdrop.c ../modules/video_output/wayland/shm_backdrop.h
 test_modules_video_output_wayland_shm_backdrop_LDADD = $(LIBVLCCORE) $(LIBM)
 endif
+
+if HAVE_LIBPLACEBO
+check_PROGRAMS += test_modules_video_output_libplacebo_plane
+test_modules_video_output_libplacebo_plane_SOURCES = modules/video_output/libplacebo/plane.c \
+    ../modules/video_output/libplacebo/utils.c ../modules/video_output/libplacebo/utils.h
+test_modules_video_output_libplacebo_plane_CPPFLAGS = $(AM_CPPFLAGS) $(LIBPLACEBO_CFLAGS)
+test_modules_video_output_libplacebo_plane_LDADD = $(LIBPLACEBO_LIBS) $(LIBVLCCORE) $(LIBM)
+if HAVE_VULKAN
+check_PROGRAMS += test_modules_video_output_libplacebo_backdrop
+test_modules_video_output_libplacebo_backdrop_SOURCES = modules/video_output/libplacebo/backdrop.c \
+    ../modules/video_output/libplacebo/backdrop.c ../modules/video_output/libplacebo/backdrop.h
+test_modules_video_output_libplacebo_backdrop_CPPFLAGS = $(AM_CPPFLAGS) $(LIBPLACEBO_CFLAGS)
+test_modules_video_output_libplacebo_backdrop_LDADD = $(LIBPLACEBO_LIBS) $(LIBM)
+endif
+endif

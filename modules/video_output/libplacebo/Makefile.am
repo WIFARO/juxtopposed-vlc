@@ -4,9 +4,11 @@ LIBPLACEBO_COMMONSOURCES = video_output/libplacebo/utils.h \
 	video_output/libplacebo/instance.h
 
 libplacebo_utils_la_SOURCES = $(LIBPLACEBO_COMMONSOURCES) \
-			      video_output/libplacebo/utils.c
+			      video_output/libplacebo/utils.c \
+			      video_output/libplacebo/backdrop.c \
+			      video_output/libplacebo/backdrop.h
 libplacebo_utils_la_CFLAGS = $(AM_CFLAGS) $(LIBPLACEBO_CFLAGS)
-libplacebo_utils_la_LIBADD = $(LIBPLACEBO_LIBS)
+libplacebo_utils_la_LIBADD = $(LIBPLACEBO_LIBS) $(LIBM)
 libplacebo_utils_la_LDFLAGS = -static -undefined
 
 noinst_LTLIBRARIES += libplacebo_utils.la

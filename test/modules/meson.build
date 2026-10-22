@@ -451,3 +451,22 @@ if have_wayland
         'dependencies': [m_lib],
     }
 endif
+
+if libplacebo_dep.found()
+    vlc_tests += {
+        'name': 'test_modules_video_output_libplacebo_plane',
+        'sources': files('video_output/libplacebo/plane.c'),
+        'suite': ['modules', 'test_modules'],
+        'link_with': [libvlccore, libplacebo_utils],
+        'dependencies': [libplacebo_dep, m_lib],
+    }
+endif
+
+if libplacebo_dep.found() and vulkan_dep.found()
+    vlc_tests += {
+        'name': 'test_modules_video_output_libplacebo_backdrop',
+        'sources': files('video_output/libplacebo/backdrop.c', '../../modules/video_output/libplacebo/backdrop.c'),
+        'suite': ['modules', 'test_modules'],
+        'dependencies': [libplacebo_dep, m_lib],
+    }
+endif
