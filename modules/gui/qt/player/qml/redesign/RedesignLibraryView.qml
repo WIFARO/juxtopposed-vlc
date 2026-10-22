@@ -305,7 +305,7 @@ Item {
         id: button
         objectName: "librarySortButton"
         enabled: sorting.options.length > 0
-        iconName: enabled && (root.sortPopup || !["title-asc", "original"].includes(sorting.selection.id)) ? "sort-active" : "sort"
+        iconName: enabled && (root.sortPopup || sorting.selection.id !== root.defaultSortChoice) ? "sort-active" : "sort"
         iconDetailColor: root.theme.accent
         foreground: root.theme.playerLabel
         text: qsTr("Sort options")
@@ -341,8 +341,10 @@ Item {
         font.pixelSize: root.theme.dp(14)
         implicitHeight: root.theme.dp(34)
         leftPadding: root.expanded ? root.theme.dp(42) : root.theme.dp(10)
+        topPadding: root.wideToolbar ? root.theme.dp(6.5) : padding
+        bottomPadding: root.wideToolbar ? root.theme.dp(5.5) : padding
         background: Rectangle { color: root.wideToolbar && !root.lightTheme ? "#151515" : root.theme.field; radius: root.theme.dp(6); border.width: parent.activeFocus ? 1 : 0; border.color: root.theme.accent }
-        RedesignIcon { visible: root.expanded; x: root.theme.dp(12); anchors.verticalCenter: parent.verticalCenter; width: root.theme.dp(24); height: width; name: "search"; color: root.theme.playerLabel }
+        RedesignIcon { visible: root.expanded; x: root.theme.dp(8); anchors.verticalCenter: parent.verticalCenter; width: root.theme.dp(24); height: width; name: "search"; color: root.theme.playerLabel }
     }
     Component {
         id: compactToolbar
@@ -395,19 +397,10 @@ Item {
                 BackButton {}
                 ForwardButton {}
                 Location { Layout.fillWidth: true; Layout.leftMargin: root.theme.dp(4) }
-                ItemCount { Layout.rightMargin: root.theme.dp(16) }
+                ItemCount { Layout.rightMargin: root.theme.dp(14) }
                 SortButton { Layout.rightMargin: root.theme.dp(8) }
                 ViewButton {}
                 SearchField { Layout.preferredWidth: Math.min(root.theme.dp(325), root.width * 0.24); Layout.leftMargin: root.theme.dp(14); Layout.rightMargin: root.theme.dp(14) }
-                LibraryButton {
-                    objectName: "libraryToolbarAddButton"
-                    readonly property bool fileLocation: ["folder", "collection"].includes(root.locationPinTarget?.kind)
-                    visible: root.showAddRow || fileLocation
-                    enabled: !root.playlistOpen || !root.playlistBusy
-                    iconName: "add"; text: fileLocation ? qsTr("Add File") : root.addLabel
-                    foreground: root.theme.playerLabel
-                    onClicked: fileLocation ? root.filesRequested() : root.addMedia()
-                }
                 MoreButton {}
             }
         }

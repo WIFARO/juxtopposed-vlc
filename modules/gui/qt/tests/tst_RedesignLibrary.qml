@@ -186,6 +186,7 @@ TestCase {
     }
     function test_sortMenuMatchesReferenceAndKeepsChoice() {
         const button = findChild(library, "librarySortButton")
+        compare(button.iconName, "sort")
         mouseClick(button)
         let menu = library.sortPopup
         tryCompare(menu, "opened", true)
@@ -208,6 +209,11 @@ TestCase {
         compare(button.iconName, "sort-active")
         keyClick(Qt.Key_Escape)
         tryCompare(library, "sortPopup", null)
+        compare(button.iconName, "sort-active")
+        library.sortState.select("unwatched")
+        compare(button.iconName, "sort")
+        compare(library.sortField, "played")
+        compare(library.descending, false)
     }
     function test_pinsPersistInOrderAndDoNotDuplicate() {
         let pins = createTemporaryObject(pinsComponent, testCase)
@@ -861,31 +867,41 @@ TestCase {
         library.expanded = true
         wait(20)
     }
-    function test_expandedFolderAddOpensFilesAndPreservesOtherActions() {
+    function test_expandedToolbarAddsFromMoreMenuAndKeepsSourceSpacing() {
         expandLibrary()
         library.showAddRow = false
         library.locationPinTarget = {kind: "folder", uri: "file:///Videos/Shows"}
-        const button = findChild(library, "libraryToolbarAddButton")
-        tryCompare(button, "visible", true)
-        compare(button.text, "Add File")
-        mouseClick(button)
+        const search = findChild(library, "librarySearchField")
+        compare(search.mapToItem(library, 0, 0).x, 1531)
+        compare(search.width, 325)
+        const more = findChild(library, "libraryMoreButton")
+        const menu = findChild(library, "libraryMoreMenu")
+        function clickAction(action) {
+            mouseClick(more)
+            tryCompare(menu, "opened", true)
+            const entry = findChild(menu, "libraryAction_" + action)
+            verify(waitForRendering(entry))
+            mouseClick(entry)
+        }
+        clickAction("add-files")
         compare(filesSpy.count, 1)
         compare(addSpy.count, 0)
+        clickAction("add-folder")
+        compare(folderSpy.count, 1)
 
         library.locationPinTarget = undefined
-        tryCompare(button, "visible", false)
-        library.showAddRow = true
-        mouseClick(button)
-        compare(addSpy.count, 1)
         library.category = 4
-        mouseClick(button)
+        clickAction("add")
         compare(playlistSpy.count, 1)
         library.playlistOpen = true
         library.playlistBusy = true
-        tryCompare(button, "enabled", false)
-        mouseClick(button)
+        mouseClick(more)
+        tryCompare(menu, "opened", true)
+        const add = findChild(menu, "libraryAction_add")
+        verify(!add.enabled)
+        mouseClick(add)
         compare(filesSpy.count, 1)
-        compare(addSpy.count, 1)
+        compare(addSpy.count, 0)
         compare(playlistSpy.count, 1)
     }
     function test_expandedNavigationAndToolbarKeepSearchOnCollapse() {
@@ -1136,10 +1152,12 @@ TestCase {
         compare(filesSpy.count, 1)
         compare(addSpy.count, 0)
         expandLibrary()
-        const button = findChild(library, "libraryToolbarAddButton")
-        verify(button.visible)
-        compare(button.text, "Add File")
-        mouseClick(button)
+        mouseClick(findChild(library, "libraryMoreButton"))
+        const menu = findChild(library, "libraryMoreMenu")
+        tryCompare(menu, "opened", true)
+        const entry = findChild(menu, "libraryAction_add-files")
+        verify(waitForRendering(entry))
+        mouseClick(entry)
         compare(filesSpy.count, 2)
         compare(addSpy.count, 0)
     }
