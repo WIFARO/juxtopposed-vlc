@@ -946,6 +946,11 @@ static void *Thread( void *obj )
     QApplication::setAttribute( Qt::AA_DontCheckOpenGLContextThreadAffinity );
     QQuickWindow::setDefaultAlphaBuffer(true);
 
+    // Grayscale coverage keeps text edges neutral on the translucent surfaces.
+    // Respect an explicit Qt antialiasing choice.
+    if (!qEnvironmentVariableIsSet("QSG_DISTANCEFIELD_ANTIALIASING"))
+        qputenv("QSG_DISTANCEFIELD_ANTIALIASING", QByteArrayLiteral("gray"));
+
     /* Start the QApplication here */
     QApplication app( argc, argv );
     app.setProperty("initialStyle", app.style()->name());
