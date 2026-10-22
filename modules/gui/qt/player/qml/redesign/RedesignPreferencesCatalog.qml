@@ -4,7 +4,7 @@ import QtQml
 QtObject {
     function interfaceSlider(options) {
         return Object.assign({editor: "slider", rowHeight: 57, alignSliderTop: true,
-            sliderTopMargin: 3, sliderPadding: 0, trackHeight: 16, hideHelp: true}, options)
+            sliderTopMargin: 3, sliderPadding: 0, trackHeight: 16, trackRadius: 6, trackInset: 2, hideHelp: true}, options)
     }
     function pictureSlider(options) {
         return Object.assign({editor: "slider", inlineSlider: true, sliderPadding: 0,
@@ -109,9 +109,9 @@ QtObject {
         video: [
             { title: qsTr("Output"), rows: [ ["video", qsTr("Enable video")], ["fullscreen", qsTr("Start videos in fullscreen")],
                 ["disable-screensaver", qsTr("Stop the screensaver during playback"), {editor: "toggle", toggleValues: {on: 1, off: 0}}], ["video-wallpaper", qsTr("Play video as desktop wallpaper")] ] },
-            { title: qsTr("Picture"), rows: [ ["hue", qsTr("Hue"), pictureSlider({from: -180, to: 180, step: 1})],
-                ["brightness", qsTr("Brightness"), pictureSlider({from: 0, to: 2, decimals: 2})],
-                ["contrast", qsTr("Contrast"), pictureSlider({from: 0, to: 2, decimals: 2})],
+            { title: qsTr("Picture"), rows: [ ["hue", qsTr("Hue"), pictureSlider({from: -180, to: 180, step: 1, trackTicks: [0]})],
+                ["brightness", qsTr("Brightness"), pictureSlider({from: 0, to: 2, decimals: 2, trackTicks: [1]})],
+                ["contrast", qsTr("Contrast"), pictureSlider({from: 0, to: 2, decimals: 2, trackTicks: [1]})],
                 ["saturation", qsTr("Saturation"), pictureSlider({from: 0, to: 3, decimals: 2, trackTicks: [1, 2]})],
                 ["gamma", qsTr("Gamma"), pictureSlider({from: 0.01, to: 10, decimals: 2, trackTicks: [1, 2, 3, 4, 5, 6, 7, 8, 9]})],
                 ["redesign-reset-picture", qsTr("Reset picture"), {hideHelp: true, rowHeight: 42}] ] },
@@ -200,7 +200,7 @@ QtObject {
             ["qt-bgcone", qsTr("Show cover art in the window when playing audio"), {hideHelp: true}], ["qt-embedded-open", qsTr("Show the file browser inside the open dialog"), {hideHelp: true}],
             ["qt-icon-change", qsTr("Allow the app icon to change"), {hideHelp: true}],
             ["qt-fs-opacity", qsTr("Fullscreen controls opacity"), interfaceSlider({rowHeight: 52, from: 10, to: 100, factor: 100, suffix: "%", ticks: [10, 100], trackTicks: [20, 30, 40, 50, 60, 70, 80, 90]})],
-            ["redesign-fullscreen-sensitivity", qsTr("Fullscreen controls sensitivity"), interfaceSlider({rowHeight: 52, from: 0, to: 6, step: 1, ticks: [0, 3, 6], tickLabels: [qsTr("Low"), qsTr("Medium"), qsTr("High")], trackTicks: [0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7, 3, 3.3, 3.6, 3.9, 4.2, 4.5, 4.8, 5.1, 5.4, 5.7]})] ] } ],
+            ["redesign-fullscreen-sensitivity", qsTr("Fullscreen controls sensitivity"), interfaceSlider({rowHeight: 52, from: 0, to: 6, step: 1, ticks: [0, 3, 6], tickLabels: [qsTr("Low"), qsTr("Medium"), qsTr("High")], trackTicks: [3]})] ] } ],
         playback: [ {title: "", rows: [ ["input-timeshift-path", qsTr("Time-shift buffer folder"), {rowHeight: 42, fieldOutset: 2, fieldRadius: 8, placeholder: qsTr("Default")}], ["input-timeshift-granularity", qsTr("Time-shift buffer size"), {dynamicChoices: true}] ] } ],
         audio: [ {title: "", rows: [ ["redesign-audio-passthrough", qsTr("Pass compressed audio to the receiver"), {dynamicChoices: true}], ["force-dolby-surround", qsTr("Detect Dolby Surround"), {choiceLabels: {0: qsTr("Automatic")}}], ["redesign-resampling-quality", qsTr("Resampling quality"), {dynamicChoices: true}], ["role", qsTr("Media role")],
             ["visualization-size", qsTr("Visualization size"), {dynamicChoices: true}],

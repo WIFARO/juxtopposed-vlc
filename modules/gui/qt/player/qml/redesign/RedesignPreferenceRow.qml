@@ -620,6 +620,7 @@ ColumnLayout {
                     x: slider.leftPadding; y: (slider.height - height) / 2
                     width: slider.availableWidth; height: theme.dp(root.presentation.trackHeight || 14); radius: theme.dp(root.presentation.trackRadius || 5); color: theme.field
                     Rectangle {
+                        id: sliderFill
                         readonly property real origin: {
                             const crossesZero = !root.presentation.fillFromMinimum
                                 && Math.min(slider.from, slider.to) < 0 && Math.max(slider.from, slider.to) > 0
@@ -635,11 +636,25 @@ ColumnLayout {
                     Repeater {
                         model: root.presentation.trackTicks || []
                         Rectangle {
+                            required property int index
                             required property real modelData
-                            width: theme.dp(1); height: theme.dp(7); anchors.verticalCenter: parent.verticalCenter
+                            objectName: "preferenceTickMark_" + index
+                            visible: modelData > Math.min(slider.from, slider.to) && modelData < Math.max(slider.from, slider.to)
+                            width: theme.dp(2); height: theme.dp(8); radius: theme.dp(1)
+                            anchors.verticalCenter: parent.verticalCenter
                             readonly property real position: (modelData - slider.from) / (slider.to - slider.from)
-                            x: slider.handle.width / 2 + (slider.mirrored ? 1 - position : position) * (parent.width - slider.handle.width)
-                            color: theme.background
+                            readonly property real inset: theme.dp(root.presentation.trackInset || 0)
+                            x: inset + (slider.mirrored ? 1 - position : position) * (parent.width - 2 * inset) - width / 2
+                            color: {
+                                if (root.lightTheme) return theme.sliderTick
+                                const center = x + width / 2
+                                const base = sliderFill.width > 0 && center >= sliderFill.x && center <= sliderFill.x + sliderFill.width
+                                    ? theme.progress : theme.field
+                                const ink = theme.sliderTick
+                                return Qt.rgba(1 - (1 - base.r) * (1 - ink.r),
+                                    1 - (1 - base.g) * (1 - ink.g),
+                                    1 - (1 - base.b) * (1 - ink.b), 1)
+                            }
                         }
                     }
                 }
