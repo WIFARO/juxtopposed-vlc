@@ -191,6 +191,7 @@ TestCase {
     function dragFromTo(source, targetX, targetY) {
         tryCompare(player, "layoutReady", true)
         tryVerify(() => source.visible && source.width > 0 && source.height > 0)
+        player.Window.window.update()
         verify(waitForRendering(source))
         const start = source.mapToItem(editor, source.width / 2, source.height / 2)
         mousePress(editor, start.x, start.y)
@@ -200,6 +201,22 @@ TestCase {
         wait(20)
         mouseRelease(editor, targetX, targetY)
         wait(20)
+    }
+    function test_pointerOutlinesStayGrayAndKeyboardFocusIsVisible() {
+        for (const id of ["menu", "spacer"]) {
+            editor.begin()
+            const controlName = (id === "menu" ? "customizeHandle_" : "customizePalette_") + id
+            tryVerify(() => item(controlName) !== null)
+            const control = item(controlName)
+            const outline = findChild(control, (id === "menu" ? "customizeOutline_" : "customizePaletteOutline_") + id)
+            control.forceActiveFocus(Qt.TabFocusReason)
+            tryCompare(outline, "stroke", player.theme.accent)
+            mousePress(control, control.width / 2, control.height / 2)
+            tryCompare(outline, "stroke", player.theme.playerLabel)
+            mouseRelease(control, control.width / 2, control.height / 2)
+            editor.cancel()
+            tryCompare(editor, "opened", false)
+        }
     }
     function test_realPointerAddRemoveAndMoveTimeline() {
         editor.begin(); tryVerify(() => item("customizePalette_favorite") !== null)
@@ -325,11 +342,12 @@ TestCase {
         editor.begin()
         const palette = item("customizationPalette")
         tryVerify(() => palette.itemAtIndex(0) !== null)
-        palette.itemAtIndex(0).forceActiveFocus()
+        palette.itemAtIndex(0).forceActiveFocus(Qt.TabFocusReason)
         for (let n = 0; n < 5; ++n) keyClick(Qt.Key_Down)
         compare(palette.currentIndex, 30)
         const last = palette.itemAtIndex(30)
         verify(last !== null && last.activeFocus)
+        tryCompare(last, "visualFocus", true)
         verify(last.mapToItem(palette, 0, last.height).y <= palette.height + 1)
         keyClick(Qt.Key_Return)
         tryCompare(item("customizationPlacement"), "currentIndex", 0)

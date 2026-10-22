@@ -12,7 +12,7 @@ QtObject {
         {id: "backward15", label: qsTr("Backward 15s"), icon: "backward-15-sec"},
         {id: "stop", label: qsTr("Stop"), icon: "stop"},
         {id: "repeat", label: qsTr("Repeat"), icon: "repeat"},
-        {id: "shuffle", label: qsTr("Shuffle"), icon: "shuffle"},
+        {id: "shuffle", label: qsTr("Shuffle"), icon: "shuffle", paletteIcon: "queue-shuffle"},
         {id: "record", label: qsTr("Record"), icon: "record"},
         {id: "snapshot", label: qsTr("Snapshot"), icon: "snapshot"},
         {id: "pip", label: qsTr("Picture in Picture"), icon: "pip"},

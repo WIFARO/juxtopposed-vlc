@@ -202,30 +202,16 @@ Item {
     }
     Keys.onEscapePressed: root.cancel()
 
-    component Outline: Item {
+    component Outline: RedesignSvg {
         id: outline
         property color stroke: root.theme.playerLabel
         readonly property real unit: root.theme.dp(1)
-        Repeater {
-            model: Math.max(0, Math.ceil(outline.width / (outline.unit * 8)))
-            delegate: Item {
-                required property int index
-                x: index * outline.unit * 8
-                width: Math.max(0, Math.min(outline.unit * 4, outline.width - x)); height: outline.height
-                Rectangle { width: parent.width; height: outline.unit; color: outline.stroke }
-                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: outline.unit; color: outline.stroke }
-            }
-        }
-        Repeater {
-            model: Math.max(0, Math.ceil(outline.height / (outline.unit * 8)))
-            delegate: Item {
-                required property int index
-                y: index * outline.unit * 8
-                width: outline.width; height: Math.max(0, Math.min(outline.unit * 4, outline.height - y))
-                Rectangle { width: outline.unit; height: parent.height; color: outline.stroke }
-                Rectangle { anchors.right: parent.right; width: outline.unit; height: parent.height; color: outline.stroke }
-            }
-        }
+        // Keep the dash phase continuous through the corners, as in the design.
+        svg: width > unit && height > unit ? '<svg xmlns="http://www.w3.org/2000/svg" width="'
+            + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">'
+            + '<rect x="' + unit / 2 + '" y="' + unit / 2 + '" width="' + (width - unit)
+            + '" height="' + (height - unit) + '" fill="none" stroke="' + stroke.toString()
+            + '" stroke-width="' + unit + '" stroke-dasharray="' + unit * 4 + ' ' + unit * 4 + '"/></svg>' : ""
     }
     component PointerArea: MouseArea {
         id: pointerArea
@@ -235,14 +221,18 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         enabled: !root.saving
         cursorShape: root.dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-        onPressed: mouse => { root.startPointer(controlId, pointerArea, mouse); anchorItem.forceActiveFocus() }
+        onPressed: mouse => {
+            root.startPointer(controlId, pointerArea, mouse)
+            anchorItem.focusReason = Qt.MouseFocusReason
+            anchorItem.forceActiveFocus(Qt.MouseFocusReason)
+        }
         onPositionChanged: mouse => { if (pressed && pressedButtons === Qt.LeftButton) root.movePointer(pointerArea, mouse) }
         onReleased: root.releasePointer(controlId, anchorItem)
         onCanceled: root.endDrag()
     }
     Repeater {
         model: root.opened ? Object.keys(root.player.chromeItems).filter(id => !!root.model.location(id)) : []
-        delegate: FocusScope {
+        delegate: C.Control {
             id: handle
             required property string modelData
             readonly property Item control: root.player.chromeItems[modelData]
@@ -269,7 +259,7 @@ Item {
                 objectName: "customizeOutline_" + handle.modelData
                 x: handle.outlineRect.x - handle.x; y: handle.outlineRect.y - handle.y
                 width: handle.outlineRect.width; height: handle.outlineRect.height
-                stroke: handle.activeFocus ? root.theme.accent : root.theme.playerLabel
+                stroke: handle.visualFocus ? root.theme.accent : root.theme.playerLabel
             }
             PointerArea { anchors.fill: parent; controlId: handle.modelData; anchorItem: handle }
         }
@@ -329,7 +319,10 @@ Item {
         Drag.hotSpot.x: width / 2; Drag.hotSpot.y: height / 2
         RedesignIcon {
             anchors.centerIn: parent; width: root.theme.dp(24); height: width
-            name: (catalog.definition(root.dragId) || {}).icon || ""
+            name: {
+                const definition = catalog.definition(root.dragId) || {}
+                return definition.paletteIcon || definition.icon || ""
+            }
             color: root.theme.foreground
         }
     }
@@ -385,6 +378,14 @@ Item {
                 cellWidth: Math.min(width, root.theme.dp(110))
                 cellHeight: root.theme.dp(120)
                 model: root.available
+                Keys.onPressed: event => {
+                    if ([Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_Home, Qt.Key_End].includes(event.key)) {
+                        Qt.callLater(() => {
+                            if (currentItem && currentItem.activeFocus) currentItem.focusReason = Qt.TabFocusReason
+                        })
+                    }
+                    event.accepted = false
+                }
                 function revealFocusedCell() { Qt.callLater(revealFocusedCellNow) }
                 function revealFocusedCellNow() {
                     if (!root.opened || !currentItem || !currentItem.activeFocus) return
@@ -396,7 +397,7 @@ Item {
                 onCellWidthChanged: revealFocusedCell()
                 onCellHeightChanged: revealFocusedCell()
                 C.ScrollBar.vertical: C.ScrollBar { }
-                delegate: FocusScope {
+                delegate: C.Control {
                     id: cell
                     required property var modelData
                     required property int index
@@ -422,8 +423,16 @@ Item {
                         objectName: "customizePaletteOutline_" + cell.modelData.id
                         anchors.horizontalCenter: parent.horizontalCenter; y: root.theme.dp(14 - Math.max(0, cell.referenceRow - 2) * 4)
                         width: root.theme.dp(cell.outlineSize.width); height: root.theme.dp(cell.outlineSize.height)
-                        stroke: cell.activeFocus ? root.theme.accent : root.theme.playerLabel
-                        RedesignIcon { anchors.centerIn: parent; width: root.theme.dp(24); height: width; name: cell.modelData.icon; color: cell.modelData.id === "thumbnail" ? root.theme.lightTheme ? "#a3a3a3" : "#303030" : root.theme.foreground }
+                        stroke: cell.visualFocus ? root.theme.accent : root.theme.playerLabel
+                        RedesignIcon {
+                            anchors.centerIn: parent; width: root.theme.dp(24); height: width
+                            name: cell.modelData.paletteIcon || cell.modelData.icon
+                            color: {
+                                if (cell.modelData.id === "thumbnail") return root.theme.lightTheme ? "#a3a3a3" : "#303030"
+                                if (cell.modelData.id === "divider") return root.theme.lightTheme ? root.theme.border : "#373737"
+                                return root.theme.foreground
+                            }
+                        }
                     }
                     Text {
                         x: root.theme.dp(5); y: cellOutline.y + cellOutline.height + root.theme.dp(16.5)
