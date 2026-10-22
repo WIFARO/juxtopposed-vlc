@@ -12,6 +12,10 @@
 #include <vlc/vlc.h>
 #include <vlc_common.h>
 #include <vlc_opengl.h>
+#undef MODULE_NAME
+#define MODULE_NAME test_gl_backdrop_window
+#undef VLC_DYNAMIC_PLUGIN
+#include <vlc_plugin.h>
 #include "../../../../lib/libvlc_internal.h"
 #include "../../../../modules/video_output/opengl/gl_api.h"
 #include "../../../../modules/video_output/opengl/backdrop.h"
@@ -35,6 +39,19 @@
 # define GL_RGBA32F 0x8814
 #endif
 const char vlc_module_name[] = "test_gl_backdrop";
+static const struct vlc_window_operations window_ops = {0};
+static int OpenWindow(vlc_window_t *window)
+{
+    window->type = VLC_WINDOW_TYPE_DUMMY;
+    window->ops = &window_ops;
+    return VLC_SUCCESS;
+}
+vlc_module_begin()
+    set_callback(OpenWindow)
+    set_capability("vout window", 1)
+vlc_module_end()
+VLC_EXPORT const vlc_plugin_cb vlc_static_modules[] = {VLC_SYMBOL(vlc_entry), NULL};
+
 static void *GetSymbol(vlc_gl_t *gl, const char *name)
 { (void)gl; return eglGetProcAddress(name); }
 static const struct vlc_gl_operations ops = {.get_proc_address = GetSymbol};
@@ -228,7 +245,7 @@ static void *MissingSymbol(vlc_gl_t *gl, const char *name)
 static void WindowBackdrops(vlc_gl_t *gl, struct vlc_gl_backdrop *reference)
 {
     const vlc_window_owner_t owner = {0};
-    vlc_window_t *window = vlc_window_New(VLC_OBJECT(gl), "dummy", &owner, NULL);
+    vlc_window_t *window = vlc_window_New(VLC_OBJECT(gl), MODULE_STRING, &owner, NULL);
     assert(window);
     /* The core snapshot API must also work for a Cocoa video window. No OS
      * drawable is needed for this EGL test of the shared final render pass. */
