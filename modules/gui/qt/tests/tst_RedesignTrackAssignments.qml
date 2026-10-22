@@ -238,6 +238,71 @@ TestCase {
         dialog.errorMessage="VLC cannot read " + trackName
         literal(findChild(dialog,"trackAssignmentError"),dialog.errorMessage)
     }
+    function openPicker() {
+        dialog.selectScope(1); load(rows())
+        const list=findChild(dialog,"trackAssignmentList")
+        tryVerify(() => !!list.itemAtIndex(0))
+        mouseClick(findChild(list.itemAtIndex(0),"trackAssignmentChoose_0"))
+        const picker=findChild(dialog,"trackAssignmentPicker")
+        tryCompare(picker,"opened",true)
+        return picker
+    }
+    function test_pickerKeyboardChangesRemainInDraft() {
+        const picker=openPicker(), choices=findChild(picker,"trackAssignmentPickerList")
+        tryVerify(() => !!choices.itemAtIndex(1))
+        compare(choices.currentIndex,0)
+        keyClick(Qt.Key_Return)
+        compare(dialog.tracks(first).join(","),english)
+        keyClick(Qt.Key_Down)
+        compare(choices.currentIndex,1)
+        keyClick(Qt.Key_Space)
+        compare(dialog.tracks(first).length,2)
+        choices.itemAtIndex(0).Accessible.toggleAction()
+        compare(dialog.tracks(first).length,1)
+        choices.itemAtIndex(0).Accessible.toggleAction()
+        compare(dialog.tracks(first).length,2)
+        keyClick(Qt.Key_Escape)
+        tryCompare(picker,"visible",false)
+        verify(dialog.visible); compare(saveSpy.count,0)
+        compare(dialog.tracks(first).length,2)
+        dialog.chooseRow(first); tryCompare(picker,"opened",true)
+        mouseClick(findChild(picker,"trackAssignmentPickerClear"))
+        compare(dialog.tracks(first).length,0)
+        keyClick(Qt.Key_Escape); tryCompare(picker,"visible",false)
+        verify(dialog.visible); compare(saveSpy.count,0)
+        dialog.reject(); tryCompare(dialog,"visible",false)
+        compare(Object.keys(dialog.drafts).length,0)
+    }
+    function test_pickerActionsFit_data() {
+        return [{tag:"dark",w:1280,h:900,scale:1},{tag:"light",w:1280,h:900,scale:1,light:true},
+            {tag:"scaled",w:1280,h:1000,scale:1.5},{tag:"narrow",w:360,h:640,scale:1}]
+    }
+    function test_pickerActionsFit(data) {
+        dialog.scaleFactor=data.scale; dialog.lightTheme=!!data.light
+        const picker=openPicker()
+        width=data.w; height=data.h
+        const files=findChild(picker,"trackAssignmentPickerFiles"), clear=findChild(picker,"trackAssignmentPickerClear"), done=findChild(picker,"trackAssignmentPickerDone")
+        const bounds=picker.background
+        for(const button of [files,clear,done]) {
+            tryVerify(() => {
+                const point=button.mapToItem(bounds,0,0)
+                return point.x>=0 && point.y>=0 && point.x+button.width<=bounds.width+.5 && point.y+button.height<=bounds.height+.5
+            },5000,button.objectName + " stays inside the popup")
+            verify(button.width>=button.contentItem.implicitWidth)
+        }
+        if(data.w===360) {
+            const a=files.mapToItem(bounds,0,files.height), b=clear.mapToItem(bounds,0,0), c=done.mapToItem(bounds,0,0)
+            verify(a.y<=b.y && b.y+clear.height<=c.y)
+        }
+        const choices=findChild(picker,"trackAssignmentPickerList")
+        tryVerify(()=>!!choices.itemAtIndex(0))
+        mouseClick(choices.itemAtIndex(0)); compare(dialog.tracks(first)[0],english)
+        mouseClick(done); tryCompare(picker,"visible",false)
+        verify(dialog.visible); compare(saveSpy.count,0)
+        compare(dialog.tracks(first)[0],english)
+        dialog.submit(); compare(saveSpy.count,1)
+        compare(saveSpy.signalArguments[0][0][0].tracks[0],english)
+    }
     function test_scopeSwitchPreservesAllDrafts() {
         dialog.toggle(first,english)
         dialog.selectScope(1); load(rows()); dialog.applyMatches({[second]:[spanish]})

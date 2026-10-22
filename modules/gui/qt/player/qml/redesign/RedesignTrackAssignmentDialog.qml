@@ -10,6 +10,7 @@ C.Dialog {
     property bool lightTheme: false
     property color accentColor: "#d37918"
     property Component videoBackdropContent
+    property Component pickerBackdropContent
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     property bool subtitles: true
     property var context: ({})
@@ -727,19 +728,50 @@ C.Dialog {
     C.Popup {
         id: picker
         property string targetUrl: ""
+        readonly property bool stackedActions: availableWidth < root.theme.dp(340)
         objectName: "trackAssignmentPicker"
-        anchors.centerIn: parent
-        width: Math.min(root.theme.dp(640), root.width - root.theme.dp(40))
-        height: Math.min(root.theme.dp(460), root.height - root.theme.dp(80))
-        padding: root.theme.dp(12); modal: true; focus: true
-        background: Rectangle { color: root.theme.panel; radius: root.theme.dp(8); border.color: root.theme.border }
+        popupType: C.Popup.Item
+        parent: root.parent
+        x: parent ? Math.round((parent.width - width) * root.pixelRatio / 2) / root.pixelRatio : 0
+        y: parent ? Math.round((parent.height - height) * root.pixelRatio / 2) / root.pixelRatio : 0
+        width: Math.max(0, Math.min(root.theme.dp(640), root.width - root.theme.dp(40)))
+        height: Math.max(0, Math.min(root.theme.dp(460), parent ? parent.height - root.theme.dp(32) : root.theme.dp(460)))
+        padding: root.theme.dp(20)
+        modal: true; dim: true; focus: true
+        closePolicy: C.Popup.CloseOnEscape | C.Popup.CloseOnPressOutside
+        C.Overlay.modal: Rectangle { color: "#80000000" }
+        background: RedesignDialogSurface {
+            theme: root.theme
+            videoBackdropContent: root.pickerBackdropContent
+        }
+        onOpened: { pickerList.currentIndex = pickerList.count ? 0 : -1; pickerList.forceActiveFocus() }
         contentItem: ColumnLayout {
-            spacing: root.theme.dp(10)
-            Text { objectName: "trackAssignmentPickerTitle"; Layout.fillWidth: true; text: root.fileName(picker.targetUrl); textFormat: Text.PlainText; elide: Text.ElideMiddle; color: root.theme.bright; font.pixelSize: root.theme.dp(14) }
+            Accessible.role: Accessible.Dialog
+            Accessible.name: root.fileName(picker.targetUrl)
+            spacing: root.theme.dp(16)
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: root.theme.dp(12)
+                Text {
+                    objectName: "trackAssignmentPickerTitle"
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    text: root.fileName(picker.targetUrl); textFormat: Text.PlainText; elide: Text.ElideMiddle
+                    color: root.theme.bright; font.pixelSize: root.theme.dp(20)
+                }
+                RedesignButton {
+                    objectName: "trackAssignmentPickerClose"
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    iconName: "close"; text: qsTr("Close")
+                    onClicked: picker.close()
+                }
+            }
             ListView {
+                id: pickerList
                 objectName: "trackAssignmentPickerList"
-                Layout.fillWidth: true; Layout.fillHeight: true; clip: true
+                Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
+                clip: true; spacing: root.theme.dp(4)
                 model: root.visibleSources
+                activeFocusOnTab: true
                 DropArea {
                     objectName: "trackAssignmentPickerDropArea"
                     anchors.fill: parent
@@ -752,23 +784,72 @@ C.Dialog {
                 }
                 C.ScrollBar.vertical: C.ScrollBar {}
                 delegate: C.ItemDelegate {
+                    id: pickerEntry
                     required property var modelData
+                    required property int index
+                    objectName: "trackAssignmentPickerRow_" + index
                     width: ListView.view.width; height: root.theme.dp(36)
+                    leftPadding: root.theme.dp(8); rightPadding: root.theme.dp(10)
                     text: modelData.name; highlighted: root.tracks(picker.targetUrl).includes(modelData.url)
+                    Accessible.role: Accessible.CheckBox
+                    Accessible.name: text
+                    Accessible.checkable: true
+                    Accessible.checked: highlighted
+                    Accessible.onToggleAction: root.toggle(picker.targetUrl, modelData.url)
                     onClicked: root.toggle(picker.targetUrl, modelData.url)
-                    background: Rectangle { radius: root.theme.dp(4); color: parent.highlighted ? root.theme.field : parent.hovered ? root.theme.hover : "transparent"; border.color: parent.visualFocus ? root.theme.accent : "transparent" }
+                    Keys.onReturnPressed: clicked()
+                    Keys.onEnterPressed: clicked()
+                    background: Rectangle {
+                        radius: root.theme.dp(6)
+                        color: pickerEntry.highlighted ? root.theme.field : pickerEntry.hovered ? root.theme.hover : "transparent"
+                        border.color: pickerEntry.visualFocus ? root.theme.accent : "transparent"
+                    }
                     contentItem: RowLayout {
-                        Text { objectName: "trackAssignmentPickerName"; Layout.fillWidth: true; text: parent.parent.text; textFormat: Text.PlainText; elide: Text.ElideMiddle; color: root.theme.foreground; font.pixelSize: root.theme.dp(14) }
-                        RedesignIcon { sourceSize: Qt.size(root.theme.dp(40), root.theme.dp(40)); Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20); name: "check"; color: root.theme.accent; visible: parent.parent.highlighted }
+                        spacing: root.theme.dp(14)
+                        RedesignIcon {
+                            Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24)
+                            name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel
+                        }
+                        Text {
+                            objectName: "trackAssignmentPickerName"
+                            Layout.fillWidth: true; Layout.minimumWidth: 0
+                            text: pickerEntry.text; textFormat: Text.PlainText; elide: Text.ElideMiddle
+                            color: root.theme.playerHeading; font.pixelSize: root.theme.dp(14)
+                        }
+                        RedesignIcon {
+                            Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20)
+                            name: "check"; color: root.theme.accent; visible: pickerEntry.highlighted
+                        }
                     }
                 }
             }
-            RowLayout {
+            RedesignSeparator { Layout.fillWidth: true; scaleFactor: root.scaleFactor; color: root.theme.border }
+            GridLayout {
                 Layout.fillWidth: true
-                RedesignButton { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor; caption: qsTr("Select files…"); text: caption; onClicked: root.filesRequested(picker.targetUrl) }
-                RedesignButton { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor; caption: qsTr("Clear"); text: caption; onClicked: root.setTracks(picker.targetUrl, []) }
-                Item { Layout.fillWidth: true }
-                RedesignButton { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor; caption: qsTr("Done"); text: caption; onClicked: picker.close() }
+                columns: picker.stackedActions ? 1 : 4
+                columnSpacing: root.theme.dp(8); rowSpacing: root.theme.dp(8)
+                RedesignButton {
+                    objectName: "trackAssignmentPickerFiles"
+                    Layout.fillWidth: picker.stackedActions; Layout.preferredHeight: root.theme.dp(32)
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    caption: qsTr("Select files…"); captionFontWeight: Font.DemiBold; text: caption
+                    filled: true; onClicked: root.filesRequested(picker.targetUrl)
+                }
+                RedesignButton {
+                    objectName: "trackAssignmentPickerClear"
+                    Layout.fillWidth: picker.stackedActions; Layout.preferredWidth: root.theme.dp(100); Layout.preferredHeight: root.theme.dp(32)
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    caption: qsTr("Clear"); captionFontWeight: Font.DemiBold; text: caption
+                    filled: true; onClicked: root.setTracks(picker.targetUrl, [])
+                }
+                Item { Layout.fillWidth: true; visible: !picker.stackedActions }
+                RedesignButton {
+                    objectName: "trackAssignmentPickerDone"
+                    Layout.fillWidth: picker.stackedActions; Layout.preferredWidth: root.theme.dp(100); Layout.preferredHeight: root.theme.dp(32)
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    caption: qsTr("Done"); captionFontWeight: Font.DemiBold; text: caption
+                    primaryAction: true; onClicked: picker.close()
+                }
             }
         }
     }

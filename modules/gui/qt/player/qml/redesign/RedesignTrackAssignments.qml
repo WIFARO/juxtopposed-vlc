@@ -8,6 +8,13 @@ import VLC.Style
 
 RedesignTrackAssignmentDialog {
     id: root
+    pickerBackdropContent: Component {
+        RedesignSurfaceBackdrop {
+            sourceItem: root.background ? root.background.parent : null
+            scaleFactor: root.scaleFactor
+            nativeVideo: false
+        }
+    }
     sourceFolderDisplay: MainCtx.displayMRL(sourceFolder)
     sourceFolderRoots: MediaLib.folderRoots
     property bool restartNeeded: false
