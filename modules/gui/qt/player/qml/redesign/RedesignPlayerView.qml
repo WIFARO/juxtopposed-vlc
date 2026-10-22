@@ -711,7 +711,7 @@ FocusScope {
                 anchors.verticalCenter: parent === windowControls ? parent.verticalCenter : undefined
                 objectName: "fullscreenButton"
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                iconName: "fullscreen"; text: root.fullscreen ? qsTr("Exit fullscreen") : qsTr("Fullscreen")
+                iconName: root.fullscreen ? "fullscreen-active" : "fullscreen"; text: root.fullscreen ? qsTr("Exit fullscreen") : qsTr("Fullscreen")
                 onClicked: root.fullscreenRequested()
             }
             ChromeButton {
