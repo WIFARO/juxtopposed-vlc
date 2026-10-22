@@ -71,22 +71,22 @@ C.Menu {
         property string hint: ""
         property int textElide: Text.ElideRight
         implicitHeight: root.theme.menuItemHeight
-        leftPadding: root.theme.dp(root.theme.compactMenus ? 8 : 16)
-        rightPadding: root.theme.dp(root.theme.compactMenus ? 8 : row.hint.length > 0 ? 14 : 16)
+        leftPadding: root.theme.dp(root.theme.compactMenus ? 8 : 14)
+        rightPadding: root.theme.dp(root.theme.compactMenus ? 8 : 14)
         topPadding: 0; bottomPadding: 0
         hoverEnabled: true
         indicator: null
         arrow: null
         background: Rectangle { color: row.highlighted ? root.theme.hover : "transparent"; radius: root.theme.dp(6) }
         contentItem: RowLayout {
-            spacing: root.theme.dp(root.theme.compactMenus ? 6 : 12)
+            spacing: root.theme.dp(root.theme.compactMenus ? 6 : 10)
             RedesignIcon {
-                Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20)
-                sourceSize: Qt.size(root.theme.dp(20) * Screen.devicePixelRatio, root.theme.dp(20) * Screen.devicePixelRatio)
+                Layout.preferredWidth: root.theme.dp(root.theme.compactMenus ? 20 : 24); Layout.preferredHeight: Layout.preferredWidth
+                sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
                 visible: !root.theme.compactMenus || row.checkable
-                name: row.checkable ? "check" : row.glyph
+                name: row.checkable ? "check-active" : row.glyph
                 color: row.checkable ? root.theme.accent : root.theme.foreground
-                detailColor: Qt.darker(root.theme.accent, 1.2)
+                detailColor: root.theme.menuAccent
                 opacity: row.checkable && !row.checked ? 0 : 1
             }
             Text {
@@ -98,8 +98,8 @@ C.Menu {
             Text { text: row.hint; color: root.theme.playerLabel; font.pixelSize: root.theme.dp(14); horizontalAlignment: Text.AlignRight }
             RedesignIcon {
                 visible: !!row.subMenu
-                Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20)
-                sourceSize: Qt.size(root.theme.dp(20) * Screen.devicePixelRatio, root.theme.dp(20) * Screen.devicePixelRatio)
+                Layout.preferredWidth: root.theme.dp(root.theme.compactMenus ? 20 : 24); Layout.preferredHeight: Layout.preferredWidth
+                sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
                 name: "chevron-right"; color: root.theme.foreground
             }
         }
