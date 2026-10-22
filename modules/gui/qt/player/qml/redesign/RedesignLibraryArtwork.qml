@@ -16,6 +16,8 @@ Item {
         && !(String(root.source).startsWith("image://mlcustomcover?")
             && artworkImage.sourceSize.width === 1 && artworkImage.sourceSize.height === 1)
     property real progress: 0
+    property real progressHeight: 4
+    property bool roundProgress: true
     property bool showPlaceholderBackground: true
     property color surroundColor: theme.panel
     property color placeholderColor: lightTheme ? theme.field : iconName === "folder" ? "#222222" : "#171717"
@@ -30,8 +32,9 @@ Item {
     Image { id: artworkImage; objectName: "libraryArtworkImage"; anchors.fill: parent; source: root.source; fillMode: Image.PreserveAspectCrop; asynchronous: true; visible: root.hasArtwork }
     Rectangle {
         anchors.left: parent.left; anchors.bottom: parent.bottom
+        z: root.roundProgress ? 0 : 1
         width: parent.width * Math.max(0, Math.min(1, root.progress))
-        height: root.theme.dp(4); color: root.theme.accent
+        height: root.theme.dp(root.progressHeight); color: root.theme.accent
         visible: root.progress > 0
     }
     // A border masks the image corners on both native and software renderers.

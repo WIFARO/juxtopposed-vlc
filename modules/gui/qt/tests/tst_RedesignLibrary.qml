@@ -45,6 +45,7 @@ TestCase {
     }
     ListModel { id: emptyHomeItems }
     ListModel { id: playlistItems }
+    ListModel { id: progressItems }
     QtObject {
         id: settings
         property string saved: "[]"
@@ -971,6 +972,39 @@ TestCase {
         artwork.source = Qt.resolvedUrl("missing-library-cover-test.png")
         tryCompare(image, "status", Image.Error)
         verifyArtworkPixel(artwork, 1, 1, "#236cb0")
+    }
+    function test_savedProgressStaysVisibleWhenTheLibraryLayoutChanges_data() {
+        return [{tag: "dark", light: false, accent: "#d37918"},
+                {tag: "light", light: true, accent: "#0cb37a"}]
+    }
+    function test_savedProgressStaysVisibleWhenTheLibraryLayoutChanges(data) {
+        const cover = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="#236cb0"/></svg>')
+        progressItems.clear()
+        progressItems.append({title: "Episode", thumbnail: cover, progress: 0.875})
+        library.mediaModel = progressItems
+        library.lightTheme = data.light
+        library.accentColor = data.accent
+        for (const expanded of [false, true]) {
+            if (expanded) expandLibrary()
+            for (const grid of [false, true]) {
+                library.grid = grid
+                wait(20)
+                const artwork = findChild(library, "libraryArtwork0")
+                verify(artwork)
+                tryCompare(findChild(artwork, "libraryArtworkImage"), "status", Image.Ready)
+                const x = Math.floor(artwork.width / 4)
+                verifyArtworkPixel(artwork, x, artwork.height - 2, data.accent)
+                verifyArtworkPixel(artwork, x, artwork.height - 4, grid ? data.accent : "#236cb0")
+                if (!grid) verifyArtworkPixel(artwork, 0, artwork.height - 1, data.accent)
+                verifyArtworkPixel(artwork, Math.floor(artwork.width * .95), artwork.height - 2, "#236cb0")
+                progressItems.setProperty(0, "progress", 0)
+                wait(20)
+                verifyArtworkPixel(artwork, x, artwork.height - 2, "#236cb0")
+                progressItems.setProperty(0, "progress", 0.875)
+                wait(20)
+                verifyArtworkPixel(artwork, x, artwork.height - 2, data.accent)
+            }
+        }
     }
     function test_navigationIconsFollowTheCategoryAndClearForPins(data) {
         library.lightTheme = data.light

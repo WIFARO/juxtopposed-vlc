@@ -578,7 +578,9 @@ Item {
                             iconSize: root.grid && root.expanded ? 48 : 24
                             showPlaceholderBackground: root.grid
                             source: delegate.itemArtwork
-                            progress: root.grid ? Number(model.progress || 0) : 0
+                            progress: Number(model.progress || 0)
+                            progressHeight: root.grid ? 4 : 3
+                            roundProgress: root.grid
                             surroundColor: mediaButton.down || mediaButton.selected ? theme.selected : mediaButton.hovered ? theme.hover : theme.panel
                         }
                         Text {
