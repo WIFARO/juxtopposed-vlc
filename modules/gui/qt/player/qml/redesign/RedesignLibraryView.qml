@@ -317,7 +317,7 @@ Item {
         videoBackdropContent: root.videoBackdropContent
         objectName: "libraryLocation"
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-        boldCurrent: root.expanded
+        boldCurrent: root.expanded && root.breadcrumbs.length > 1
         entries: root.breadcrumbs.length ? root.breadcrumbs : [{label: root.heading}]
         onActivated: index => root.breadcrumbActivated(index)
     }

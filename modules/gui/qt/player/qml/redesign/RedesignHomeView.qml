@@ -39,9 +39,21 @@ Flickable {
                     text: section.modelData.title
                     onClicked: root.sectionRequested(section.modelData.key)
                     contentItem: Item {
+                        // The expanded reference heading has a 15 px baseline.
+                        baselineOffset: root.theme.dp(15)
                         Text {
                             id: sectionTitle
-                            anchors.left: parent.left; anchors.right: arrow.left; anchors.verticalCenter: parent.verticalCenter
+                            objectName: "homeSectionTitle_" + section.modelData.key
+                            anchors.left: parent.left; anchors.right: arrow.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            states: State {
+                                name: "expanded"; when: root.expanded
+                                AnchorChanges {
+                                    target: sectionTitle
+                                    anchors.verticalCenter: undefined
+                                    anchors.baseline: sectionTitle.parent.baseline
+                                }
+                            }
                             text: section.modelData.title; elide: Text.ElideRight
                             color: root.expanded ? root.theme.foreground : root.theme.playerHeading; font.pixelSize: root.theme.dp(root.expanded ? 20 : 16)
                         }
@@ -72,7 +84,7 @@ Flickable {
                                 required property int index
                                 required property var model
                                 width: root.expanded ? root.theme.dp(section.modelData.key === "watching" ? 316 : 200) : section.width
-                                height: !visible ? 0 : !root.expanded ? root.theme.dp(42) : coverHeight + root.theme.dp(section.modelData.key === "listening" ? 70 : 40)
+                                height: !visible ? 0 : !root.expanded ? root.theme.dp(42) : coverHeight + root.theme.dp(section.modelData.key === "listening" ? 69 : 40)
                                 visible: index < (root.expanded ? 6 : 3)
                                 readonly property real coverHeight: width * (section.modelData.key === "watching" ? 9 / 16 : 1)
                                 readonly property string title: model.title || model.name || ""

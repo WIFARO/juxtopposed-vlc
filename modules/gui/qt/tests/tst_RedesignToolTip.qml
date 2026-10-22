@@ -82,6 +82,7 @@ TestCase {
         compare(button.tooltipEnabled, true)
     }
     function init() {
+        if (typeof failOnWarning === "function") failOnWarning(/Binding loop|non-NOTIFYable/)
         originalWindowWidth = testCase.Window.window.width
         originalWindowHeight = testCase.Window.window.height
         button.tooltipEnabled = true; hintPreference = true

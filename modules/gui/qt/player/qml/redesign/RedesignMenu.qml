@@ -18,12 +18,13 @@ C.Menu {
     property string selectedProfile: ""
     property Item triggerItem
     property bool pointerPressPending: false
+    readonly property Item tooltipTrigger: triggerItem && ("tooltipEnabled" in triggerItem) ? triggerItem : null
     // Cancel a pending hint while this button owns an open popup.
     Binding {
-        target: root.triggerItem && root.triggerItem.tooltipEnabled !== undefined ? root.triggerItem : null
+        target: root.tooltipTrigger
         property: "tooltipEnabled"
         value: false
-        when: root.visible && !!target
+        when: root.visible && !!root.tooltipTrigger
         restoreMode: Binding.RestoreBindingOrValue
     }
 

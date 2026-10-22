@@ -20,12 +20,13 @@ C.Popup {
     property bool lightTheme: false
     property string page: "subtitles"
     property Item placementArea: parent
+    readonly property Item tooltipTrigger: parent && ("tooltipEnabled" in parent) ? parent : null
     // Cancel a pending hint while this button owns an open popup.
     Binding {
-        target: root.parent && root.parent.tooltipEnabled !== undefined ? root.parent : null
+        target: root.tooltipTrigger
         property: "tooltipEnabled"
         value: false
-        when: root.visible && !!target
+        when: root.visible && !!root.tooltipTrigger
         restoreMode: Binding.RestoreBindingOrValue
     }
 

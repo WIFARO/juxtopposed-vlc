@@ -12,12 +12,13 @@ C.Menu {
     property var entries: []
     property string checkedAction: ""
     property Item buttonAnchor: null
+    readonly property Item tooltipTrigger: buttonAnchor && ("tooltipEnabled" in buttonAnchor) ? buttonAnchor : null
     // Cancel a pending hint while this button owns an open popup.
     Binding {
-        target: root.buttonAnchor && root.buttonAnchor.tooltipEnabled !== undefined ? root.buttonAnchor : null
+        target: root.tooltipTrigger
         property: "tooltipEnabled"
         value: false
-        when: root.visible && !!target
+        when: root.visible && !!root.tooltipTrigger
         restoreMode: Binding.RestoreBindingOrValue
     }
 

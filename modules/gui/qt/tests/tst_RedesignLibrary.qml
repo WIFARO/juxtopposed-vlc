@@ -126,6 +126,7 @@ TestCase {
         library.videoBackdropContent = null
     }
     function init() {
+        if (typeof failOnWarning === "function") failOnWarning(/Binding loop|non-NOTIFYable|Baseline anchor/)
         library.videoBackdropContent = null
         testCase.width = 427
         testCase.Window.window.width = 427
@@ -560,6 +561,14 @@ TestCase {
         library.scaleFactor = 1.25
         tryVerify(() => expanded.widths[0] > oldWidth * 1.2)
         for (let i = 0; i < 4; ++i) verify(!findChild(expanded, "libraryPath" + i).contentItem.truncated)
+    }
+    function test_categoryHeadingUsesRegularSourceWeight() {
+        library.breadcrumbs = [{label: "Home"}]
+        expandLibrary()
+        const location = findChild(library, "libraryLocation")
+        const heading = findChild(location, "libraryPath0")
+        compare(heading.font.weight, Font.Normal)
+        verify(!heading.contentItem.truncated)
     }
     function test_breadcrumbsElideLongCurrentFolder() {
         library.breadcrumbs = [{label: "Videos"}, {label: "A folder name that is much longer than the compact library toolbar"}]
@@ -1183,6 +1192,10 @@ TestCase {
         const next = findChild(home, "homeSection_listening")
         compare(first.mapToItem(library, 0, 0).y, 112)
         compare(next.mapToItem(home, 0, 0).y - first.mapToItem(home, 0, 0).y, 337.75)
+        const title = findChild(home, "homeSectionTitle_watching")
+        compare(title.mapToItem(first, 0, title.baselineOffset).y, 15)
+        const folders = findChild(home, "homeSection_folders")
+        compare(folders.mapToItem(home, 0, 0).y - next.mapToItem(home, 0, 0).y, 389)
         const fourth = findChild(home, "homeItem_watching_3")
         verify(fourth.visible)
         mouseClick(fourth)
