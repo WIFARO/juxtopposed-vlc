@@ -97,6 +97,23 @@ TestCase {
         mouseClick(refresh)
         compare(refreshed.count, 1)
     }
+    function test_longDescriptionsAreTruncatedToThreeLines_data() {
+        return [{tag: "normal", width: 400, scale: 1}, {tag: "narrow", width: 280, scale: 1},
+                {tag: "scaled", width: 300, scale: 1.25}]
+    }
+    function test_longDescriptionsAreTruncatedToThreeLines(data) {
+        view.width = data.width; view.scaleFactor = data.scale
+        const notes = "Episode notes and show links.\n" + "A long episode description with details and links. ".repeat(40)
+            + "https://example.invalid/" + "long-link".repeat(50)
+        rows.values = rows.values.map((row, index) => index === 0 ? Object.assign({}, row, {description: notes}) : row)
+        const description = item("episodeDescription_0")
+        tryCompare(description, "lineCount", 3)
+        tryCompare(description, "truncated", true)
+        compare(description.text, notes)
+        rows.values = rows.values.map((row, index) => index === 0 ? Object.assign({}, row, {description: "Short notes."}) : row)
+        tryCompare(item("episodeDescription_0"), "truncated", false)
+        tryCompare(item("episodeDescription_0"), "lineCount", 1)
+    }
     function test_narrowScaledLayoutAndPartialState() {
         view.width = 300; view.scaleFactor = 1.25; view.lightTheme = true
         view.limited = true

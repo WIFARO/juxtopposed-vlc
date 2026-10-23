@@ -211,8 +211,10 @@ FocusScope {
                         surroundColor: theme.floatingPanel; cornerRadius: 6
                     }
                     Text {
+                        objectName: "episodeDescription_" + row.index
                         Layout.fillWidth: true; visible: !!row.entry.description
-                        text: row.entry.description; textFormat: Text.PlainText; wrapMode: Text.WordWrap
+                        text: row.entry.description; textFormat: Text.PlainText; wrapMode: Text.Wrap
+                        maximumLineCount: 3; elide: Text.ElideRight
                         color: theme.foreground; font.pixelSize: theme.dp(13)
                     }
                     RedesignComboBox {
