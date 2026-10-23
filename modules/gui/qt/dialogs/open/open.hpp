@@ -73,6 +73,7 @@ public:
     void setActionFlag(ActionFlag action_flag);
 
 public slots:
+    void reject() override;
     void selectSlots();
     void play();
     void stream( bool b_transode_only = false );
@@ -97,6 +98,9 @@ private:
 
 private slots:
     void setMenuAction();
+    void updateEditorText();
+    void updateLayoutMetrics();
+    void updateValidation();
     void cancel();
     void close();
     void toggleAdvancedPanel();

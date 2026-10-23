@@ -90,11 +90,23 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QLabel[redesignValue=\"true\"] { color: %5; }"
             "QWidget#redesignMediaInfo QTabBar::tab { padding: %14px %15px; }"
             "QTreeWidget#codecInformationTree::item { padding: %16px; }"
-            "QWidget#codecInformation QLineEdit, QWidget#extraMetadata QLineEdit, QWidget#redesignPodcasts QLineEdit, QWidget#redesignConvert QLineEdit, QWidget#redesignStream QLineEdit, QWidget#redesignMessages QLineEdit, QWidget#redesignHelp QLineEdit, QWidget#redesignProfileEditor QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
+            "QWidget#codecInformation QLineEdit, QWidget#extraMetadata QLineEdit, QWidget#redesignPodcasts QLineEdit, QWidget#redesignConvert QLineEdit, QWidget#redesignStream QLineEdit, QWidget#redesignMessages QLineEdit, QWidget#redesignHelp QLineEdit, QWidget#redesignProfileEditor QLineEdit, QWidget#redesignOpenMedia QLineEdit, QWidget#redesignCaptureOptions QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
             "QWidget#redesignMediaInfo QLineEdit, QWidget#redesignMediaInfo QTextEdit, QWidget#redesignMediaInfo QPushButton { border-radius: %16px; }"
             "QWidget#redesignMediaInfo QLineEdit:read-only { background: %3; color: %2; }"
-            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton, QWidget#redesignProgramGuide QPushButton, QWidget#redesignPodcasts QPushButton, QWidget#redesignConvert QPushButton, QWidget#redesignStream QPushButton, QWidget#redesignBookmarks QPushButton, QWidget#redesignMessages QPushButton, QWidget#redesignHelp QPushButton, QWidget#aboutWidget QPushButton, QWidget#redesignProfileEditor QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
+            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton, QWidget#redesignProgramGuide QPushButton, QWidget#redesignPodcasts QPushButton, QWidget#redesignConvert QPushButton, QWidget#redesignStream QPushButton, QWidget#redesignBookmarks QPushButton, QWidget#redesignMessages QPushButton, QWidget#redesignHelp QPushButton, QWidget#aboutWidget QPushButton, QWidget#redesignProfileEditor QPushButton, QWidget#redesignOpenMedia QPushButton, QWidget#redesignCaptureOptions QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
             "QWidget#redesignProfileEditor QCheckBox::indicator, QWidget#redesignProfileEditor QGroupBox::indicator, QWidget#redesignProfileEditor QRadioButton::indicator { width: %1px; height: %1px; }"
+            "QWidget#redesignOpenMedia QCheckBox::indicator, QWidget#redesignOpenMedia QRadioButton::indicator, QWidget#redesignCaptureOptions QCheckBox::indicator { width: %1px; height: %1px; }"
+            "QWidget#redesignOpenMedia QRadioButton::indicator { border-radius: %20px; }"
+            "QWidget#redesignOpenMedia QGroupBox { border: 1px solid %6; border-radius: %16px; margin-top: %15px; padding: %14px; }"
+            "QWidget#redesignOpenMedia QGroupBox::title { subcontrol-origin: margin; left: %14px; padding: 0 %16px; }"
+            "QWidget#redesignOpenMedia QFrame[frameShape=\"HLine\"] { border: none; background: %6; min-height: 1px; max-height: 1px; }"
+            "QWidget#redesignOpenMedia QToolButton#playButton { background: %7; color: #161616; min-height: %17px; padding: %16px %11px %16px %15px; border-radius: %16px; }"
+            "QWidget#redesignOpenMedia QToolButton#playButton:disabled { background: %8; color: %2; }"
+            "QWidget#redesignOpenMedia QToolButton#playButton::menu-button { subcontrol-origin: border; subcontrol-position: top right; width: %11px; border-left: 1px solid %6; background: %7; }"
+            "QWidget#redesignOpenMedia QToolButton#playButton::menu-arrow { image: url(:/icons/chevron-down-light.svg); width: %1px; height: %1px; }"
+            "QWidget#redesignOpenMedia QToolButton#playButton::menu-button:disabled { background: %8; }"
+            "QWidget#redesignOpenMedia QToolButton#playButton::menu-arrow:disabled { image: url(:/icons/chevron-down-light-disabled.svg); }"
+            "QWidget#redesignOpenMedia QToolButton#playButton:focus, QWidget#redesignOpenMedia QPushButton[redesignPrimary=\"true\"]:focus, QWidget#redesignCaptureOptions QPushButton[redesignPrimary=\"true\"]:focus { border-color: %5; }"
             "QWidget#redesignProfileEditor QListWidget::item { padding: %16px; }"
             "QWidget#redesignProfileEditor QGroupBox { border: 1px solid %6; border-radius: %16px; margin-top: %15px; padding: %14px; }"
             "QWidget#redesignProfileEditor QGroupBox::title { subcontrol-origin: margin; left: %14px; padding: 0 %16px; }"
@@ -150,7 +162,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }"
             "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }")
             .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover)
-            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)).arg(dp(16)));
+            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)).arg(dp(16)).arg((dp(14) + 1) / 2));
         // Wizard headers and rulers paint with their palette rather than QSS.
         if (widget->objectName() == QStringLiteral("redesignStream"))
             for (auto *child : widget->findChildren<QWidget *>())

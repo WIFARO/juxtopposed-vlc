@@ -11,12 +11,6 @@
     <height>347</height>
    </rect>
   </property>
-  <property name="minimumSize">
-   <size>
-    <width>500</width>
-    <height>0</height>
-   </size>
-  </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
@@ -30,52 +24,81 @@
       </sizepolicy>
      </property>
      <property name="title">
-      <string>Disc Selection</string>
+      <string>Disc source</string>
      </property>
-     <layout class="QGridLayout" name="gridLayout">
-      <item row="0" column="1">
-       <widget class="QRadioButton" name="dvdRadioButton">
-        <property name="layoutDirection">
-         <enum>Qt::LayoutDirection::LeftToRight</enum>
+     <layout class="QVBoxLayout" name="discSourceLayout">
+      <item>
+       <widget class="QWidget" name="discTypeChoices">
+        <layout class="QGridLayout" name="discTypeLayout">
+         <property name="leftMargin">
+          <number>0</number>
+         </property>
+         <property name="rightMargin">
+          <number>0</number>
+         </property>
+         <property name="topMargin">
+          <number>0</number>
+         </property>
+         <property name="bottomMargin">
+          <number>0</number>
+         </property>
+         <item row="0" column="0">
+          <widget class="QRadioButton" name="dvdRadioButton">
+           <property name="layoutDirection">
+            <enum>Qt::LayoutDirection::LeftToRight</enum>
+           </property>
+           <property name="text">
+            <string>DVD</string>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QRadioButton" name="dvdaRadioButton">
+           <property name="text">
+            <string>DVD-Audio</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QRadioButton" name="bdRadioButton">
+           <property name="text">
+            <string>Blu-ray</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QRadioButton" name="audioCDRadioButton">
+           <property name="text">
+            <string>Audio CD</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QRadioButton" name="vcdRadioButton">
+           <property name="text">
+            <string>SVCD/VCD</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="dvdsimple">
+        <property name="toolTip">
+         <string>Disable Disc Menus</string>
         </property>
         <property name="text">
-         <string>DVD</string>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
+         <string>Skip disc menus</string>
         </property>
        </widget>
       </item>
-      <item row="0" column="6">
-       <spacer>
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>16</width>
-          <height>25</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item row="0" column="3">
-       <widget class="QRadioButton" name="dvdaRadioButton">
-        <property name="text">
-         <string>DVD-Audio</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="7">
-       <widget class="QRadioButton" name="audioCDRadioButton">
-        <property name="text">
-         <string>Audio CD</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0" colspan="10">
-       <layout class="QHBoxLayout" name="horizontalLayout_5">
-        <item>
+      <item>
+       <layout class="QGridLayout" name="discDeviceLayout">
+        <item row="0" column="0">
          <widget class="QLabel" name="deviceLabel">
           <property name="text">
            <string>Disc device</string>
@@ -85,7 +108,7 @@
           </property>
          </widget>
         </item>
-        <item>
+        <item row="0" column="1">
          <widget class="QComboBox" name="deviceCombo">
           <property name="sizePolicy">
            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
@@ -98,7 +121,7 @@
           </property>
          </widget>
         </item>
-        <item>
+        <item row="0" column="2">
          <widget class="QToolButton" name="ejectButton">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Fixed" vsizetype="Minimum">
@@ -111,7 +134,7 @@
           </property>
          </widget>
         </item>
-        <item>
+        <item row="0" column="3">
          <widget class="QPushButton" name="browseDiscButton">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -126,99 +149,16 @@
         </item>
        </layout>
       </item>
-      <item row="0" column="8">
-       <spacer>
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>20</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item row="0" column="9">
-       <widget class="QRadioButton" name="vcdRadioButton">
-        <property name="text">
-         <string>SVCD/VCD</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="10">
-       <spacer>
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>31</width>
-          <height>25</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item row="3" column="4" colspan="6">
-       <widget class="Line" name="line">
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="5">
-       <widget class="QRadioButton" name="bdRadioButton">
-        <property name="text">
-         <string>Blu-ray</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1" colspan="5">
-       <widget class="QCheckBox" name="dvdsimple">
-        <property name="toolTip">
-         <string>Disable Disc Menus</string>
-        </property>
-        <property name="text">
-         <string>No disc menus</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="2">
-       <spacer>
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>20</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item row="0" column="4">
-       <spacer name="horizontalSpacer_3">
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
      </layout>
     </widget>
    </item>
    <item>
     <widget class="QGroupBox" name="diskOptionBox">
      <property name="title">
-      <string>Starting Position</string>
+      <string>Start position</string>
      </property>
-     <layout class="QHBoxLayout" name="horizontalLayout">
-      <item>
+     <layout class="QGridLayout" name="discPositionLayout">
+      <item row="0" column="0">
        <widget class="QLabel" name="titleLabel">
         <property name="text">
          <string>Title</string>
@@ -228,7 +168,7 @@
         </property>
        </widget>
       </item>
-      <item>
+      <item row="0" column="1">
        <widget class="QSpinBox" name="titleSpin">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -247,23 +187,7 @@
         </property>
        </widget>
       </item>
-      <item>
-       <spacer name="horizontalSpacer">
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeType">
-         <enum>QSizePolicy::Policy::Fixed</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>20</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item>
+      <item row="1" column="0">
        <widget class="QLabel" name="chapterLabel">
         <property name="text">
          <string>Chapter</string>
@@ -273,7 +197,7 @@
         </property>
        </widget>
       </item>
-      <item>
+      <item row="1" column="1">
        <widget class="QSpinBox" name="chapterSpin">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -292,9 +216,9 @@
    <item>
     <widget class="QGroupBox" name="diskOptionBox_2">
      <property name="title">
-      <string>Audio and Subtitles</string>
+      <string>Tracks</string>
      </property>
-     <layout class="QGridLayout" name="gridLayout_2">
+     <layout class="QGridLayout" name="discTrackLayout">
       <item row="0" column="0">
        <widget class="QLabel" name="audioLabel">
         <property name="text">
@@ -317,33 +241,20 @@
          <set>Qt::AlignmentFlag::AlignRight</set>
         </property>
         <property name="minimum">
-         <number>-1</number>
+         <number>0</number>
         </property>
         <property name="maximum">
-         <number>10</number>
+         <number>11</number>
         </property>
         <property name="value">
-         <number>-1</number>
+         <number>0</number>
+        </property>
+        <property name="specialValueText">
+         <string>Auto</string>
         </property>
        </widget>
       </item>
-      <item row="0" column="2">
-       <spacer name="horizontalSpacer_2">
-        <property name="orientation">
-         <enum>Qt::Orientation::Horizontal</enum>
-        </property>
-        <property name="sizeType">
-         <enum>QSizePolicy::Policy::Fixed</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>20</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-      <item row="0" column="3">
+      <item row="1" column="0">
        <widget class="QLabel" name="subtitlesLabel">
         <property name="text">
          <string>Subtitle track</string>
@@ -353,7 +264,7 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="4">
+      <item row="1" column="1">
        <widget class="QSpinBox" name="subtitlesSpin">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
@@ -368,16 +279,19 @@
          <set>Qt::AlignmentFlag::AlignRight</set>
         </property>
         <property name="suffix">
-         <string/>
+         <string />
         </property>
         <property name="minimum">
-         <number>-1</number>
+         <number>0</number>
         </property>
         <property name="maximum">
-         <number>31</number>
+         <number>11</number>
         </property>
         <property name="value">
-         <number>-1</number>
+         <number>0</number>
+        </property>
+        <property name="specialValueText">
+         <string>Auto</string>
         </property>
        </widget>
       </item>
@@ -418,7 +332,7 @@
   <tabstop>subtitlesSpin</tabstop>
  </tabstops>
  <resources>
-  <include location="../../vlc.qrc"/>
+  <include location="../../vlc.qrc" />
  </resources>
- <connections/>
+ <connections />
 </ui>

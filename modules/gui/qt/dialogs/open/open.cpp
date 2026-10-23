@@ -27,6 +27,8 @@
 #include "dialogs/open/open.hpp"
 #include "dialogs/dialogs_provider.hpp"
 #include "util/qt_dirs.hpp"
+#include "maininterface/mainctx.hpp"
+#include "util/redesign_widget_theme.hpp"
 #include "util/interface_translator.hpp"
 #include "playlist/playlist_controller.hpp"
 
@@ -34,6 +36,8 @@
 #include <QMenu>
 #include <QTabBar>
 #include <QSignalBlocker>
+#include <QScreen>
+#include <QScrollArea>
 
 #include <vlc_url.h>
 
@@ -60,6 +64,7 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent, OpenTab sourceKind)
 {
     /* Basic Creation of the Window */
     ui.setupUi( this );
+    setObjectName(QStringLiteral("redesignOpenMedia"));
     setWindowTitle( qtr( "Open Media" ) );
     setWindowRole( "vlc-open-media" );
     setWindowModality( Qt::WindowModal );
@@ -92,13 +97,16 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent, OpenTab sourceKind)
     /* Buttons Creation */
     /* Play Button */
     playButton = ui.playButton;
+    playButton->setProperty("redesignPrimary", true);
 
     /* Cancel Button */
     cancelButton = new QPushButton( qtr( "&Cancel" ) );
+    cancelButton->setObjectName(QStringLiteral("openCancel"));
 
     /* Select Button */
     selectButton = new QPushButton( qtr( "&Select" ) );
     selectButton->setProperty("redesignPrimary", true);
+    selectButton->setObjectName(QStringLiteral("openSelect"));
     actionButton = new QPushButton;
     actionButton->setObjectName("openActionButton");
     actionButton->setProperty("redesignPrimary", true);
@@ -130,9 +138,12 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent, OpenTab sourceKind)
     for (OpenPanel *panel : sourcePanels)
         if (panel)
         {
-            connect(panel, &OpenPanel::mrlUpdated, this,
-                    QOverload<const QStringList&, const QString&>::of(&OpenDialog::updateMRL));
-            connect(panel, &OpenPanel::methodChanged, this, &OpenDialog::newCachingMethod);
+            connect(panel, &OpenPanel::mrlUpdated, this, [this, panel](const QStringList& items, const QString& options) {
+                if (ui.Tab->currentWidget() == panel) updateMRL(items, options);
+            });
+            connect(panel, &OpenPanel::methodChanged, this, [this, panel](const QString& method) {
+                if (ui.Tab->currentWidget() == panel) newCachingMethod(method);
+            });
             connect(panel, &OpenPanel::acceptRequested, this, &OpenDialog::close);
             connect(panel, &OpenPanel::cancelRequested, this, &OpenDialog::cancel);
         }
@@ -148,7 +159,7 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent, OpenTab sourceKind)
              this, QOverload<>::of(&OpenDialog::updateMRL) );
     connect( ui.stopTimeTimeEdit, &QTimeEdit::timeChanged,
              this, QOverload<>::of(&OpenDialog::updateMRL) );
-    BUTTONACT( ui.advancedCheckBox, &OpenDialog::toggleAdvancedPanel );
+    connect(ui.advancedCheckBox, &QCheckBox::toggled, this, &OpenDialog::toggleAdvancedPanel);
     BUTTONACT( ui.slaveBrowseButton, &OpenDialog::browseInputSlave );
 
     /* Buttons action */
@@ -174,9 +185,14 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent, OpenTab sourceKind)
     ui.startTimeTimeEdit->setCurrentSection( QDateTimeEdit::SecondSection );
     ui.stopTimeTimeEdit->setCurrentSection( QDateTimeEdit::SecondSection );
 
-    setMinimumSize( sizeHint() );
-    setMaximumWidth( 900 );
-    resize(getSettings()->value(settingsGroup + "/size", QSize(500, 400)).toSize());
+    applyRedesignWidgetTheme(this, p_intf->p_mi);
+    updateEditorText();
+    updateLayoutMetrics();
+    const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+    QSize preferred = getSettings()->value(settingsGroup + "/size", QSize(dp(760), dp(600))).toSize();
+    if (screen()) preferred = preferred.boundedTo(screen()->availableGeometry().size());
+    resize(preferred);
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &OpenDialog::updateLayoutMetrics);
     if (auto* translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
             ui.retranslateUi(this);
@@ -190,6 +206,8 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent, OpenTab sourceKind)
             for (int i = 0; i < menu.size() && i < int(ARRAY_SIZE(actions)); ++i)
                 menu[i]->setText(qtr(actions[i]));
             setMenuAction();
+            updateEditorText();
+            updateValidation();
         });
 }
 
@@ -232,6 +250,7 @@ void OpenDialog::setMenuAction()
         default: setWindowTitle(qtr("Open Media")); break;
         }
     }
+    updateEditorText();
     if( i_action_flag == SELECT )
     {
         playButton->hide();
@@ -267,9 +286,7 @@ void OpenDialog::setMenuAction()
 
 OpenDialog::~OpenDialog()
 {
-    getSettings()->setValue(settingsGroup + "/size", size() -
-                 ( ui.advancedFrame->isEnabled() ?
-                   QSize(0, ui.advancedFrame->height()) : QSize(0, 0) ) );
+    getSettings()->setValue(settingsGroup + "/size", size());
     getSettings()->setValue(settingsGroup + "/advanced", ui.advancedFrame->isEnabled());
 }
 
@@ -312,22 +329,69 @@ void OpenDialog::showTab( OpenDialog::OpenTab i_tab, OpenDialog::ActionFlag i_ac
 
 void OpenDialog::toggleAdvancedPanel()
 {
-    if( ui.advancedFrame->isVisible() )
-    {
-        ui.advancedFrame->hide();
-        ui.advancedFrame->setEnabled( false );
-        if( size().isValid() )
-            resize( size().width(), size().height()
-                    - ui.advancedFrame->height() );
-    }
-    else
-    {
-        ui.advancedFrame->show();
-        ui.advancedFrame->setEnabled( true );
-        if( size().isValid() )
-            resize( size().width(), size().height()
-                    + ui.advancedFrame->height() );
-    }
+    ui.advancedFrame->setVisible(ui.advancedCheckBox->isChecked());
+    ui.advancedFrame->setEnabled(ui.advancedCheckBox->isChecked());
+    if (ui.advancedCheckBox->isChecked())
+        QMetaObject::invokeMethod(this, [this] {
+            if (ui.advancedCheckBox->isChecked()) ui.openSourceScroll->ensureWidgetVisible(ui.cacheSpinBox);
+        }, Qt::QueuedConnection);
+}
+
+void OpenDialog::updateEditorText()
+{
+    ui.openHeading->setText(windowTitle());
+    QString help;
+    const bool capture = qobject_cast<CaptureOpenPanel*>(ui.Tab->currentWidget());
+    if (source == OPEN_DISC_TAB) help = qtr("Select a disc type and a device or folder.");
+    else if (capture) help = qtr("Select a capture mode. Then set its source and options.");
+    else help = qtr("Select a source. Use more options to set a time range or add an extra media file.");
+    ui.openHelp->setText(help);
+    ui.startTimeTimeEdit->setSpecialValueText(qtr("Start of media"));
+    ui.label_3->setVisible(!capture);
+    ui.startTimeTimeEdit->setVisible(!capture);
+    ui.label_4->setText(capture ? qtr("Stop after") : qtr("Stop at"));
+    ui.stopTimeTimeEdit->setSpecialValueText(capture ? qtr("No time limit") : qtr("End of media"));
+    ui.startTimeTimeEdit->setToolTip(qtr("Set the time where playback starts."));
+    ui.stopTimeTimeEdit->setToolTip(capture
+        ? qtr("Set the capture duration. Zero keeps capture running until you stop it.")
+        : qtr("Set the time where playback stops. Zero plays to the end."));
+    ui.slaveText->setPlaceholderText(qtr("Select an extra media file"));
+    ui.slaveCheckbox->setToolTip(qtr("Play this file with the main source. Use it for a separate audio track."));
+    ui.advancedLineInput->setToolTip(qtr("These input options apply when you open this source."));
+    ui.cacheSpinBox->setToolTip(qtr("Set the input buffer in milliseconds. A larger value can reduce pauses on slow sources."));
+    ui.mrlLine->setAccessibleName(qtr("Selected source"));
+}
+
+void OpenDialog::updateLayoutMetrics()
+{
+    const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+    layout()->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
+    layout()->setSpacing(dp(12));
+    playButton->setMinimumWidth(dp(112));
+    QSize minimum(dp(360), dp(320));
+    if (screen()) minimum = minimum.boundedTo(screen()->availableGeometry().size());
+    setMinimumSize(minimum);
+}
+
+void OpenDialog::updateValidation()
+{
+    QString error;
+    if (auto *panel = qobject_cast<OpenPanel*>(ui.Tab->currentWidget())) error = panel->validationError();
+    if (error.isEmpty() && itemsMRL.isEmpty()) error = qtr("Select a source to continue.");
+    if (error.isEmpty() && ui.slaveCheckbox->isChecked() && ui.slaveText->text().trimmed().isEmpty())
+        error = qtr("Select an extra media file, or turn off this option.");
+    if (error.isEmpty() && !qobject_cast<CaptureOpenPanel*>(ui.Tab->currentWidget())
+        && ui.stopTimeTimeEdit->time() != ui.stopTimeTimeEdit->minimumTime()
+        && ui.stopTimeTimeEdit->time() <= ui.startTimeTimeEdit->time())
+        error = qtr("Set the stop time after the start time, or set it to zero.");
+    const bool valid = error.isEmpty();
+    ui.openFeedback->setText(valid ? qtr("Ready to continue.") : error);
+    ui.openFeedback->setAccessibleName(ui.openFeedback->text());
+    playButton->setEnabled(valid);
+    actionButton->setEnabled(valid);
+    selectButton->setEnabled(valid);
+    for (auto *action : playButton->menu()->actions())
+        action->setEnabled(valid && source == OPEN_TAB_MAX && i_action_flag == OPEN_AND_PLAY);
 }
 
 void OpenDialog::browseInputSlave()
@@ -343,6 +407,10 @@ void OpenDialog::browseInputSlave()
 /* Function called on signal currentChanged triggered */
 void OpenDialog::signalCurrent( int )
 {
+    updateEditorText();
+    itemsMRL.clear();
+    optionsMRL.clear();
+    updateMRL();
     if (auto *capture = qobject_cast<CaptureOpenPanel*>(ui.Tab->currentWidget()))
         capture->initialize();
     if( ui.Tab->currentWidget() != NULL )
@@ -356,12 +424,17 @@ void OpenDialog::signalCurrent( int )
                               OpenPanel::CONTEXT_BATCH );
     }
     // Capture controls are built lazily. Their styled minimum sizes are ready after polish.
-    QMetaObject::invokeMethod(this, [this] { setMinimumSize(minimumSizeHint()); }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, &OpenDialog::updateLayoutMetrics, Qt::QueuedConnection);
 }
 
 /***********
  * Actions *
  ***********/
+void OpenDialog::reject()
+{
+    cancel();
+}
+
 /* If Cancel is pressed or escaped */
 void OpenDialog::cancel()
 {
@@ -374,7 +447,7 @@ void OpenDialog::cancel()
     optionsMRL.clear();
 
     /* If in Select Mode, reject instead of hiding */
-    if( i_action_flag == SELECT ) reject();
+    if( i_action_flag == SELECT ) QDialog::reject();
     else hide();
 }
 
@@ -382,6 +455,8 @@ void OpenDialog::cancel()
 void OpenDialog::close()
 {
     /* If in Select Mode, accept instead of selecting a Slot */
+    updateValidation();
+    if (!selectButton->isEnabled()) return;
     if( i_action_flag == SELECT )
         accept();
     else
@@ -391,6 +466,8 @@ void OpenDialog::close()
 /* Play button */
 void OpenDialog::selectSlots()
 {
+    updateValidation();
+    if (!actionButton->isEnabled()) return;
     switch ( i_action_flag )
     {
     case OPEN_AND_STREAM:
@@ -417,7 +494,9 @@ void OpenDialog::play()
 /* Enqueue Action, called from selectSlots or enqueue Menu */
 void OpenDialog::enqueue( bool b_enqueue )
 {
-    toggleVisible();
+    updateValidation();
+    if (!actionButton->isEnabled()) return;
+    hide();
 
     if( i_action_flag == SELECT )
     {
@@ -425,8 +504,7 @@ void OpenDialog::enqueue( bool b_enqueue )
         return;
     }
 
-    for (OpenPanel *panel : sourcePanels)
-        if (panel) panel->onAccept();
+    if (auto *panel = qobject_cast<OpenPanel*>(ui.Tab->currentWidget())) panel->onAccept();
 
     /* Sort alphabetically */
     itemsMRL.sort();
@@ -448,11 +526,12 @@ void OpenDialog::transcode()
 
 void OpenDialog::stream( bool b_transcode_only )
 {
+    updateValidation();
+    if (!actionButton->isEnabled()) return;
 //    QString soutMRL = getMRL( false );
 //    if( soutMRL.isEmpty() ) return;
 
-    for (OpenPanel *panel : sourcePanels)
-        if (panel) panel->onAccept();
+    if (auto *panel = qobject_cast<OpenPanel*>(ui.Tab->currentWidget())) panel->onAccept();
 
     QStringList soutMRLS = getMRLs();
     if(soutMRLS.empty())
@@ -490,23 +569,22 @@ QString TimeToMilliseconds( const QTimeEdit *t ) {
 /* Update the complete MRL */
 void OpenDialog::updateMRL() {
     QString mrl = optionsMRL;
+    const bool capture = qobject_cast<CaptureOpenPanel*>(ui.Tab->currentWidget());
     if( ui.slaveCheckbox->isChecked() ) {
         mrl += " :input-slave=" + ui.slaveText->text();
     }
     mrl += QString( " :%1=%2" ).arg( storedMethod ).
                                 arg( ui.cacheSpinBox->value() );
-    if( ui.startTimeTimeEdit->time() != ui.startTimeTimeEdit->minimumTime() ) {
+    if(!capture && ui.startTimeTimeEdit->time() != ui.startTimeTimeEdit->minimumTime()) {
         mrl += " :start-time=" + TimeToMilliseconds( ui.startTimeTimeEdit );
     }
-    if( ui.stopTimeTimeEdit->time() > ui.startTimeTimeEdit->time() ) {
+    if ((capture && ui.stopTimeTimeEdit->time() != ui.stopTimeTimeEdit->minimumTime())
+        || (!capture && ui.stopTimeTimeEdit->time() > ui.startTimeTimeEdit->time())) {
         mrl += " :stop-time=" + TimeToMilliseconds( ui.stopTimeTimeEdit );
     }
     ui.advancedLineInput->setText( mrl );
     ui.mrlLine->setText( itemsMRL.join( " " ) );
-    /* Only allow action without valid items */
-    playButton->setEnabled( !itemsMRL.isEmpty() );
-    actionButton->setEnabled( !itemsMRL.isEmpty() );
-    selectButton->setEnabled( !itemsMRL.isEmpty() );
+    updateValidation();
 }
 
 /* Change the caching combobox */

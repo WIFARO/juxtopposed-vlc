@@ -40,6 +40,8 @@
 #include "ui_open_capture.h"
 
 #include <QFileDialog>
+#include <QHash>
+#include <QVariantMap>
 
 #include <limits.h>
 
@@ -60,6 +62,7 @@ class QWidget;
 class QLineEdit;
 class QString;
 class QEvent;
+class QResizeEvent;
 class EmbeddedFileBrowser;
 
 class OpenPanel: public QWidget
@@ -75,6 +78,7 @@ public:
     virtual void clear() = 0;
     virtual void onFocus() {}
     virtual void onAccept() {}
+    virtual QString validationError() const { return {}; }
 
     static const int CONTEXT_INTERACTIVE = 0;
     static const int CONTEXT_BATCH = 1;
@@ -159,10 +163,14 @@ public:
     virtual ~DiscOpenPanel();
     void clear() override;
     virtual void accept();
+    QString validationError() const override;
 #if defined( _WIN32 ) || defined( __OS2__ )
     void onFocus() override;
 #endif
     void updateContext(int) override;
+protected:
+    void resizeEvent(QResizeEvent*) override;
+    bool eventFilter(QObject*, QEvent*) override;
 private:
     Ui::OpenDisk ui;
     char *psz_dvddiscpath, *psz_vcddiscpath, *psz_cddadiscpath;
@@ -170,6 +178,8 @@ private:
 public slots:
     void updateMRL() override;
 private slots:
+    void updateEditorText();
+    void updateLayoutMetrics();
     void browseDevice();
     void updateButtons() ;
     void eject();
@@ -183,11 +193,13 @@ public:
     CaptureOpenPanel( QWidget *, qt_intf_t * );
     virtual ~CaptureOpenPanel();
     void clear() override;
+    QString validationError() const override;
 private:
     Ui::OpenCapture ui;
     bool isInitialized;
 
-    QString advMRL;
+    QHash<int, QString> advancedMRLs;
+    QHash<int, QVariantMap> advancedValues;
     QStringList configList;
     QDialog *adv;
 #ifdef _WIN32

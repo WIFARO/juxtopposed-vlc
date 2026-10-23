@@ -17,6 +17,9 @@
      <property name="text">
       <string>Capture mode</string>
      </property>
+     <property name="buddy">
+      <cstring>deviceCombo</cstring>
+     </property>
     </widget>
    </item>
    <item row="0" column="2" colspan="2">
@@ -42,7 +45,7 @@
    <item row="2" column="0" colspan="4">
     <widget class="QGroupBox" name="cardBox">
      <property name="title">
-      <string>Device Selection</string>
+      <string>Source</string>
      </property>
     </widget>
    </item>
@@ -72,7 +75,7 @@
    <item row="4" column="3">
     <widget class="QPushButton" name="advancedButton">
      <property name="toolTip">
-      <string>Access advanced options to tweak the device</string>
+      <string>Set more options for this capture mode.</string>
      </property>
      <property name="text">
       <string>Advanced options...</string>
@@ -81,6 +84,6 @@
    </item>
   </layout>
  </widget>
- <resources/>
- <connections/>
+ <resources />
+ <connections />
 </ui>

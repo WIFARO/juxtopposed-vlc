@@ -30,6 +30,7 @@
 #endif
 
 #include <cassert>
+#include <cmath>
 
 #include "qt.hpp"
 #include "maininterface/mainctx.hpp"
@@ -40,6 +41,8 @@
 #include "util/validators.hpp"
 #include "util/interface_translator.hpp"
 #include "util/colorizedsvgicon.hpp"
+#include "util/redesign_widget_theme.hpp"
+#include "util/color_scheme_model.hpp"
 #include "widgets/native/embedded_file_browser.hpp"
 #include <vlc_intf_strings.h>
 #include <vlc_modules.h>
@@ -58,6 +61,12 @@
 #include <QRegularExpression>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QShortcut>
+#include <QScreen>
+#include <QKeyEvent>
+#include <QApplication>
+#include <QResizeEvent>
+#include <QStyleHints>
 
 #define I_DEVICE_TOOLTIP \
     I_DIR_OR_FOLDER( N_("Select a device or a VIDEO_TS directory"), \
@@ -80,6 +89,61 @@ static const char psz_devModule[][8] = { "v4l2", "pvr", "dtv",
                                        "dshow", "screen", "jack" };
 
 namespace {
+class CaptureOptionsDialog final : public QDialog
+{
+public:
+    using QDialog::QDialog;
+    void setSearchField(QLineEdit *field)
+    {
+        search = field;
+        for (auto *widget : findChildren<QWidget*>()) widget->installEventFilter(this);
+        installEventFilter(this);
+    }
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (search && (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress))
+        {
+            auto *key = static_cast<QKeyEvent*>(event);
+            const bool find = key->matches(QKeySequence::Find);
+            const bool clear = watched == search && key->key() == Qt::Key_Escape && !search->text().isEmpty();
+            if (find || clear)
+            {
+                if (event->type() == QEvent::KeyPress)
+                {
+                    if (find) { search->setFocus(); search->selectAll(); }
+                    else search->clear();
+                }
+                key->accept();
+                return true;
+            }
+        }
+        return QDialog::eventFilter(watched, event);
+    }
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        {
+            if (auto *button = qobject_cast<QPushButton*>(QApplication::focusWidget()))
+                if (isAncestorOf(button)) button->click();
+            event->accept();
+            return;
+        }
+        QDialog::keyPressEvent(event);
+    }
+private:
+    QLineEdit *search = nullptr;
+};
+
+bool hasScreenCapture()
+{
+    module_t **modules = nullptr;
+    size_t strictMatches;
+    const auto count = vlc_module_match("access", "screen", true, &modules, &strictMatches);
+    free(modules);
+    return count > 0;
+}
+
 template<typename Widget>
 Widget* captureText(const char* source, QWidget* parent)
 {
@@ -333,6 +397,7 @@ DiscOpenPanel::DiscOpenPanel( QWidget *_parent, qt_intf_t *_p_intf ) :
             ui.browseDiscButton->setToolTip(qfut(I_DEVICE_TOOLTIP));
             ui.deviceCombo->setToolTip(qfut(I_DEVICE_TOOLTIP));
             ui.titleLabel->setText(m_discType == Vcd ? qtr("Entry") : m_discType == Cdda ? qtr("Track") : qtr("Title"));
+            updateEditorText();
         });
 
     /* Get the default configuration path for the devices */
@@ -347,6 +412,14 @@ DiscOpenPanel::DiscOpenPanel( QWidget *_parent, qt_intf_t *_p_intf ) :
     ui.browseDiscButton->setToolTip( qfut( I_DEVICE_TOOLTIP ));
     ui.deviceCombo->setToolTip( qfut( I_DEVICE_TOOLTIP ) );
     ui.deviceCombo->setInsertPolicy( QComboBox::InsertAtTop );
+    ui.deviceCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    ui.deviceCombo->setMinimumContentsLength(8);
+    if (p_intf->p_mi)
+    {
+        connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &DiscOpenPanel::updateLayoutMetrics);
+        connect(p_intf->p_mi->getColorScheme(), &ColorSchemeModel::currentChanged, this, &DiscOpenPanel::updateLayoutMetrics);
+    }
+    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, &DiscOpenPanel::updateLayoutMetrics);
 
 #if !defined( _WIN32 ) && !defined( __OS2__ )
     char const * const ppsz_discdevices[] = {
@@ -390,6 +463,7 @@ DiscOpenPanel::DiscOpenPanel( QWidget *_parent, qt_intf_t *_p_intf ) :
              this, &DiscOpenPanel::updateMRL );
     connect( ui.dvdsimple, &QCheckBox::toggled, this, &DiscOpenPanel::updateMRL );
 
+    connect(ui.titleSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, &DiscOpenPanel::updateEditorText);
     /* Run once the updateButtons function in order to fill correctly the comboBoxes */
     updateButtons();
 }
@@ -494,8 +568,8 @@ void DiscOpenPanel::clear()
 {
     ui.titleSpin->setValue( 0 );
     ui.chapterSpin->setValue( 0 );
-    ui.subtitlesSpin->setValue( -1 );
-    ui.audioSpin->setValue( -1 );
+    ui.subtitlesSpin->setValue(0);
+    ui.audioSpin->setValue(0);
     m_discType = None;
 }
 
@@ -578,7 +652,88 @@ void DiscOpenPanel::updateButtons()
         ui.dvdsimple->setEnabled( false );
     }
 
+    updateEditorText();
     updateMRL();
+}
+
+void DiscOpenPanel::updateEditorText()
+{
+    ui.titleSpin->setSpecialValueText(m_discType == Cdda ? qtr("All tracks") : qtr("Default"));
+    ui.chapterSpin->setSpecialValueText(qtr("Default"));
+    ui.chapterSpin->setEnabled(ui.titleSpin->value() > 0);
+    ui.chapterLabel->setEnabled(ui.titleSpin->value() > 0);
+    ui.chapterSpin->setToolTip(qtr("Select a title first. Then select a chapter."));
+    const auto trackHelp = qtr("Auto uses your track preferences. Track numbers start at 1.");
+    ui.audioSpin->setToolTip(trackHelp);
+    ui.subtitlesSpin->setToolTip(trackHelp);
+    ui.dvdsimple->setToolTip(qtr("Play the disc without its menus. Use this for conversion or streaming."));
+    ui.ejectButton->setAccessibleName(qtr("Eject disc"));
+    updateLayoutMetrics();
+}
+
+void DiscOpenPanel::resizeEvent(QResizeEvent *event)
+{
+    OpenPanel::resizeEvent(event);
+    updateLayoutMetrics();
+}
+
+bool DiscOpenPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::Resize)
+        QMetaObject::invokeMethod(this, &DiscOpenPanel::updateLayoutMetrics, Qt::QueuedConnection);
+    return OpenPanel::eventFilter(watched, event);
+}
+
+void DiscOpenPanel::updateLayoutMetrics()
+{
+    const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+    int available = width() - dp(40);
+    for (QWidget *parent = parentWidget(); parent; parent = parent->parentWidget())
+        if (auto *scroll = qobject_cast<QScrollArea*>(parent))
+        {
+            scroll->viewport()->installEventFilter(this);
+            available = qMin(available, scroll->viewport()->width() - dp(40));
+            break;
+        }
+    const QList<QRadioButton*> choices = {ui.dvdRadioButton, ui.dvdaRadioButton,
+        ui.bdRadioButton, ui.audioCDRadioButton, ui.vcdRadioButton};
+    int choiceWidth = 1;
+    for (auto *choice : choices)
+    {
+        choice->ensurePolished();
+        choiceWidth = qMax(choiceWidth, choice->sizeHint().width());
+        choice->setMinimumWidth(choice->sizeHint().width());
+    }
+    const int gap = dp(12);
+    const int columns = qBound(1, (available + gap) / (choiceWidth + gap), int(choices.size()));
+    if (ui.discTypeLayout->property("columns").toInt() != columns)
+    {
+        for (int i = 0; i < choices.size(); ++i) ui.discTypeLayout->addWidget(choices[i], i / columns, i % columns);
+        ui.discTypeLayout->setProperty("columns", columns);
+    }
+    const bool stacked = available < dp(500);
+    if (!ui.discDeviceLayout->property("stacked").isValid()
+        || ui.discDeviceLayout->property("stacked").toBool() != stacked)
+    {
+        ui.discDeviceLayout->addWidget(ui.deviceLabel, 0, 0, 1, stacked ? 3 : 1);
+        ui.discDeviceLayout->addWidget(ui.deviceCombo, stacked ? 1 : 0, stacked ? 0 : 1);
+        ui.discDeviceLayout->addWidget(ui.ejectButton, stacked ? 1 : 0, 2 - int(stacked));
+        ui.discDeviceLayout->addWidget(ui.browseDiscButton, stacked ? 1 : 0, 3 - int(stacked));
+        for (int col = 0; col < 4; ++col) ui.discDeviceLayout->setColumnStretch(col, col == int(!stacked) ? 1 : 0);
+        const auto arrange = [stacked](QGridLayout *grid, QWidget *firstLabel, QWidget *first,
+                                       QWidget *secondLabel, QWidget *second) {
+            grid->addWidget(firstLabel, 0, 0); grid->addWidget(first, 0, 1);
+            grid->addWidget(secondLabel, stacked ? 1 : 0, stacked ? 0 : 2);
+            grid->addWidget(second, stacked ? 1 : 0, stacked ? 1 : 3);
+        };
+        arrange(ui.discPositionLayout, ui.titleLabel, ui.titleSpin, ui.chapterLabel, ui.chapterSpin);
+        arrange(ui.discTrackLayout, ui.audioLabel, ui.audioSpin, ui.subtitlesLabel, ui.subtitlesSpin);
+        ui.discDeviceLayout->setProperty("stacked", stacked);
+    }
+    ui.ejectButton->setFixedSize(dp(32), dp(32));
+    ui.ejectButton->setIconSize(QSize(dp(20), dp(20)));
+    ui.ejectButton->ensurePolished();
+    ui.ejectButton->setIcon(ColorizedSvgIcon::colorizedIconForWidget(":/menu/ic_fluent_arrow_eject.svg", ui.ejectButton));
 }
 
 #undef setDrive
@@ -590,6 +745,13 @@ void DiscOpenPanel::updateMRL()
     QStringList fileList;
 
     discPath = ui.deviceCombo->currentText();
+    if (discPath.trimmed().isEmpty())
+    {
+        ui.ejectButton->setEnabled(false);
+        emit mrlUpdated({}, {});
+        return;
+    }
+    ui.ejectButton->setEnabled(true);
 
     int tmp = ui.deviceCombo->findText( discPath );
     if( tmp != -1 &&  ui.deviceCombo->itemData( tmp ).isValid() )
@@ -616,7 +778,10 @@ void DiscOpenPanel::updateMRL()
 
     char *mrl = vlc_path2uri( qtu(discPath), scheme );
     if( unlikely(mrl == NULL) )
+    {
+        emit mrlUpdated({}, {});
         return;
+    }
 
     /* Title/chapter encoded in MRL */
     QString anchor = "";
@@ -640,12 +805,12 @@ void DiscOpenPanel::updateMRL()
     /* Input item options */
     if ( ui.dvdRadioButton->isChecked() || ui.vcdRadioButton->isChecked())
     {
-        if ( ui.audioSpin->value() >= 0 )
+        if (ui.audioSpin->value() > 0)
             opts += " :audio-track=" +
-                QString("%1").arg( ui.audioSpin->value() );
-        if ( ui.subtitlesSpin->value() >= 0 )
+                QString::number(ui.audioSpin->value() - 1);
+        if (ui.subtitlesSpin->value() > 0)
             opts += " :sub-track=" +
-                QString("%1").arg( ui.subtitlesSpin->value() );
+                QString::number(ui.subtitlesSpin->value() - 1);
     }
     else if( ui.audioCDRadioButton->isChecked() )
     {
@@ -658,6 +823,12 @@ void DiscOpenPanel::updateMRL()
             opts += " :no-bluray-menu";
     }
     emit mrlUpdated( fileList, opts );
+}
+
+QString DiscOpenPanel::validationError() const
+{
+    return ui.deviceCombo->currentText().trimmed().isEmpty()
+        ? qtr("Select a disc device or folder.") : QString();
 }
 
 void DiscOpenPanel::browseDevice()
@@ -764,14 +935,20 @@ void NetOpenPanel::updateMRL()
     emit methodChanged( qfu( "network-caching" ) );
 
     QStringList qsl;
-    if( url.isEmpty() )
+    if (url.isEmpty())
+    {
+        emit mrlUpdated({}, {});
         return;
+    }
 
     if( url.contains( QLatin1String( "://" ) ) )
     {
         char *uri = vlc_uri_fixup( qtu( url ) );
-        if( uri == NULL )
+        if (uri == NULL)
+        {
+            emit mrlUpdated({}, {});
             return;
+        }
         url = qfu(uri);
         free( uri );
     }
@@ -798,6 +975,7 @@ CaptureOpenPanel::CaptureOpenPanel( QWidget *_parent, qt_intf_t *_p_intf ) :
                                 OpenPanel( _parent, _p_intf )
 {
     isInitialized = false;
+    screenFPS = nullptr;
 #ifdef _WIN32
     vdevDshowW = NULL;
     adevDshowW = NULL;
@@ -1017,6 +1195,8 @@ void CaptureOpenPanel::initialize()
     dvbPropLayout->addWidget( dvbFreqLabel, 0, 0 );
 
     dvbFreq = new QSpinBox;
+    dvbFreq->setObjectName(QStringLiteral("captureFrequency"));
+    dvbFreqLabel->setBuddy(dvbFreq);
     dvbFreq->setAlignment( Qt::AlignRight );
     dvbFreq->setSuffix(" kHz");
     dvbFreq->setSingleStep( 1000 );
@@ -1162,6 +1342,7 @@ void CaptureOpenPanel::initialize()
     /**********
      * Screen *
      **********/
+    if (hasScreenCapture()) {
     addModuleAndLayouts( SCREEN_DEVICE, screen, N_("Desktop"), QGridLayout );
     QLabel *screenLabel = captureText<QLabel>(N_("Your display will be "
             "opened and played in order to stream or save it."), this);
@@ -1172,8 +1353,12 @@ void CaptureOpenPanel::initialize()
     screenPropLayout->addWidget( screenFPSLabel, 0, 0 );
 
     screenFPS = new QDoubleSpinBox;
-    screenFPS->setValue( 1. );
-    screenFPS->setRange( .01, 100. );
+    screenFPS->setObjectName(QStringLiteral("captureFrameRate"));
+    screenFPSLabel->setBuddy(screenFPS);
+    const double configuredFPS = var_InheritFloat(p_intf, "screen-fps");
+    const double initialFPS = std::isfinite(configuredFPS) && configuredFPS > 0 ? configuredFPS : 2.;
+    screenFPS->setRange(.01, qMax(100., initialFPS));
+    screenFPS->setValue(initialFPS);
     screenFPS->setAlignment( Qt::AlignRight );
     /* xgettext: frames per second */
     screenFPS->setSuffix( qtr( " f/s" ) );
@@ -1181,21 +1366,27 @@ void CaptureOpenPanel::initialize()
 
     /* Screen connect */
     CuMRL( screenFPS, QOverload<double>::of(&QDoubleSpinBox::valueChanged) );
+    }
 
-    /* General connects */
-    connect( ui.deviceCombo, QOverload<int>::of(&QComboBox::activated), [=]( int index ) {
-        stackedDevLayout->setCurrentIndex( index );
-        stackedPropLayout->setCurrentIndex( index );
-        this->updateMRL();
-        this->updateButtons();
-    } );
+    /* Keep the visible page and source in step for mouse and keyboard changes. */
+    connect(ui.deviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int index) {
+        stackedDevLayout->setCurrentIndex(index);
+        stackedPropLayout->setCurrentIndex(index);
+        updateButtons();
+        updateMRL();
+    });
+    updateButtons();
+    enableAdvancedDialog(ui.deviceCombo->currentIndex());
 
     if (auto* translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
             ui.retranslateUi(this);
-            const QSignalBlocker blocker(screenFPS);
-            /* xgettext: frames per second */
-            screenFPS->setSuffix(qtr(" f/s"));
+            if (screenFPS)
+            {
+                const QSignalBlocker blocker(screenFPS);
+                /* xgettext: frames per second */
+                screenFPS->setSuffix(qtr(" f/s"));
+            }
         });
 
 #undef CuMRL
@@ -1212,11 +1403,27 @@ CaptureOpenPanel::~CaptureOpenPanel()
 
 void CaptureOpenPanel::clear()
 {
-    advMRL.clear();
+    advancedMRLs.clear();
+    advancedValues.clear();
+}
+
+QString CaptureOpenPanel::validationError() const
+{
+    if (!isInitialized) return {};
+    if (ui.deviceCombo->currentIndex() < 0) return qtr("No capture modes are available in this build.");
+    if (ui.deviceCombo->currentData().toInt() == DTV_DEVICE && dvbFreq->value() == 0)
+        return qtr("Set a frequency above zero.");
+    return {};
 }
 
 void CaptureOpenPanel::updateMRL()
 {
+    if (!isInitialized) return;
+    if (ui.deviceCombo->currentIndex() < 0)
+    {
+        emit mrlUpdated({}, {});
+        return;
+    }
     QString mrl = "";
     QStringList fileList;
     int i_devicetype = ui.deviceCombo->itemData(
@@ -1307,7 +1514,8 @@ void CaptureOpenPanel::updateMRL()
     }
     emit methodChanged( "live-caching" );
 
-    if( !advMRL.isEmpty() ) mrl += " " + advMRL;
+    const auto advanced = advancedMRLs.value(i_devicetype);
+    if (!advanced.isEmpty()) mrl += QLatin1Char(' ') + advanced;
 
     emit mrlUpdated( fileList, mrl );
 }
@@ -1318,8 +1526,13 @@ void CaptureOpenPanel::updateMRL()
  **/
 void CaptureOpenPanel::updateButtons()
 {
-    /*  Be sure to display the ui Elements in case they were hidden by
-     *  some Device Type (like Screen://) */
+    const bool available = ui.deviceCombo->currentIndex() >= 0;
+    ui.deviceCombo->setEnabled(available);
+    ui.cardBox->setVisible(available);
+    ui.optionsBox->setVisible(available);
+    ui.advancedButton->setVisible(available);
+    if (!available) return;
+    /* Restore fields that the previous capture mode hid. */
     ui.optionsBox->show();
     ui.advancedButton->show();
     /* Get the current Device Number */
@@ -1367,11 +1580,11 @@ void CaptureOpenPanel::updateButtons()
         break;
     }
 
-    advMRL.clear();
 }
 
 void CaptureOpenPanel::enableAdvancedDialog( int i_index )
 {
+    if (i_index < 0) { ui.advancedButton->setEnabled(false); return; }
     int i_devicetype = ui.deviceCombo->itemData( i_index ).toInt();
     module_t *p_module =
         module_find( psz_devModule[i_devicetype] );
@@ -1380,6 +1593,7 @@ void CaptureOpenPanel::enableAdvancedDialog( int i_index )
 
 void CaptureOpenPanel::advancedDialog()
 {
+    if (!isInitialized || ui.deviceCombo->currentIndex() < 0) return;
     /* Get selected device type */
     int i_devicetype = ui.deviceCombo->itemData(
                                 ui.deviceCombo->currentIndex() ).toInt();
@@ -1391,6 +1605,10 @@ void CaptureOpenPanel::advancedDialog()
 
     /* Init */
     QList<ConfigControl *> controls;
+    QHash<ConfigControl*, module_config_t*> controlItems;
+    const auto previousValues = advancedValues.value(i_devicetype);
+    // module_config_get returns a shallow copy; keep restored strings here.
+    QHash<QString, QByteArray> restoredStrings;
 
     /* Get the confsize  */
     unsigned int i_confsize;
@@ -1398,19 +1616,37 @@ void CaptureOpenPanel::advancedDialog()
     p_config = module_config_get( p_module, &i_confsize );
 
     /* New Adv Prop dialog */
-    adv = new QDialog( this );
-    adv->setWindowTitle( qtr( "Advanced Options" ) );
-    adv->setWindowRole( "vlc-advanced-options" );
+    auto *optionsDialog = new CaptureOptionsDialog(this);
+    adv = optionsDialog;
+    adv->setObjectName(QStringLiteral("redesignCaptureOptions"));
+    adv->setWindowTitle(qtr("Capture options: %1").arg(ui.deviceCombo->currentText()));
+    adv->setWindowRole("vlc-advanced-options");
 
     /* A main Layout with a Frame */
-    QVBoxLayout *mainLayout = new QVBoxLayout( adv );
+    QVBoxLayout *mainLayout = new QVBoxLayout(adv);
+    auto *heading = new QLabel(adv->windowTitle(), adv);
+    heading->setProperty("redesignHeading", true);
+    heading->setWordWrap(true);
+    mainLayout->addWidget(heading);
+    auto *help = new QLabel(qtr("Changes apply to this capture mode."), adv);
+    help->setWordWrap(true);
+    mainLayout->addWidget(help);
+    auto *find = new QLineEdit(adv);
+    find->setObjectName(QStringLiteral("captureOptionFind"));
+    find->setPlaceholderText(qtr("Find an option"));
+    find->setAccessibleName(qtr("Find an option"));
+    mainLayout->addWidget(find);
+    auto *status = new QLabel(adv);
+    status->setWordWrap(true);
+    mainLayout->addWidget(status);
     QScrollArea *scroll = new QScrollArea;
     mainLayout->addWidget( scroll );
 
     QFrame *advFrame = new QFrame;
     /* GridLayout inside the Frame */
-    QGridLayout *gLayout = new QGridLayout( advFrame );
-
+    QGridLayout *gLayout = new QGridLayout(advFrame);
+    gLayout->setColumnStretch(1, 1);
+    scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable( true );
     scroll->setWidget( advFrame );
 
@@ -1423,17 +1659,43 @@ void CaptureOpenPanel::advancedDialog()
         if( name.isEmpty() || configList.contains( name ) )
             continue;
 
-        msg_Dbg( p_intf, "item %s", p_item->psz_name);
-        ConfigControl *config = ConfigControl::createControl(
-                                    p_item, advFrame, gLayout, n );
-        if( config )
-            controls.append( config );
+        if (previousValues.contains(name))
+        {
+            const auto value = previousValues.value(name);
+            switch (CONFIG_CLASS(p_item->i_type))
+            {
+            case CONFIG_ITEM_STRING:
+                restoredStrings.insert(name, value.toString().toUtf8());
+                p_item->value.psz = restoredStrings[name].data();
+                break;
+            case CONFIG_ITEM_INTEGER: case CONFIG_ITEM_BOOL: p_item->value.i = value.toLongLong(); break;
+            case CONFIG_ITEM_FLOAT: p_item->value.f = value.toDouble(); break;
+            }
+        }
+        ConfigControl *config = ConfigControl::createControl(p_item, advFrame, gLayout, n);
+        if (config)
+        {
+            config->setObjectName(name);
+            config->setParent(adv);
+            controls.append(config);
+            controlItems.insert(config, p_item);
+            for (auto *field : advFrame->findChildren<QWidget*>())
+                if (!field->property("captureOption").isValid()
+                    && (qobject_cast<QLineEdit*>(field) || qobject_cast<QAbstractSpinBox*>(field)
+                        || qobject_cast<QComboBox*>(field) || qobject_cast<QAbstractButton*>(field)))
+                    field->setProperty("captureOption", name);
+        }
     }
 
     /* Button stuffs */
     QDialogButtonBox *advButtonBox = new QDialogButtonBox( adv );
-    QPushButton *closeButton = new QPushButton( qtr( "OK" ) );
-    QPushButton *cancelButton = new QPushButton( qtr( "Cancel" ) );
+    QPushButton *closeButton = new QPushButton(qtr("&Apply"));
+    closeButton->setObjectName(QStringLiteral("captureOptionsApply"));
+    closeButton->setProperty("redesignPrimary", true);
+    closeButton->setAutoDefault(false);
+    QPushButton *cancelButton = new QPushButton(qtr("&Cancel"));
+    cancelButton->setAutoDefault(false);
+    cancelButton->setObjectName(QStringLiteral("captureOptionsCancel"));
 
     connect( closeButton, &QPushButton::clicked, adv, &QDialog::accept );
     connect( cancelButton, &QPushButton::clicked, adv, &QDialog::reject );
@@ -1443,17 +1705,58 @@ void CaptureOpenPanel::advancedDialog()
 
     mainLayout->addWidget( advButtonBox );
 
+    const auto filter = [controls, controlItems, find, status] {
+        const auto query = find->text().trimmed();
+        int shown = 0;
+        for (auto *control : controls)
+        {
+            const auto *item = controlItems.value(control);
+            const QString text = qfu(item->psz_name) + QLatin1Char(' ') + qfut(item->psz_text)
+                + QLatin1Char(' ') + qfut(item->psz_longtext);
+            const bool match = query.isEmpty() || text.contains(query, Qt::CaseInsensitive);
+            if (match) { control->show(); ++shown; }
+            else control->hide();
+        }
+        status->setText(controls.isEmpty() ? qtr("This capture mode has no additional options.")
+            : shown ? qtr("Options shown: %1 of %2.").arg(shown).arg(controls.size())
+                    : qtr("No options match this text."));
+    };
+    connect(find, &QLineEdit::textChanged, adv, filter);
+    filter();
+    optionsDialog->setSearchField(find);
+    for (auto *button : {closeButton, cancelButton})
+        for (const auto key : {Qt::Key_Return, Qt::Key_Enter})
+        {
+            auto *shortcut = new QShortcut(QKeySequence(key), button);
+            shortcut->setContext(Qt::WidgetShortcut);
+            connect(shortcut, &QShortcut::activated, button, &QPushButton::click);
+        }
     if (auto* translator = InterfaceTranslator::instance())
-        connect(translator, &InterfaceTranslator::languageChanged, adv, [dialog = adv, closeButton, cancelButton] {
-            dialog->setWindowTitle(qtr("Advanced Options"));
-            closeButton->setText(qtr("OK"));
-            cancelButton->setText(qtr("Cancel"));
+        connect(translator, &InterfaceTranslator::languageChanged, adv,
+                [this, dialog = adv, closeButton, cancelButton, heading, help, find, filter] {
+            dialog->setWindowTitle(qtr("Capture options: %1").arg(ui.deviceCombo->currentText()));
+            heading->setText(dialog->windowTitle());
+            help->setText(qtr("Changes apply to this capture mode."));
+            find->setPlaceholderText(qtr("Find an option"));
+            find->setAccessibleName(qtr("Find an option"));
+            closeButton->setText(qtr("&Apply"));
+            cancelButton->setText(qtr("&Cancel"));
+            filter();
         });
+    applyRedesignWidgetTheme(adv, p_intf->p_mi);
+    const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+    mainLayout->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
+    mainLayout->setSpacing(dp(12));
+    QSize preferred(dp(760), dp(600));
+    if (adv->screen()) preferred = preferred.boundedTo(adv->screen()->availableGeometry().size());
+    adv->resize(preferred);
+    find->setFocus();
 
     /* Creation of the MRL */
     if( adv->exec() )
     {
         QString tempMRL = "";
+        QVariantMap values;
         for( int i = 0; i < controls.count(); i++ )
         {
             ConfigControl *control = controls[i];
@@ -1471,6 +1774,10 @@ void CaptureOpenPanel::advancedDialog()
 
             tempMRL += control->getName();
 
+            const auto name = qfu(control->getName());
+            if (ctrl_type == CONFIG_ITEM_STRING) values[name] = qobject_cast<VStringConfigControl*>(control)->getValue();
+            else if (ctrl_type == CONFIG_ITEM_FLOAT) values[name] = qobject_cast<VFloatConfigControl*>(control)->getValue();
+            else values[name] = qobject_cast<VIntConfigControl*>(control)->getValue();
             switch( ctrl_type )
             {
                 case CONFIG_ITEM_STRING:
@@ -1484,7 +1791,8 @@ void CaptureOpenPanel::advancedDialog()
                     break;
             }
         }
-        advMRL = std::move(tempMRL);
+        advancedMRLs.insert(i_devicetype, std::move(tempMRL));
+        advancedValues.insert(i_devicetype, std::move(values));
         updateMRL();
     }
     qDeleteAll( controls );
