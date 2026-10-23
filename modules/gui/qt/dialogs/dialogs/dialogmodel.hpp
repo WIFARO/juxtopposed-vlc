@@ -76,6 +76,8 @@ class DialogErrorModel : public QAbstractListModel, public Singleton<DialogError
     Q_PROPERTY(bool notificationIsWarning READ notificationIsWarning NOTIFY notificationChanged FINAL)
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
     Q_PROPERTY(QString notificationText READ notificationText NOTIFY notificationChanged FINAL)
+    Q_PROPERTY(QString notificationTitle READ notificationTitle NOTIFY notificationChanged FINAL)
+    Q_PROPERTY(QString notificationDetails READ notificationDetails NOTIFY notificationChanged FINAL)
     Q_PROPERTY(int repeatedMessageCount READ repeatedMessageCount NOTIFY notificationChanged FINAL)
 
 public: // Enums
@@ -95,6 +97,8 @@ private:
         bool warning = false;
     };
     QString lastNotificationText;
+    QString lastNotificationTitle;
+    QString lastNotificationDetails;
     int repeatedNotificationCount = 0;
     bool m_notificationWarning = false;
 
@@ -142,6 +146,9 @@ public: // Properties
     void refreshNotificationPreference();
     int count() const;
     QString notificationText() const;
+    QString notificationTitle() const { return lastNotificationTitle; }
+    QString notificationDetails() const { return lastNotificationDetails; }
+    Q_INVOKABLE bool copyNotification() const;
     int repeatedMessageCount() const;
     Q_INVOKABLE void resetRepeatedMessageCount();
 

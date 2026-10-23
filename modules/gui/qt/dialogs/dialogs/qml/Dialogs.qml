@@ -46,10 +46,7 @@ Item {
     // Events
     //---------------------------------------------------------------------------------------------
 
-    Component.onCompleted: if (DialogErrorModel.notificationAllowed && DialogErrorModel.repeatedMessageCount){
-                               hideErrorPopupTimer.restart()
-                               errorPopup.state = "visible"
-                           }
+    Component.onCompleted: if (DialogErrorModel.notificationAllowed && DialogErrorModel.repeatedMessageCount) showNotice()
 
     property var requests: []
     property var activeRequest: null
@@ -187,154 +184,78 @@ Item {
         }
     }
 
-    Connections
-    {
+    property Item noticeReturnFocus: null
+    function isNoticeItem(item) {
+        for (let current = item; current; current = current.parent)
+            if (current === errorPopup) return true
+        return false
+    }
+    function showNotice() {
+        if (!DialogErrorModel.notificationAllowed) return
+        const window = root.Window.window
+        if (window && window.activeFocusItem && !isNoticeItem(window.activeFocusItem))
+            noticeReturnFocus = window.activeFocusItem
+        errorPopup.state = "visible"
+        if (errorPopup.contentItem && errorPopup.contentItem.held) hideErrorPopupTimer.stop()
+        else hideErrorPopupTimer.restart()
+    }
+    function hideNotice() {
+        const restore = errorPopup.activeFocus
+        hideErrorPopupTimer.stop()
+        errorPopup.state = "hidden"
+        DialogErrorModel.resetRepeatedMessageCount()
+        if (restore && noticeReturnFocus && noticeReturnFocus.visible && noticeReturnFocus.enabled)
+            noticeReturnFocus.forceActiveFocus(Qt.OtherFocusReason)
+    }
+    Connections {
         target: DialogErrorModel
-
         function onNotificationsEnabledChanged() {
-            if (!DialogErrorModel.notificationAllowed) {
-                hideErrorPopupTimer.stop()
-                errorPopup.state = "hidden"
-            }
+            if (!DialogErrorModel.notificationAllowed) root.hideNotice()
         }
-
-        function onNotificationRequested() {
-            if (!DialogErrorModel.notificationAllowed) return
-            hideErrorPopupTimer.restart()
-            errorPopup.state = "visible"
+        function onNotificationRequested() { root.showNotice() }
+    }
+    Connections {
+        target: root.Window.window
+        enabled: errorPopup.state === "visible"
+        function onActiveFocusItemChanged() {
+            const item = root.Window.window.activeFocusItem
+            if (item && !root.isNoticeItem(item)) root.noticeReturnFocus = item
         }
     }
-
-    //---------------------------------------------------------------------------------------------
-    // Childs
-    //---------------------------------------------------------------------------------------------
-
     Widgets.DrawerExt {
         id: errorPopup
         objectName: "errorNotificationPopup"
-
-        property string messageText
-        property int repeatedMessageCount: 0
-
-        anchors {
-            bottom: parent.bottom
-            horizontalCenter: parent.horizontalCenter
-            bottomMargin: VLCStyle.margin_small
-        }
-
+        anchors { bottom: parent.bottom; horizontalCenter: parent.horizontalCenter; bottomMargin: VLCStyle.margin_small }
         edge: Widgets.DrawerExt.Edges.Bottom
-        width: contentItem?.layoutWidth ?? 0
-        height: contentItem?.height ?? 0
+        width: Math.max(0, Math.min(VLCStyle.dp(560, VLCStyle.scale), root.width - VLCStyle.dp(32, VLCStyle.scale)))
+        height: contentItem ? contentItem.height : 0
         z: 10
-
-        ColorContext {
-            id: errorMsgTheme
-            palette: VLCStyle.palette
-            colorSet: ColorContext.Window
-        }
-
-        component: Rectangle {
-            color: DialogErrorModel.notificationIsWarning
-                ? (VLCStyle.palette.isDark ? "#191919" : "#acacac") : errorMsgTheme.bg.negative
-            border.width: DialogErrorModel.notificationIsWarning ? VLCStyle.dp(1, VLCStyle.scale) : 0
-            border.color: VLCStyle.palette.isDark ? "#d69c38" : "#775100"
-
-            height: messageText.implicitHeight + VLCStyle.margin_normal
-            radius: VLCStyle.fontHeight_normal / 2
-
-            property real layoutWidth: layout.width
-
-            Accessible.role: Accessible.AlertMessage
-            Accessible.name: DialogErrorModel.notificationIsWarning ? qsTr("Warning notice") : qsTr("Error notice")
-
-            RowLayout {
-                id: layout
-
-                spacing: VLCStyle.margin_xsmall
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-
-                Widgets.IconLabel {
-                    text: VLCIcons.info
-                    color: DialogErrorModel.notificationIsWarning
-                        ? (VLCStyle.palette.isDark ? "#d69c38" : "#775100") : errorMsgTheme.fg.primary
-                    Layout.leftMargin: VLCStyle.margin_xxsmall
-                }
-
-                T.Label {
-                    id: messageText
-
-                    Layout.maximumWidth: root.width * 0.5
-                    Layout.leftMargin: VLCStyle.margin_xxsmall
-                    Layout.rightMargin: VLCStyle.margin_xxsmall
-
-                    text: (DialogErrorModel.repeatedMessageCount > 1 ? '[' + DialogErrorModel.repeatedMessageCount + '] ' : '')
-                          + DialogErrorModel.notificationText
-
-                    textFormat: Text.PlainText
-                    wrapMode: Text.WrapAnywhere
-                    font.pixelSize: VLCStyle.fontSize_normal
-                    font.bold: true
-                    color: DialogErrorModel.notificationIsWarning
-                        ? (VLCStyle.palette.isDark ? "#e5e5e5" : "#2e2e2e") : errorMsgTheme.fg.primary
-                }
-
-                Widgets.TextToolButton {
-                    id: detailsBtn
-
-                    text: qsTr("Show details")
-
-                    colorContext.colorSet: ColorContext.ButtonAccent
-
-                    onClicked: {
-                        hideErrorPopupTimer.stop()
-                        errorPopup.state = "hidden"
-                        DialogErrorModel.resetRepeatedMessageCount()
-                        DialogsProvider.messagesDialog(1)
-                    }
-                }
-
-                Widgets.IconToolButton {
-                    id: closeBtn
-                    font.pixelSize: VLCStyle.icon_normal
-                    text: VLCIcons.clear
-                    description: qsTr("Dismiss")
-                    Layout.rightMargin: VLCStyle.margin_xxsmall
-
-                    color: closeBtn.colorContext.fg.primary
-                    backgroundColor: closeBtn.colorContext.bg.negative
-
-                    onClicked: {
-                        hideErrorPopupTimer.stop()
-                        errorPopup.state = "hidden"
-                        DialogErrorModel.resetRepeatedMessageCount()
-                    }
-                }
-            }
-
-            Widgets.RoundedRectangleShadow {
-                yOffset: VLCStyle.dp(4, VLCStyle.scale)
-                blurRadius: VLCStyle.dp(3, VLCStyle.scale)
-
-                opacity: 0.2
-
-                visible: (color.a > 0.0)
-
-                color: Qt.darker(parent.color)
-            }
-        }
-
         state: "hidden"
-
-        Timer {
-            id: hideErrorPopupTimer
-            interval: 5000
-            repeat: false
-            onTriggered: {
-                errorPopup.state = "hidden"
-                DialogErrorModel.resetRepeatedMessageCount()
+        component: MessageNotice {
+            scaleFactor: VLCStyle.scale
+            lightTheme: !VLCStyle.palette.isDark
+            accentColor: MainCtx.redesignAccent
+            title: DialogErrorModel.notificationTitle
+            details: DialogErrorModel.notificationDetails
+            count: DialogErrorModel.repeatedMessageCount
+            warning: DialogErrorModel.notificationIsWarning
+            maximumHeight: {
+                const window = root.Window.window
+                const localY = root.y // Keep this binding tied to bottom-anchor changes.
+                return window ? Math.max(0, root.mapToItem(window.contentItem, 0, root.height).y - VLCStyle.dp(24, VLCStyle.scale)) : VLCStyle.dp(240, VLCStyle.scale)
+            }
+            onHeldChanged: {
+                if (held) hideErrorPopupTimer.stop()
+                else if (errorPopup.state === "visible") hideErrorPopupTimer.restart()
+            }
+            onDismissRequested: root.hideNotice()
+            onCopyRequested: if (DialogErrorModel.copyNotification()) copyDone()
+            onDetailsRequested: {
+                root.hideNotice()
+                DialogsProvider.messagesDialog(1)
             }
         }
+        Timer { id: hideErrorPopupTimer; interval: 5000; onTriggered: root.hideNotice() }
     }
 
     ModalDialog {

@@ -21,6 +21,8 @@
 #include <QSignalSpy>
 #include <QThreadPool>
 #include <QGuiApplication>
+#include <QClipboard>
+#include <QScopeGuard>
 #include <QtPlugin>
 #include <thread>
 #if defined(QT_STATIC) && defined(Q_OS_WIN)
@@ -313,6 +315,57 @@ private slots:
         QCOMPARE(errors.repeatedMessageCount(), 0);
         QCOMPARE(errors.count(), 2);
         QCOMPARE(preferences.count(), 3);
+    }
+
+    void testNotificationContextAndCopy() {
+        const QString saved = QGuiApplication::clipboard()->text();
+        const auto restore = qScopeGuard([saved] { QGuiApplication::clipboard()->setText(saved); });
+        DialogErrorModel errors(m_intf);
+        errors.pushError("Cannot open <fixture>", "First file & full details");
+        QCOMPARE(errors.notificationTitle(), "Cannot open <fixture>");
+        QCOMPARE(errors.notificationDetails(), "First file & full details");
+        QVERIFY(errors.copyNotification());
+        QCOMPARE(QGuiApplication::clipboard()->text(), "Cannot open <fixture>\nFirst file & full details");
+        errors.pushError("Cannot open <fixture>", "First file & full details");
+        QCOMPARE(errors.repeatedMessageCount(), 2);
+        QVERIFY(errors.copyNotification());
+        QCOMPARE(QGuiApplication::clipboard()->text(), "[2] Cannot open <fixture>\nFirst file & full details");
+        errors.pushError("Cannot open <fixture>", "A different file");
+        QCOMPARE(errors.repeatedMessageCount(), 1);
+        QCOMPARE(errors.notificationDetails(), "A different file");
+        QCOMPARE(errors.count(), 3);
+        QCOMPARE(errors.data(errors.index(0), DialogErrorModel::DIALOG_TEXT).toString(), "First file & full details");
+        errors.resetRepeatedMessageCount();
+        QGuiApplication::clipboard()->setText("Keep clipboard");
+        QVERIFY(!errors.copyNotification());
+        QCOMPARE(QGuiApplication::clipboard()->text(), "Keep clipboard");
+        var_SetBool(m_intf, "qt-error-dialogs", false);
+        errors.refreshNotificationPreference();
+        errors.pushError("Hidden notice", "History only");
+        QVERIFY(!errors.copyNotification());
+        QCOMPARE(QGuiApplication::clipboard()->text(), "Keep clipboard");
+        QCOMPARE(errors.count(), 4);
+    }
+
+    void testWarningNotificationContextAndCopy() {
+        const QString saved = QGuiApplication::clipboard()->text();
+        const auto restore = qScopeGuard([saved] { QGuiApplication::clipboard()->setText(saved); });
+        var_SetBool(m_intf, "qt-minor-warnings", true);
+        DialogErrorModel errors(m_intf);
+        msg_Warn(m_intf, "First <literal> warning");
+        msg_Warn(m_intf, "Second warning");
+        QVERIFY(QMetaObject::invokeMethod(&errors, "flushWarnings"));
+        QVERIFY(errors.notificationIsWarning());
+        QVERIFY(errors.notificationTitle().startsWith("Warning"));
+        QVERIFY(errors.notificationDetails().contains("First <literal> warning"));
+        QVERIFY(errors.notificationDetails().contains("2 warnings"));
+        QCOMPARE(errors.repeatedMessageCount(), 2);
+        QVERIFY(errors.copyNotification());
+        QVERIFY(QGuiApplication::clipboard()->text().startsWith("[2] Warning"));
+        QVERIFY(QGuiApplication::clipboard()->text().contains("First <literal> warning"));
+        var_SetBool(m_intf, "qt-minor-warnings", false);
+        errors.refreshNotificationPreference();
+        QVERIFY(!errors.copyNotification());
     }
 
     void testQuestion_data() {

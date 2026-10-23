@@ -26,6 +26,7 @@
 #include <vlc_log_observer.h>
 #include "qt.hpp"
 #include <QThread>
+#include <QClipboard>
 #include <QScopeGuard>
 #include <atomic>
 
@@ -136,13 +137,15 @@ void DialogErrorModel::pushError(const DialogError & error)
         return;
     }
 
-    if (!m_notificationWarning && lastNotificationText == error.title)
+    if (!m_notificationWarning && lastNotificationTitle == error.title
+        && lastNotificationDetails == error.text)
         repeatedNotificationCount += 1;
-    else{
-        lastNotificationText = error.title;
+    else
         repeatedNotificationCount = 1;
-    }
 
+    lastNotificationText = error.title;
+    lastNotificationTitle = error.title;
+    lastNotificationDetails = error.text;
     m_notificationWarning = false;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
@@ -205,6 +208,8 @@ void DialogErrorModel::flushWarnings()
     // A minor warning must not replace an active error notice.
     if (!m_notificationWarning && repeatedNotificationCount > 0) return;
     lastNotificationText = title + QStringLiteral(": ") + batch.text;
+    lastNotificationTitle = title;
+    lastNotificationDetails = text;
     repeatedNotificationCount = batch.count;
     m_notificationWarning = true;
     emit notificationChanged();
@@ -269,6 +274,23 @@ QString DialogErrorModel::notificationText() const
 int DialogErrorModel::repeatedMessageCount() const
 {
     return repeatedNotificationCount;
+}
+
+bool DialogErrorModel::copyNotification() const
+{
+    if (!notificationAllowed() || repeatedNotificationCount <= 0) return false;
+    auto *clipboard = QGuiApplication::clipboard();
+    if (!clipboard) return false;
+    QString text = repeatedNotificationCount > 1
+        ? QStringLiteral("[%1] ").arg(repeatedNotificationCount) : QString();
+    text += lastNotificationTitle;
+    if (!lastNotificationDetails.isEmpty())
+    {
+        if (!text.isEmpty()) text += QLatin1Char('\n');
+        text += lastNotificationDetails;
+    }
+    clipboard->setText(text);
+    return true;
 }
 
 void DialogErrorModel::resetRepeatedMessageCount()
