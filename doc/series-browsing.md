@@ -6,6 +6,10 @@ current season, highlights the playing episode, shows saved playback progress,
 and expands episode details. The caret, show title and season label share one
 button that opens the season selector. Specials
 use season zero; episodes without season metadata remain a separate group.
+Opening the panel scrolls to the playing episode. The season selector scrolls
+to its season, and selecting that season returns to the playing episode;
+other seasons open at the first episode. Episode descriptions show at most
+three lines, with an ellipsis for longer notes.
 The control is also available in player toolbar customization. Existing saved
 toolbar layouts retain their controls and can add Episodes from the palette.
 
@@ -89,7 +93,8 @@ filenames, specials, remakes, combined episodes, versions, date/absolute numberi
 scan bounds, symbolic links, cancellation and drive-root avoidance.
 `test_series_model.cpp` covers projection, GUID identity, stale results, progress,
 snapshot reuse and native model consistency. `tst_RedesignEpisodes.qml` covers
-season navigation, expansion, resume/restart, keyboard navigation and scaled
+season navigation, current-entry scrolling in long lists, description truncation,
+expansion, resume/restart, keyboard navigation and scaled
 layouts. The media-library model suite checks that batch state reads return
 saved progress without requesting artwork. Existing player layout, chrome and
 customization suites cover the new control alongside saved layouts.

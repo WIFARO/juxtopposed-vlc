@@ -35,16 +35,47 @@ FocusScope {
         try { return decodeURIComponent(name) } catch (error) { return name }
     }
     function followCurrentEpisode() {
-        if (!episodesModel || expandedKey) return
+        if (!episodesModel || episodes.count === 0 || expandedKey || showingSeasons) return
+        let index = 0
         for (let i = 0; i < episodes.count; ++i) {
             const row = episodesModel.get ? episodesModel.get(i) : episodesModel[i]
-            if (row && row.current) { episodes.currentIndex = i; episodes.positionViewAtIndex(i, ListView.Contain); return }
+            if (row && row.current) { index = i; break }
         }
+        episodes.forceLayout()
+        episodes.currentIndex = index
+        episodes.positionViewAtIndex(index, ListView.Beginning)
     }
-    Component.onCompleted: Qt.callLater(() => { episodes.forceActiveFocus(); followCurrentEpisode() })
+    function followCurrentSeason() {
+        if (!showingSeasons || seasons.length === 0) return
+        let index = seasons.indexOf(currentSeason)
+        if (index < 0) index = Math.max(0, seasons.indexOf(selectedSeason))
+        seasonList.forceLayout()
+        seasonList.currentIndex = index
+        seasonList.positionViewAtIndex(index, ListView.Beginning)
+    }
+    function positionCurrentEntry() {
+        if (!visible) return
+        if (showingSeasons) followCurrentSeason()
+        else followCurrentEpisode()
+    }
+    function enterList() {
+        if (!visible) return
+        if (showingSeasons) seasonList.forceActiveFocus()
+        else episodes.forceActiveFocus()
+        // Wait for the layout and newly created, expanded episode delegates.
+        Qt.callLater(root.positionCurrentEntry)
+    }
+    Component.onCompleted: {
+        if (selectedSeason !== currentSeason && seasons.indexOf(currentSeason) >= 0)
+            seasonRequested(currentSeason)
+        Qt.callLater(root.enterList)
+    }
+    onVisibleChanged: if (visible) Qt.callLater(root.enterList)
+    onShowingSeasonsChanged: Qt.callLater(root.enterList)
+    onSeasonsChanged: if (showingSeasons) Qt.callLater(root.positionCurrentEntry)
     Connections {
         target: root.episodesModel && typeof root.episodesModel.modelReset === "function" ? root.episodesModel : null
-        function onModelReset() { Qt.callLater(root.followCurrentEpisode) }
+        function onModelReset() { Qt.callLater(root.positionCurrentEntry) }
     }
     Keys.onEscapePressed: event => {
         if (showingSeasons) showingSeasons = false
@@ -134,7 +165,11 @@ FocusScope {
                 cornerRadius: 0
                 text: root.seasonLabel(modelData)
                 selected: modelData === root.currentSeason
-                onClicked: { root.seasonRequested(modelData); root.showingSeasons = false; episodes.forceActiveFocus() }
+                onClicked: {
+                    root.expandedKey = ""
+                    root.seasonRequested(modelData)
+                    root.showingSeasons = false
+                }
                 contentItem: RowLayout {
                     spacing: theme.dp(10)
                     RedesignIcon { Layout.leftMargin: theme.dp(12); Layout.preferredWidth: theme.dp(20); Layout.preferredHeight: theme.dp(20); name: modelData === root.currentSeason ? "check" : ""; color: theme.accent }
@@ -149,6 +184,7 @@ FocusScope {
             Layout.fillWidth: true; Layout.fillHeight: true
             visible: !root.showingSeasons; clip: true
             model: root.episodesModel
+            onCountChanged: Qt.callLater(root.positionCurrentEntry)
             keyNavigationEnabled: true
             Keys.onReturnPressed: if (currentItem) currentItem.toggle()
             Keys.onEnterPressed: if (currentItem) currentItem.toggle()
