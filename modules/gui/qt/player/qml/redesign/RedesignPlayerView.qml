@@ -209,7 +209,7 @@ FocusScope {
         episodesOpen = false
         if (trackPopup) trackPopup.close()
         queueOpen = false
-        settingsPage = settingsPage === page ? "" : page
+        settingsPage = settingsPage.length > 0 ? "" : page
     }
     function toggleTracks(anchor, page) {
         episodesOpen = false
@@ -1035,14 +1035,6 @@ FocusScope {
                 onClicked: { root.toggleTracks(this, "subtitles"); root.subtitleTracksRequested(this) }
             }
             ChromeButton {
-                id: episodesButton
-                objectName: "episodesButton"
-                visible: root.episodesAvailable || root.presentationOnly || chromeLayout.editing
-                scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                iconName: "episodes"; text: qsTr("Episodes"); selected: root.episodesOpen
-                onClicked: root.toggleEpisodes()
-            }
-            ChromeButton {
                 id: playbackSettingsButton
                 rightPadding: selected ? 0 : theme.dp(2)
                 Layout.rightMargin: parent === originalToolbar ? theme.dp(8) : 0
@@ -1052,6 +1044,14 @@ FocusScope {
                 selectedIconName: "playback-settings-active"
                 selected: root.settingsPage.length > 0
                 onClicked: root.toggleSettings("playback")
+            }
+            ChromeButton {
+                id: episodesButton
+                objectName: "episodesButton"
+                visible: root.episodesAvailable || root.presentationOnly || chromeLayout.editing
+                scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                iconName: "episodes"; text: qsTr("Episodes"); selected: root.episodesOpen
+                onClicked: root.toggleEpisodes()
             }
             ChromeButton {
                 id: queueButton
@@ -1082,6 +1082,6 @@ FocusScope {
             title: titleControl, minimize: minimizeButton, maximize: maximizeButton, fullscreen: fullscreenButton, close: closeButton,
             previous: previousButton, play: playButton, next: nextButton, timeline: timelineControl,
             mute: muteButton, volume: volumeSlider, audio: audioButton, subtitles: subtitleButton,
-            episodes: episodesButton, settings: playbackSettingsButton, queue: queueButton})
+            settings: playbackSettingsButton, episodes: episodesButton, queue: queueButton})
     }
 }

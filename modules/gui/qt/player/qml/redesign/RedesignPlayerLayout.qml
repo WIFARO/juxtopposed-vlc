@@ -22,7 +22,7 @@ QtObject {
             headerLeft: ["menu", "library", "divider:1", "folder"],
             headerCenter: ["title"], headerRight: ["minimize", "maximize", "fullscreen", "close"],
             footerLeft: ["previous", "play", "next"], footerCenter: ["timeline"],
-            footerRight: ["mute", "volume", "audio", "subtitles", "episodes", "settings", "queue"], above: []
+            footerRight: ["mute", "volume", "audio", "subtitles", "settings", "episodes", "queue"], above: []
         }}
     }
     function clone(value) { return JSON.parse(JSON.stringify(value)) }

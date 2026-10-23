@@ -32,6 +32,7 @@ TestCase {
         player.playerLayout = ""; player.layoutModel.reload()
         player.scaleFactor = 1; player.lightTheme = false
         player.libraryOpen = false; player.libraryExpanded = false
+        player.episodesAvailable = false; player.episodesOpen = false; player.settingsPage = ""
         player.fullscreen = false; player.controlsHideTimeout = 1800
         player.fullscreenControlsOpacity = 1
         player.maximized = false
@@ -50,6 +51,28 @@ TestCase {
         model.move("fullscreen", "footerRight", model.layout.zones.footerRight.length)
         tryVerify(() => item("mainMenuButton").parent.objectName === "customFooterLeft")
         tryVerify(() => Math.abs(point("seekBar").x - 104) < 1 && Math.abs(point("seekBar").y - 986) < 1)
+    }
+    function test_defaultEpisodesButtonSitsBetweenSettingsAndQueue() {
+        player.episodesAvailable = true
+        compare(player.layoutModel.layout.zones.footerRight.slice(-3), ["settings", "episodes", "queue"])
+        tryVerify(() => item("episodesButton").visible
+            && point("playbackSettingsButton").x + item("playbackSettingsButton").width <= point("episodesButton").x
+            && point("episodesButton").x + item("episodesButton").width <= point("queueButton").x)
+    }
+    function test_settingsButtonClosesEverySettingsPage_data() {
+        return ["playback", "video", "audio", "subtitles"].map(page => ({tag: page, page: page}))
+    }
+    function test_settingsButtonClosesEverySettingsPage(data) {
+        const button = item("playbackSettingsButton")
+        player.settingsPage = data.page
+        verify(button.selected)
+        mouseClick(button)
+        compare(player.settingsPage, "")
+        verify(!button.selected)
+        mouseClick(button)
+        compare(player.settingsPage, "playback")
+        mouseClick(button)
+        compare(player.settingsPage, "")
     }
     function test_alternateNavigationUsesReferenceDividerSpacing_data() {
         return [{tag: "normal", scale: 1}, {tag: "fractional", scale: 1.125}]
