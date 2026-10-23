@@ -23,6 +23,8 @@
 #include "../medialibrary/mlbasemodel.hpp"
 #include "../medialibrary/mlmedia.hpp"
 #include "../medialibrary/mlmediastore.hpp"
+#include "../medialibrary/mlfileartwork.hpp"
+#include "../util/artwork_store.hpp"
 #include "../medialibrary/mlfoldersmodel.hpp"
 #include "vlc_stub_modules.hpp"
 
@@ -358,6 +360,76 @@ private slots:
         m_env->mediaGet = {};
         m_env->mediaControl = {};
         m_env->mediaList = {};
+    }
+
+    void testArtworkPriorityCollageAndCancellation()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        QTemporaryDir directory;
+        const auto makeImage = [&](const QString& name, QColor color) {
+            QImage image(64, 64, QImage::Format_RGB32); image.fill(color);
+            return image.save(directory.filePath(name), "PNG");
+        };
+        QVERIFY(makeImage("a.png", Qt::red));
+        QVERIFY(makeImage("b.png", Qt::red)); // same picture in a different file
+        QVERIFY(makeImage("c.png", Qt::green));
+        QVERIFY(makeImage("d.png", Qt::blue));
+        QVERIFY(makeImage("e.png", Qt::yellow));
+        for (const auto& name : {"a", "b", "c", "d", "e"}) {
+            QFile file(directory.filePath(QString(name) + ".mkv")); QVERIFY(file.open(QIODevice::WriteOnly));
+        }
+        const auto folder = QUrl::fromLocalFile(directory.path());
+        const auto media = QUrl::fromLocalFile(directory.filePath("a.mkv"));
+        MLFileArtwork resolver;
+        resolver.setMediaLibrary(m_medialib.get());
+        QHash<QUrl, QString> results;
+        connect(&resolver, &MLFileArtwork::artworkChanged, this, [&](const QUrl& url, const QString& image) { results.insert(url, image); });
+        resolver.request(folder, true);
+        QTRY_VERIFY(results.contains(folder));
+        auto collage = ArtworkStore::read(QUrl(results.value(folder)).toLocalFile());
+        QVERIFY(!collage.isNull()); QCOMPARE(collage.size(), QSize(512,320));
+        QCOMPARE(collage.pixelColor(20, 20), QColor(Qt::red));
+        QCOMPARE(collage.pixelColor(500, 20), QColor(Qt::green));
+        QCOMPARE(collage.pixelColor(20, 300), QColor(Qt::blue));
+        QCOMPARE(collage.pixelColor(500, 300), QColor(Qt::yellow));
+        QSignalSpy saved(&resolver, &MLFileArtwork::selectionFinished);
+        resolver.setSelectedArtwork(folder, QUrl::fromLocalFile(directory.filePath("c.png")));
+        QTRY_COMPARE(saved.count(), 1); QVERIFY(saved[0][1].toBool());
+        results.clear(); resolver.request(folder, true);
+        QTRY_VERIFY(results.contains(folder));
+        QCOMPARE(ArtworkStore::read(QUrl(results.value(folder)).toLocalFile()).pixelColor(20, 20), QColor(Qt::green));
+        resolver.setSelectedArtwork(folder, {});
+        QTRY_COMPARE(saved.count(), 2); QVERIFY(saved[1][1].toBool());
+        const auto cleanup = qScopeGuard([folder] { ArtworkStore::save(folder, {}); });
+        resolver.clear(); results.clear();
+        resolver.request(media, true, "file:///missing/old-thumbnail.png");
+        QTRY_VERIFY(results.contains(media));
+        QCOMPARE(QUrl(results.value(media)).fileName(), "a.png");
+        resolver.clear(); results.clear();
+        resolver.request(folder, true); resolver.clear();
+        QTest::qWait(100); QVERIFY(results.isEmpty());
+    }
+
+    void testArtworkMissingChildAndFolderOverride()
+    {
+        QTemporaryDir directory;
+        QFile missing(directory.filePath("a.mkv")); QVERIFY(missing.open(QIODevice::WriteOnly)); missing.close();
+        QFile valid(directory.filePath("b.mkv")); QVERIFY(valid.open(QIODevice::WriteOnly)); valid.close();
+        QImage image(40, 40, QImage::Format_RGB32); image.fill(Qt::blue);
+        QVERIFY(image.save(directory.filePath("b.png")));
+        MLFileArtwork resolver; resolver.setMediaLibrary(m_medialib.get());
+        const auto folder = QUrl::fromLocalFile(directory.path());
+        QString result; bool finished = false;
+        connect(&resolver, &MLFileArtwork::artworkChanged, this, [&](const QUrl& url, const QString& image) {
+            if (url == folder) { result = image; finished = true; }
+        });
+        resolver.request(folder, true);
+        QTRY_VERIFY(finished); QVERIFY(!result.isEmpty());
+        QCOMPARE(ArtworkStore::read(QUrl(result).toLocalFile()).pixelColor(20, 20), QColor(Qt::blue));
+        resolver.clear(); finished = false;
+        image.fill(Qt::red); QVERIFY(image.save(directory.filePath("folder.png")));
+        resolver.request(folder, true);
+        QTRY_VERIFY(finished); QCOMPARE(QUrl(result).fileName(), "folder.png");
     }
 
     void testMetadataBatchesReplaceQueuedRequestsAndKeepTheUiResponsive()

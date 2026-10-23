@@ -507,6 +507,8 @@ qt_plugin_sources = files(
     'util/playlist_cover_store.hpp',
     'util/track_matching.hpp',
     'util/media_identity.hpp',
+    'util/artwork_discovery.hpp',
+    'util/artwork_store.hpp',
     'util/media_identity_ml.hpp',
     'util/media_fingerprint.hpp',
     'util/media_identity_vlc.hpp',
@@ -1627,6 +1629,14 @@ if qt6_dep.found()
             'link_args': qt_link_args,
         }
         vlc_tests += {
+            'name': 'test_qt_artwork_discovery',
+            'sources': files('tests/test_artwork_discovery.cpp'),
+            'moc_sources': files('tests/test_artwork_discovery.cpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+        }
+        vlc_tests += {
             'name': 'test_qt_media_identity',
             'sources': files('tests/test_media_identity.cpp'),
             'moc_sources': files('tests/test_media_identity.cpp'),
@@ -1771,6 +1781,7 @@ if qt6_dep.found()
                 'medialibrary/medialib.cpp',
                 'medialibrary/mlthreadpool.cpp',
                 'medialibrary/mlmediastore.cpp',
+                'medialibrary/mlfileartwork.cpp',
                 'medialibrary/mlfoldersmodel.cpp',
                 'medialibrary/mlhelper.cpp',
                 'playlist/playlist_controller.cpp',
@@ -1790,6 +1801,8 @@ if qt6_dep.found()
                 'medialibrary/medialib.hpp',
                 'medialibrary/mlthreadpool.hpp',
                 'medialibrary/mlmediastore.hpp',
+                'medialibrary/mlfileartwork.hpp',
+                'util/asynctask.hpp',
                 'medialibrary/mlfoldersmodel.hpp',
                 'playlist/playlist_controller.hpp',
                 'playlist/playlist_item.hpp',

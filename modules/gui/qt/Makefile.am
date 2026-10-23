@@ -344,7 +344,7 @@ libqt_plugin_la_SOURCES = \
 	util/color_scheme_model.cpp util/color_scheme_model.hpp \
 	util/redesign_widget_theme.cpp util/redesign_widget_theme.hpp \
 	util/playlist_cover_store.hpp \
-	util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp util/media_identity_vlc.hpp util/media_identity_ml.hpp util/subtitle_matching.hpp \
+	util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp util/media_identity_vlc.hpp util/media_identity_ml.hpp util/artwork_discovery.hpp util/artwork_store.hpp util/subtitle_matching.hpp \
 	util/local_file_url.hpp \
 	util/gettext_translator.cpp util/gettext_translator.hpp \
 	util/interface_translator.cpp util/interface_translator.hpp \
@@ -2120,6 +2120,7 @@ test_ml_model_SOURCES = \
 	medialibrary/medialib.hpp medialibrary/medialib.cpp \
 	medialibrary/mlthreadpool.hpp medialibrary/mlthreadpool.cpp \
 	medialibrary/mlmediastore.hpp medialibrary/mlmediastore.cpp \
+	medialibrary/mlfileartwork.hpp medialibrary/mlfileartwork.cpp util/asynctask.hpp \
 	medialibrary/mlfoldersmodel.hpp medialibrary/mlfoldersmodel.cpp \
 	medialibrary/mlhelper.hpp medialibrary/mlhelper.cpp \
 	playlist/playlist_controller.hpp playlist/playlist_controller.cpp \
@@ -2136,6 +2137,7 @@ nodist_test_ml_model_SOURCES = \
 	medialibrary/medialib.moc.cpp \
 	medialibrary/mlthreadpool.moc.cpp \
 	medialibrary/mlmediastore.moc.cpp \
+	medialibrary/mlfileartwork.moc.cpp util/asynctask.moc.cpp \
 	medialibrary/mlfoldersmodel.moc.cpp \
 	playlist/playlist_controller.moc.cpp \
 	playlist/playlist_item.moc.cpp
@@ -2534,6 +2536,17 @@ test_qt_navigation_model_LDADD = $(QT_QTEST_COMMON_ldadd)
 test_qt_navigation_model_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_qt_navigation_model
 TESTS += test_qt_navigation_model
+
+check_PROGRAMS += test_qt_artwork_discovery
+TESTS += test_qt_artwork_discovery
+test_qt_artwork_discovery_SOURCES = tests/test_artwork_discovery.cpp util/artwork_discovery.hpp util/artwork_store.hpp util/media_identity.hpp
+nodist_test_qt_artwork_discovery_SOURCES = tests/test_artwork_discovery.moc
+BUILT_SOURCES += tests/test_artwork_discovery.moc
+CLEANFILES += tests/test_artwork_discovery.moc
+test_qt_artwork_discovery_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_artwork_discovery_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_artwork_discovery_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_qt_artwork_discovery_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 
 
 endif
