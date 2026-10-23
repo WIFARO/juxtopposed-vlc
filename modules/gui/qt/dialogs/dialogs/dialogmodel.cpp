@@ -27,6 +27,7 @@
 #include "qt.hpp"
 #include <QThread>
 #include <QScopeGuard>
+#include <atomic>
 
 #include "maininterface/mainctx.hpp"
 
@@ -290,6 +291,10 @@ void DialogErrorModel::resetRepeatedMessageCount()
 
 // Native callback strings only remain valid until their callback returns.
 namespace {
+// Queued UI replies can outlive a model instance. Keep handles distinct after
+// recreation as well as when the native allocator reuses an address.
+std::atomic<quint64> dialogSerial{0};
+
 void onDialogLogin(void *data, vlc_dialog_id *id, const char *title,
                    const char *text, const char *username, bool askStore)
 {
@@ -481,7 +486,7 @@ void VLCDialogModel::dialogCallback(vlc_dialog_id *nativeId, DialogEvent event,
         if (event == DialogEvent::Request)
         {
             Q_ASSERT(!m_dialogs.contains(nativeId));
-            handle = DialogId(nativeId, ++m_dialogSerial);
+            handle = DialogId(nativeId, dialogSerial.fetch_add(1, std::memory_order_relaxed) + 1);
             m_dialogs.insert(nativeId, {handle, 0});
             while (!m_provider && !m_shuttingDown && !onGuiThread)
                 m_providerWait.wait(&m_lock);

@@ -634,6 +634,29 @@ private slots:
         m_dialog->dismiss(newHandle);
     }
 
+    void testStaleHandleCannotCrossModelRecreation() {
+        VLCDialogModel::getInstance<false>()->setProvider(m_dialog);
+        auto *first = vlc_dialog_display_progress(m_intf, false, 0.25f,
+                                                  "Cancel", "Before restart", "Work");
+        QVERIFY(first);
+        const auto oldHandle = m_progressSpy->last()[0].value<DialogId>();
+        m_dialog->dismiss(oldHandle);
+        vlc_dialog_release(m_intf, first);
+        VLCDialogModel::killInstance();
+        VLCDialogModel::getInstance(m_intf)->setProvider(m_dialog);
+        auto *second = vlc_dialog_display_progress(m_intf, false, 0.5f,
+                                                   "Cancel", "After restart", "Work");
+        QVERIFY(second);
+        const auto newHandle = m_progressSpy->last()[0].value<DialogId>();
+        const bool unique = newHandle.m_serial != oldHandle.m_serial;
+        m_dialog->dismiss(DialogId(second, oldHandle.m_serial));
+        const bool staleRejected = !vlc_dialog_is_cancelled(m_intf, second);
+        m_dialog->dismiss(newHandle);
+        vlc_dialog_release(m_intf, second);
+        QVERIFY2(unique, "Handles must stay distinct when the model is recreated");
+        QVERIFY(staleRejected);
+    }
+
     void testLateBinding() {
         QObject::connect(m_dialog, &VLCDialog::question, this,
                          [&](DialogId dialogId, const QString& ,

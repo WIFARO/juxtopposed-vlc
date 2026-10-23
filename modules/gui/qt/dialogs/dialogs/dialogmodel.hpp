@@ -249,7 +249,6 @@ private:
     };
     // Each entry owns the native UI reference until a reply or cancellation.
     QHash<vlc_dialog_id*, PendingDialog> m_dialogs;
-    quint64 m_dialogSerial = 0;
     QPointer<VLCDialog> m_provider;
     VLCDialog *m_providerIdentity = nullptr; // comparison only, never dereferenced
     quint64 m_providerGeneration = 0;
