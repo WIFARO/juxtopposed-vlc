@@ -110,6 +110,25 @@ static void player_on_state_changed(vlc_player_t *player,
     vlc_mutex_unlock( &p_vlm->lock_manage );
 }
 
+static void player_on_error_changed(vlc_player_t *player,
+                                    enum vlc_player_error error, void *data)
+{
+    if (error == VLC_PLAYER_ERROR_NONE)
+        return;
+
+    vlm_media_sys_t *media = data;
+    for (int i = 0; i < media->i_instance; ++i)
+    {
+        vlm_media_instance_sys_t *instance = media->instance[i];
+        if (instance->player == player)
+        {
+            vlm_SendEventMediaInstanceState(media->vlm, media->cfg.id,
+                media->cfg.psz_name, instance->psz_name, VLM_ERROR_S);
+            break;
+        }
+    }
+}
+
 static vlc_mutex_t vlm_mutex = VLC_STATIC_MUTEX;
 
 /*****************************************************************************
@@ -510,6 +529,7 @@ static vlm_media_instance_sys_t *vlm_MediaInstanceNew( vlm_media_sys_t *p_media,
 
     static struct vlc_player_cbs cbs = {
         .on_state_changed = player_on_state_changed,
+        .on_error_changed = player_on_error_changed,
     };
     vlc_player_Lock(p_instance->player);
     p_instance->listener =
@@ -594,6 +614,7 @@ static int vlm_ControlMediaInstanceStart( vlm_t *p_vlm, int64_t id, const char *
         {
             if (vlc_player_IsPaused(player))
                 vlc_player_Resume(player);
+            vlc_player_Unlock(player);
             return VLC_SUCCESS;
         }
 
