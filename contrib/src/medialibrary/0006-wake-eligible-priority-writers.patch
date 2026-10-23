@@ -1,0 +1,114 @@
+Subject: [PATCH] swmr: wake eligible writers when the last reader leaves
+
+Readers denied access by a priority reservation and writers waiting for
+existing readers use the same condition variable. notify_one can select an
+ineligible reader, which sleeps again while the eligible priority writer
+remains asleep forever. This blocks progress updates and player shutdown.
+Wake all waiters so the eligible thread can recheck its predicate.
+
+A regression queues a non-priority reader before a priority writer, then
+releases the last active reader and requires both workers to finish.
+
+---
+--- a/src/utils/SWMRLock.cpp
++++ b/src/utils/SWMRLock.cpp
+@@ -54,7 +54,10 @@
+     std::unique_lock<compat::Mutex> lock( m_lock );
+     --m_nbReader;
+     if ( m_nbReader == 0 && m_nbWriterWaiting > 0 )
+-        m_cond.notify_one();
++        // Readers and writers share this condition variable. A single wake-up
++        // may select a non-priority reader which must go back to sleep, leaving
++        // an eligible priority writer blocked with no remaining active reader.
++        m_cond.notify_all();
+ }
+ 
+ void SWMRLock::lock_write()
+--- /dev/null
++++ b/test/unittest/SWMRLockPriorityTests.cpp
+@@ -0,0 +1,65 @@
++// SPDX-License-Identifier: LGPL-2.1-or-later
++#if HAVE_CONFIG_H
++#include "config.h"
++#endif
++#include "utils/SWMRLock.h"
++#include <chrono>
++#include <cstdlib>
++#include <future>
++#include <iostream>
++#include <thread>
++
++using namespace std::chrono_literals;
++using medialibrary::utils::SWMRLock;
++
++static void requireReady(std::future<void>& result, const char* operation)
++{
++    if (result.wait_for(2s) != std::future_status::ready) {
++        std::cerr << operation << " remained asleep after the last reader left\n";
++        // A failed lock test must not hang while joining its blocked threads.
++        std::_Exit(EXIT_FAILURE);
++    }
++    result.get();
++}
++
++int main()
++{
++    for (unsigned iteration = 0; iteration < 50; ++iteration) {
++        SWMRLock lock;
++        lock.lock_read();
++        std::promise<void> reserved, startWrite, readerStarted, writerDone, readerDone;
++        auto reservedFuture = reserved.get_future();
++        auto startWriteFuture = startWrite.get_future();
++        auto readerStartedFuture = readerStarted.get_future();
++        auto writerDoneFuture = writerDone.get_future();
++        auto readerDoneFuture = readerDone.get_future();
++        std::thread writer([&] {
++            lock.acquire_priority_access();
++            reserved.set_value();
++            startWriteFuture.wait();
++            lock.lock_write();
++            lock.unlock_write();
++            lock.release_priority_access();
++            writerDone.set_value();
++        });
++        requireReady(reservedFuture, "Priority reservation");
++        std::thread reader([&] {
++            readerStarted.set_value();
++            lock.lock_read();
++            lock.unlock_read();
++            readerDone.set_value();
++        });
++        requireReady(readerStartedFuture, "Reader start");
++        // Queue a reader excluded by the priority reservation before the writer.
++        std::this_thread::sleep_for(5ms);
++        startWrite.set_value();
++        std::this_thread::sleep_for(5ms);
++        lock.unlock_read();
++        // Waking only the excluded reader strands the eligible priority writer.
++        requireReady(writerDoneFuture, "Priority writer");
++        requireReady(readerDoneFuture, "Non-priority reader");
++        writer.join();
++        reader.join();
++    }
++    std::cout << "50 priority-writer handoffs completed\n";
++}
+--- a/meson.build
++++ b/meson.build
+@@ -202,6 +202,17 @@
+ 
+ endif
+ 
++# Exercise the lock independently of the parser backend and shared-library exports.
++if not get_option('tests').disabled()
++  swmr_priority_test = executable('swmr_priority_tests',
++    ['test/unittest/SWMRLockPriorityTests.cpp', 'src/utils/SWMRLock.cpp'],
++    include_directories: includes, dependencies: [threads_dep], build_by_default: false,
++  )
++  test('SWMR.PriorityWriterWakeup', swmr_priority_test,
++    timeout: 15, suite: ['unittest', 'SWMR'],
++  )
++endif
++
+ if libvlc_dep.found() and not get_option('tests').disabled()
+   subdir('test')
+ endif
