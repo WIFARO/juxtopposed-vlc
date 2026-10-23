@@ -85,7 +85,7 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
     infoTabW->insertTab( INFO_PANEL, IP, qtr( "Co&dec" ) );
     if( isMainInputInfo )
     {
-        ISP = new InputStatsPanel( infoTabW );
+        ISP = new InputStatsPanel( infoTabW, p_intf->p_mi );
         infoTabW->insertTab( INPUTSTATS_PANEL, ISP, qtr( "S&tatistics" ) );
     }
 
@@ -160,6 +160,13 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
         connect( THEMIM, &PlayerController::statisticsUpdated, this, [this](const input_stats_t &stats) {
             if (!MP->isInputLocked() && THEMIM->getInput() == displayedInput.get()) ISP->update(stats);
         } );
+        connect(THEMIM, &PlayerController::playingStateChanged, this, [this](PlayerController::PlayingState state) {
+            if (MP->isInputLocked() || THEMIM->getInput() != displayedInput.get()) return;
+            if (state == PlayerController::PLAYING_STATE_STARTED) ISP->clear();
+            if (state == PlayerController::PLAYING_STATE_STOPPED && displayedInput && displayedInput->p_stats)
+                ISP->update(*displayedInput->p_stats);
+            ISP->setStopped(state == PlayerController::PLAYING_STATE_STOPPED);
+        });
 
         p_item = SharedInputItem{ THEMIM->getInput() };
     }
@@ -245,12 +252,17 @@ void MediaInfoDialog::saveMeta()
 void MediaInfoDialog::updateAllTabs( const SharedInputItem& p_item )
 {
     if (!p_item || MP->isInputLocked()) return;
+    if (isMainInputInfo && displayedInput.get() != p_item.get()) ISP->clear();
     displayedInput = p_item;
     IP->update( p_item.get() );
     MP->update( p_item );
     EMP->update( p_item.get() );
 
-    if( isMainInputInfo && p_item->p_stats ) ISP->update( *p_item->p_stats );
+    if (isMainInputInfo)
+    {
+        if (p_item->p_stats) ISP->update(*p_item->p_stats);
+        ISP->setStopped(THEMIM->getPlayingState() == PlayerController::PLAYING_STATE_STOPPED);
+    }
 }
 
 void MediaInfoDialog::clearAllTabs()

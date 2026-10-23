@@ -59,6 +59,16 @@
 #include <QRegularExpression>
 #include <QMessageBox>
 #include <QEvent>
+#include <QClipboard>
+#include <QFrame>
+#include <QScrollArea>
+#include <QLocale>
+#include <cmath>
+#include <QKeyEvent>
+#include <QShortcut>
+#include <QScrollBar>
+#include <QSet>
+#include <algorithm>
 
 namespace {
 QLabel* translatedLabel(const char* source, QWidget* parent)
@@ -590,240 +600,497 @@ void ExtraMetaPanel::clear()
  * Third panel - Stream info
  * Display all codecs and muxers info that we could gather.
  **/
-InfoPanel::InfoPanel( QWidget *parent ) : QWidget( parent )
+InfoPanel::InfoPanel(QWidget *parent) : QWidget(parent)
 {
-     QGridLayout *layout = new QGridLayout(this);
-
-     InfoTree = new QTreeWidget(this);
-     InfoTree->setAccessibleName( qtr("Codec") );
-     InfoTree->setColumnCount( 1 );
-     InfoTree->header()->hide();
-     InfoTree->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
-     layout->addWidget(InfoTree, 0, 0 );
-     if (auto *translator = InterfaceTranslator::instance())
-         connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
-             InfoTree->setAccessibleName(qtr("Codec"));
-         });
+    setObjectName(QStringLiteral("codecInformation"));
+    auto *layout = new QVBoxLayout(this);
+    auto *tools = new QHBoxLayout;
+    filter = new QLineEdit(this);
+    filter->setObjectName(QStringLiteral("codecInformationFilter"));
+    filter->setClearButtonEnabled(true);
+    filter->installEventFilter(this);
+    copyButton = new QPushButton(this);
+    copyButton->setObjectName(QStringLiteral("copyCodecInformationButton"));
+    copyButton->installEventFilter(this);
+    tools->addWidget(filter, 1);
+    tools->addWidget(copyButton);
+    layout->addLayout(tools);
+    InfoTree = new QTreeWidget(this);
+    InfoTree->setObjectName(QStringLiteral("codecInformationTree"));
+    InfoTree->setColumnCount(2);
+    InfoTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    InfoTree->header()->setSectionResizeMode(0, QHeaderView::Interactive);
+    InfoTree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    InfoTree->header()->setStretchLastSection(true);
+    InfoTree->setTextElideMode(Qt::ElideRight);
+    InfoTree->installEventFilter(this);
+    layout->addWidget(InfoTree, 1);
+    emptyMessage = new QLabel(InfoTree->viewport());
+    emptyMessage->setObjectName(QStringLiteral("codecInformationEmpty"));
+    emptyMessage->setTextFormat(Qt::PlainText);
+    emptyMessage->setWordWrap(true);
+    emptyMessage->setAlignment(Qt::AlignCenter);
+    InfoTree->viewport()->installEventFilter(this);
+    // Empty-state text overlays the unused view without changing its size.
+    emptyMessage->setAttribute(Qt::WA_TransparentForMouseEvents);
+    connect(filter, &QLineEdit::textChanged, this, &InfoPanel::filterInformation);
+    connect(copyButton, &QPushButton::clicked, this, [this] { copyInformation(); });
+    auto *find = new QShortcut(QKeySequence::Find, this);
+    find->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(find, &QShortcut::activated, this, [this] { filter->setFocus(); filter->selectAll(); });
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, &InfoPanel::retranslate);
+    retranslate();
 }
 
-/**
- * Update the Codecs information on parent->update()
- **/
-void InfoPanel::update( input_item_t *p_item)
+void InfoPanel::retranslate()
 {
-    if( !p_item )
-    {
-        clear();
-        return;
-    }
+    InfoTree->setAccessibleName(qtr("Codec"));
+    InfoTree->setHeaderLabels({qtr("Property"), qtr("Value")});
+    filter->setPlaceholderText(qtr("Search codec information"));
+    filter->setAccessibleName(qtr("Search codec information"));
+    copyButton->setText(qtr("Copy information"));
+    filterInformation();
+}
 
-    InfoTree->clear();
-    QTreeWidgetItem *current_item = NULL;
-    QTreeWidgetItem *child_item = NULL;
-
-    vlc_mutex_locker locker( &p_item->lock );
-
-    for (auto &cat : vlc::from(p_item->categories, &info_category_t::node))
-    {
-        if (info_category_IsHidden(&cat))
-            continue;
-
-        current_item = new QTreeWidgetItem();
-        current_item->setText(0, qfu(cat.psz_name));
-        InfoTree->addTopLevelItem( current_item );
-
-        for (auto &info : vlc::from(cat.infos, &info_t::node))
+void InfoPanel::update(input_item_t *item)
+{
+    if (!item) { clear(); return; }
+    const bool sameInput = currentItem.get() == item;
+    if (!sameInput) filter->clear();
+    currentItem = SharedInputItem(item);
+    QSet<QString> collapsed;
+    QVector<QStringList> selected;
+    const int scroll = sameInput ? InfoTree->verticalScrollBar()->value() : 0;
+    if (sameInput)
+        for (int i = 0; i < InfoTree->topLevelItemCount(); ++i)
         {
-            child_item = new QTreeWidgetItem ();
-            child_item->setText(0, qfu(info.psz_name) + ": " + qfu(info.psz_value));
-            current_item->addChild(child_item);
+            auto *category = InfoTree->topLevelItem(i);
+            if (!category->isExpanded()) collapsed.insert(category->text(0));
+            for (int j = 0; j < category->childCount(); ++j)
+            {
+                auto *row = category->child(j);
+                if (row->isSelected()) selected.append({category->text(0), row->text(0), row->text(1)});
+            }
         }
-        current_item->setExpanded( true );
+    InfoTree->clear();
+    {
+        vlc_mutex_locker locker(&item->lock);
+        for (auto &category : vlc::from(item->categories, &info_category_t::node))
+        {
+            if (info_category_IsHidden(&category)) continue;
+            auto *group = new QTreeWidgetItem(InfoTree, {qfu(category.psz_name)});
+            group->setFirstColumnSpanned(true);
+            QFont heading = InfoTree->font();
+            heading.setWeight(QFont::DemiBold);
+            group->setFont(0, heading);
+            for (auto &info : vlc::from(category.infos, &info_t::node))
+            {
+                auto *row = new QTreeWidgetItem(group, {qfu(info.psz_name), qfu(info.psz_value)});
+                for (int column = 0; column < 2; ++column)
+                    row->setToolTip(column, QStringLiteral("<qt>%1</qt>").arg(row->text(column).toHtmlEscaped()));
+                row->setSelected(selected.contains({group->text(0), row->text(0), row->text(1)}));
+            }
+            group->setExpanded(!collapsed.contains(group->text(0)));
+        }
     }
+    filterInformation();
+    InfoTree->doItemsLayout();
+    InfoTree->verticalScrollBar()->setValue(scroll);
 }
 
-/**
- * Clear the tree
- **/
+void InfoPanel::filterInformation()
+{
+    const QString query = filter->text().trimmed();
+    bool any = false;
+    for (int i = 0; i < InfoTree->topLevelItemCount(); ++i)
+    {
+        auto *category = InfoTree->topLevelItem(i);
+        bool visible = false;
+        for (int j = 0; j < category->childCount(); ++j)
+        {
+            auto *row = category->child(j);
+            const bool match = query.isEmpty() || category->text(0).contains(query, Qt::CaseInsensitive)
+                || row->text(0).contains(query, Qt::CaseInsensitive) || row->text(1).contains(query, Qt::CaseInsensitive);
+            row->setHidden(!match);
+            visible |= match;
+        }
+        category->setHidden(!visible);
+        if (visible && !query.isEmpty()) category->setExpanded(true);
+        any |= visible;
+    }
+    copyButton->setEnabled(any);
+    emptyMessage->setText(InfoTree->topLevelItemCount() ? qtr("No matches.") : qtr("No codec information is available."));
+    emptyMessage->setGeometry(InfoTree->viewport()->rect().adjusted(16, 16, -16, -16));
+    emptyMessage->setVisible(!any);
+}
+
+void InfoPanel::copyInformation(bool selectionOnly)
+{
+    QStringList result;
+    const auto selectedItems = InfoTree->selectedItems();
+    const bool selected = selectionOnly && std::any_of(selectedItems.cbegin(), selectedItems.cend(), [](auto *item) {
+        return !item->isHidden() && (!item->parent() || !item->parent()->isHidden());
+    });
+    for (int i = 0; i < InfoTree->topLevelItemCount(); ++i)
+    {
+        auto *category = InfoTree->topLevelItem(i);
+        if (category->isHidden()) continue;
+        QStringList lines;
+        for (int j = 0; j < category->childCount(); ++j)
+        {
+            auto *row = category->child(j);
+            if (!row->isHidden() && (!selected || row->isSelected() || category->isSelected()))
+                lines << row->text(0) + QStringLiteral(": ") + row->text(1);
+        }
+        if (!lines.isEmpty())
+        {
+            if (!result.isEmpty()) result << QString();
+            result << category->text(0) << lines;
+        }
+    }
+    if (!result.isEmpty()) QApplication::clipboard()->setText(result.join(QLatin1Char('\n')));
+}
+
+bool InfoPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    if ((event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+        && (watched == InfoTree || watched == filter || watched == copyButton)
+        && static_cast<QKeyEvent *>(event)->matches(QKeySequence::Find))
+    {
+        if (event->type() == QEvent::KeyPress)
+        {
+            filter->setFocus();
+            filter->selectAll();
+        }
+        event->accept();
+        return true;
+    }
+    if (watched == InfoTree->viewport() && event->type() == QEvent::Resize)
+        emptyMessage->setGeometry(InfoTree->viewport()->rect().adjusted(16, 16, -16, -16));
+    if (watched == InfoTree && event->type() == QEvent::FontChange)
+    {
+        InfoTree->setIndentation(InfoTree->fontMetrics().height());
+        InfoTree->setColumnWidth(0, InfoTree->fontMetrics().horizontalAdvance(QStringLiteral("Audio sampling rate"))
+                                   + 3 * InfoTree->fontMetrics().height());
+    }
+    if (watched == filter && event->type() == QEvent::ShortcutOverride)
+    {
+        const auto *key = static_cast<QKeyEvent *>(event);
+        if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter
+            || (key->key() == Qt::Key_Escape && !filter->text().isEmpty()))
+        {
+            event->accept();
+            return true;
+        }
+    }
+    if (watched == InfoTree && event->type() == QEvent::ShortcutOverride
+        && static_cast<QKeyEvent *>(event)->matches(QKeySequence::Copy))
+    {
+        event->accept();
+        return true;
+    }
+    if (event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent *>(event);
+        if (watched == InfoTree && key->matches(QKeySequence::Copy))
+        {
+            copyInformation(true);
+            return true;
+        }
+        if (watched == filter && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter))
+        {
+            InfoTree->setFocus();
+            return true;
+        }
+        if (watched == filter && key->key() == Qt::Key_Escape && !filter->text().isEmpty())
+        {
+            filter->clear();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
 void InfoPanel::clear()
 {
+    currentItem.reset();
     InfoTree->clear();
+    filter->clear();
+    filterInformation();
 }
-
-/**
- * Save all the information to a file
- * Not yet implemented.
- **/
-/*
-void InfoPanel::saveCodecsInfo()
-{}
-*/
 
 /**
  * Fourth Panel - Stats
  * Displays the Statistics for reading/displaying in a tree
  */
-InputStatsPanel::InputStatsPanel( QWidget *parent ): QWidget( parent )
+InputStatsPanel::InputStatsPanel(QWidget *parent, MainCtx *context)
+    : QWidget(parent), ctx(context)
 {
-     QVBoxLayout *layout = new QVBoxLayout(this);
+    setObjectName(QStringLiteral("mediaStatistics"));
+    auto *layout = new QVBoxLayout(this);
+    auto *heading = new QHBoxLayout;
+    summary = new QLabel(this);
+    summary->setObjectName(QStringLiteral("statisticsStatus"));
+    summary->setWordWrap(true);
+    summary->setTextFormat(Qt::PlainText);
+    copyButton = new QPushButton(this);
+    copyButton->setObjectName(QStringLiteral("copyStatisticsButton"));
+    heading->addWidget(summary, 1);
+    heading->addWidget(copyButton, 0, Qt::AlignTop);
+    layout->addLayout(heading);
+    auto *scroll = new QScrollArea(this);
+    scroll->setObjectName(QStringLiteral("statisticsScrollArea"));
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    auto *content = new QWidget(scroll);
+    auto *body = new QVBoxLayout(content);
+    body->setContentsMargins(0, 0, 0, 0);
+    cards = new QGridLayout;
+    body->addLayout(cards);
+    body->addStretch(1);
+    scroll->setWidget(content);
+    layout->addWidget(scroll, 1);
 
-     QLabel *topLabel = translatedLabel( N_("Current media / stream statistics"), this );
-     topLabel->setWordWrap( true );
-     layout->addWidget( topLabel, 0 );
+    const auto section = [this, content](const char *name, QLabel *&title) {
+        auto *card = new QFrame(content);
+        card->setObjectName(QLatin1String(name));
+        card->setProperty("redesignCard", true);
+        auto *box = new QVBoxLayout(card);
+        title = new QLabel(card);
+        title->setProperty("redesignSectionHeading", true);
+        title->setTextFormat(Qt::PlainText);
+        title->setWordWrap(true);
+        box->addWidget(title);
+        auto *grid = new QGridLayout;
+        grid->setColumnStretch(0, 3);
+        grid->setColumnStretch(1, 2);
+        box->addLayout(grid);
+        return card;
+    };
+    inputCard = section("statisticsInput", inputHeading);
+    audioCard = section("statisticsAudio", audioHeading);
+    videoCard = section("statisticsVideo", videoHeading);
+    const auto row = [this](QWidget *card, const char *name, const char *unit, const char *objectName) {
+        auto *grid = qobject_cast<QGridLayout *>(card->layout()->itemAt(1)->layout());
+        auto *label = new QLabel(card);
+        label->setTextFormat(Qt::PlainText);
+        label->setWordWrap(true);
+        auto *value = new QLabel(card);
+        value->setObjectName(QLatin1String(objectName));
+        value->setProperty("redesignValue", true);
+        value->setTextFormat(Qt::PlainText);
+        value->setWordWrap(true);
+        value->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        value->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+        value->setFocusPolicy(Qt::StrongFocus);
+        value->installEventFilter(this);
+        const int index = grid->count() / 2;
+        grid->addWidget(label, index, 0);
+        grid->addWidget(value, index, 1);
+        label->setBuddy(value);
+        rows.append({name, unit, label, value,
+                     card == inputCard ? inputHeading : card == audioCard ? audioHeading : videoHeading});
+    };
+    row(inputCard, N_("Media data size"), "KiB", "statisticsReadBytes");
+    row(inputCard, N_("Input bitrate"), "kb/s", "statisticsInputBitrate");
+    row(inputCard, N_("Demuxed data size"), "KiB", "statisticsDemuxBytes");
+    row(inputCard, N_("Content bitrate"), "kb/s", "statisticsContentBitrate");
+    row(inputCard, N_("Discarded (corrupted)"), "", "statisticsCorrupted");
+    row(inputCard, N_("Dropped (discontinued)"), "", "statisticsDiscontinuity");
+    row(audioCard, N_("Decoded"), N_("blocks"), "statisticsDecodedAudio");
+    row(audioCard, N_("Played"), N_("buffers"), "statisticsPlayedAudio");
+    row(audioCard, N_("Lost"), N_("buffers"), "statisticsLostAudio");
+    row(videoCard, N_("Decoded"), N_("blocks"), "statisticsDecodedVideo");
+    row(videoCard, N_("Displayed"), N_("frames"), "statisticsDisplayedVideo");
+    row(videoCard, N_("Late"), N_("frames"), "statisticsLateVideo");
+    row(videoCard, N_("Lost"), N_("frames"), "statisticsLostVideo");
 
-     StatsTree = new QTreeWidget(this);
-     StatsTree->setColumnCount( 3 );
-     StatsTree->setHeaderHidden( true );
+    statsView = new VLCStatsView(inputCard);
+    statsView->setObjectName(QStringLiteral("statisticsBitrateGraph"));
+    inputCard->layout()->addWidget(statsView);
+    graphLegend = new QLabel(inputCard);
+    graphLegend->setWordWrap(true);
+    inputCard->layout()->addWidget(graphLegend);
+    for (auto *card : {inputCard, audioCard, videoCard})
+        static_cast<QVBoxLayout *>(card->layout())->addStretch(1);
 
-#define CREATE_TREE_ITEM( itemName, itemText, itemValue, unit ) {              \
-    itemName =                                                                 \
-      new QTreeWidgetItem((QStringList () << itemText << itemValue << unit )); \
-    itemName->setTextAlignment( 1 , Qt::AlignRight ) ; }
-
-#define CREATE_CATEGORY( catName, itemText ) {                           \
-    CREATE_TREE_ITEM( catName, itemText , "", "" );                      \
-    catName->setExpanded( true );                                        \
-    StatsTree->addTopLevelItem( catName );    }
-
-#define CREATE_AND_ADD_TO_CAT( itemName, itemText, itemValue, catName, unit ){ \
-    CREATE_TREE_ITEM( itemName, itemText, itemValue, unit );                   \
-    catName->addChild( itemName ); }
-
-    /* Create the main categories */
-    CREATE_CATEGORY( audio, qtr("Audio") );
-    CREATE_CATEGORY( video, qtr("Video") );
-    CREATE_CATEGORY( input, qtr("Input/Read") );
-
-    CREATE_AND_ADD_TO_CAT( read_media_stat, qtr("Media data size"),
-                           "0", input , "KiB" );
-    CREATE_AND_ADD_TO_CAT( input_bitrate_stat, qtr("Input bitrate"),
-                           "0", input, "kb/s" );
-    input_bitrate_graph = new QTreeWidgetItem();
-    input_bitrate_stat->addChild( input_bitrate_graph );
-    CREATE_AND_ADD_TO_CAT( demuxed_stat, qtr("Demuxed data size"), "0", input, "KiB") ;
-    CREATE_AND_ADD_TO_CAT( stream_bitrate_stat, qtr("Content bitrate"),
-                           "0", input, "kb/s" );
-    CREATE_AND_ADD_TO_CAT( corrupted_stat, qtr("Discarded (corrupted)"),
-                           "0", input, "" );
-    CREATE_AND_ADD_TO_CAT( discontinuity_stat, qtr("Dropped (discontinued)"),
-                           "0", input, "" );
-
-    CREATE_AND_ADD_TO_CAT( vdecoded_stat, qtr("Decoded"),
-                           "0", video, qtr("blocks") );
-    CREATE_AND_ADD_TO_CAT( vdisplayed_stat, qtr("Displayed"),
-                           "0", video, qtr("frames") );
-    CREATE_AND_ADD_TO_CAT( vlate_stat, qtr("Late"),
-                           "0", video, qtr("frames") );
-    CREATE_AND_ADD_TO_CAT( vlost_frames_stat, qtr("Lost"),
-                           "0", video, qtr("frames") );
-
-    CREATE_AND_ADD_TO_CAT( adecoded_stat, qtr("Decoded"),
-                           "0", audio, qtr("blocks") );
-    CREATE_AND_ADD_TO_CAT( aplayed_stat, qtr("Played"),
-                           "0", audio, qtr("buffers") );
-    CREATE_AND_ADD_TO_CAT( alost_stat, qtr("Lost"), "0", audio, qtr("buffers") );
-
-#undef CREATE_AND_ADD_TO_CAT
-#undef CREATE_CATEGORY
-#undef CREATE_TREE_ITEM
-
-    input->setExpanded( true );
-    video->setExpanded( true );
-    audio->setExpanded( true );
-
-    StatsTree->header()->setSectionResizeMode( 0, QHeaderView::ResizeToContents );
-    StatsTree->header()->setSectionResizeMode( 1, QHeaderView::ResizeToContents );
-
-    layout->addWidget(StatsTree, 4 );
-
-    statsView = new VLCStatsView( this );
-    statsView->setFrameStyle( QFrame::NoFrame );
-    statsView->setSizePolicy( QSizePolicy::Preferred, QSizePolicy::Fixed );
-    input_bitrate_graph->setSizeHint( 1, QSize(0, 100) );
-    graphLegend = new QLabel;
-    StatsTree->setItemWidget( input_bitrate_graph, 0, graphLegend );
-    StatsTree->setItemWidget( input_bitrate_graph, 1, statsView );
-    updateGraphLegend();
-    if (auto* translator = InterfaceTranslator::instance())
+    connect(copyButton, &QPushButton::clicked, this, &InputStatsPanel::copyStatistics);
+    if (auto *translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, &InputStatsPanel::retranslate);
+    if (ctx)
+    {
+        connect(ctx, &MainCtx::intfScaleFactorChanged, this, &InputStatsPanel::updateLayout);
+        connect(ctx, &MainCtx::redesignAccentChanged, this, &InputStatsPanel::retranslate);
+    }
+    retranslate();
+    updateLayout();
 }
 
 void InputStatsPanel::retranslate()
 {
-    const struct { QTreeWidgetItem* item; const char* source; } labels[] = {
-        {audio, N_("Audio")}, {video, N_("Video")}, {input, N_("Input/Read")},
-        {read_media_stat, N_("Media data size")}, {input_bitrate_stat, N_("Input bitrate")},
-        {demuxed_stat, N_("Demuxed data size")}, {stream_bitrate_stat, N_("Content bitrate")},
-        {corrupted_stat, N_("Discarded (corrupted)")}, {discontinuity_stat, N_("Dropped (discontinued)")},
-        {vdecoded_stat, N_("Decoded")}, {vdisplayed_stat, N_("Displayed")},
-        {vlate_stat, N_("Late")}, {vlost_frames_stat, N_("Lost")},
-        {adecoded_stat, N_("Decoded")}, {aplayed_stat, N_("Played")}, {alost_stat, N_("Lost")}
-    };
-    for (const auto& label : labels) label.item->setText(0, qtr(label.source));
-    for (auto* item : {vdecoded_stat, adecoded_stat}) item->setText(2, qtr("blocks"));
-    for (auto* item : {vdisplayed_stat, vlate_stat, vlost_frames_stat}) item->setText(2, qtr("frames"));
-    for (auto* item : {aplayed_stat, alost_stat}) item->setText(2, qtr("buffers"));
-    updateGraphLegend();
+    inputHeading->setText(qtr("Input/Read"));
+    audioHeading->setText(qtr("Audio"));
+    videoHeading->setText(qtr("Video"));
+    copyButton->setText(qtr("Copy statistics"));
+    for (const auto &row : rows)
+    {
+        row.label->setText(qtr(row.name));
+        row.value->setAccessibleName(row.heading->text() + QStringLiteral(": ") + qtr(row.name));
+        QPalette colors = row.value->palette();
+        colors.setColor(QPalette::Highlight, ctx ? ctx->redesignAccent() : window()->palette().color(QPalette::Highlight));
+        colors.setColor(QPalette::HighlightedText, QColor(QStringLiteral("#161616")));
+        row.value->setPalette(colors);
+    }
+    statsView->setAccessibleName(qtr("Input bitrate"));
+    const auto help = qtr("The dashed line shows the average of the values in the graph.");
+    statsView->setToolTip(help);
+    statsView->setAccessibleDescription(help);
+    QPalette graphColors = palette();
+    graphColors.setColor(QPalette::Highlight, ctx ? ctx->redesignAccent() : window()->palette().color(QPalette::Highlight));
+    statsView->setPalette(graphColors);
+    statsView->update();
+    graphLegend->setText(QStringLiteral("<span style=\"color:%1\">● %2</span>　<span style=\"color:%3\">— %4</span>")
+        .arg(graphColors.color(QPalette::Highlight).name(), QString(qtr("Input bitrate") + QStringLiteral(" (kb/s)")).toHtmlEscaped(),
+             palette().color(QPalette::Text).name(), qtr("Average").toHtmlEscaped()));
+    updateValues();
 }
 
-void InputStatsPanel::updateGraphLegend()
+void InputStatsPanel::updateLayout()
 {
-    if (!graphLegend) return;
-    graphLegend->setText(QStringLiteral("<font style=\"color:%1\">%2</font><br/>%3")
-        .arg(palette().color(QPalette::Highlight).name(),
-             qtr("Last 60 seconds").toHtmlEscaped(), qtr("Overall").toHtmlEscaped()));
+    const auto dp = [this](int value) { return qRound(value * (ctx ? ctx->getIntfScaleFactor() : 1.)); };
+    auto *outer = static_cast<QVBoxLayout *>(layout());
+    outer->setSpacing(dp(12));
+    outer->itemAt(0)->layout()->setSpacing(dp(12));
+    copyButton->setFixedHeight(dp(32));
+    statsView->setFixedHeight(dp(144));
+    const bool compact = width() < dp(620);
+    while (auto *item = cards->takeAt(0)) delete item;
+    cards->setContentsMargins(0, 0, 0, 0);
+    cards->setSpacing(dp(16));
+    cards->setColumnStretch(0, 1);
+    cards->setColumnStretch(1, compact ? 0 : 1);
+    cards->addWidget(inputCard, 0, 0, compact ? 1 : 2, 1);
+    cards->addWidget(audioCard, compact ? 1 : 0, compact ? 0 : 1);
+    cards->addWidget(videoCard, compact ? 2 : 1, compact ? 0 : 1);
+    for (auto *card : {inputCard, audioCard, videoCard})
+    {
+        card->layout()->setContentsMargins(dp(16), dp(16), dp(16), dp(16));
+        card->layout()->setSpacing(dp(8));
+        auto *grid = static_cast<QGridLayout *>(card->layout()->itemAt(1)->layout());
+        grid->setHorizontalSpacing(dp(12));
+        grid->setVerticalSpacing(dp(4));
+        for (int row = 0; row < grid->rowCount(); ++row) grid->setRowMinimumHeight(row, dp(28));
+    }
 }
 
-void InputStatsPanel::changeEvent(QEvent* event)
+bool InputStatsPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+        if (auto *label = qobject_cast<QLabel *>(watched);
+            label && static_cast<QKeyEvent *>(event)->matches(QKeySequence::Copy))
+        {
+            if (event->type() == QEvent::KeyPress)
+                QApplication::clipboard()->setText(label->hasSelectedText() ? label->selectedText() : label->text());
+            event->accept();
+            return true;
+        }
+    return QWidget::eventFilter(watched, event);
+}
+
+void InputStatsPanel::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateLayout();
+}
+
+void InputStatsPanel::changeEvent(QEvent *event)
 {
     QWidget::changeEvent(event);
-    if (event->type() == QEvent::PaletteChange) updateGraphLegend();
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::LocaleChange)
+        retranslate();
 }
 
-void InputStatsPanel::hideEvent( QHideEvent * event )
+void InputStatsPanel::updateValues()
 {
-    statsView->reset();
-    QWidget::hideEvent( event );
+    summary->setText(!hasSnapshot ? qtr("Play a file to show its statistics.")
+        : stopped ? qtr("Playback stopped. These are the final statistics.") : qtr("Media statistics"));
+    copyButton->setEnabled(hasSnapshot);
+    const auto integer = [this](uint64_t value) { return locale().toString(qulonglong(value)); };
+    const auto rate = [this](float value) {
+        return std::isfinite(value) && value >= 0 ? locale().toString(double(value) * 8000, 'f', 0)
+                                                : QStringLiteral("—");
+    };
+    const QStringList values = {
+        integer(snapshot.i_read_bytes / 1024), rate(snapshot.f_input_bitrate),
+        integer(snapshot.i_demux_read_bytes / 1024), rate(snapshot.f_demux_bitrate),
+        integer(snapshot.i_demux_corrupted), integer(snapshot.i_demux_discontinuity),
+        integer(snapshot.i_decoded_audio), integer(snapshot.i_played_abuffers), integer(snapshot.i_lost_abuffers),
+        integer(snapshot.i_decoded_video), integer(snapshot.i_displayed_pictures),
+        integer(snapshot.i_late_pictures), integer(snapshot.i_lost_pictures)
+    };
+    for (qsizetype i = 0; i < rows.size(); ++i)
+    {
+        const auto &row = rows[i];
+        row.value->setText(!hasSnapshot ? QStringLiteral("—") : values[i]
+            + (*row.unit ? QStringLiteral(" ") + qtr(row.unit) : QString()));
+    }
 }
 
-/**
- * Update the Statistics
- **/
-void InputStatsPanel::update( const input_stats_t& stats )
+void InputStatsPanel::showSnapshot()
 {
-    if ( !isVisible() ) return;
+    updateValues();
+    if (pendingGraphSample)
+    {
+        statsView->addValue(double(snapshot.f_input_bitrate) * 8000);
+        pendingGraphSample = false;
+    }
+}
 
+void InputStatsPanel::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    showSnapshot();
+}
 
-#define UPDATE_INT( widget, calc... ) \
-    { widget->setText( 1, QString::number( (qulonglong)calc ) ); }
+void InputStatsPanel::update(const input_stats_t &stats)
+{
+    snapshot = stats;
+    hasSnapshot = true;
+    pendingGraphSample = true;
+    if (isVisible()) showSnapshot();
+}
 
-#define UPDATE_FLOAT( widget, calc ) \
-    widget->setText( 1 , QString().setNum(calc, 'f', 0).leftJustified(6) )
-
-    UPDATE_INT( read_media_stat, (stats.i_read_bytes / 1024 ) );
-    UPDATE_FLOAT( input_bitrate_stat,  (float)(stats.f_input_bitrate *  8000 ));
-    UPDATE_INT( demuxed_stat,    (stats.i_demux_read_bytes / 1024 ) );
-    UPDATE_FLOAT( stream_bitrate_stat, (float)(stats.f_demux_bitrate *  8000 ));
-    UPDATE_INT( corrupted_stat,      stats.i_demux_corrupted );
-    UPDATE_INT( discontinuity_stat,  stats.i_demux_discontinuity );
-
-    statsView->addValue( stats.f_input_bitrate * 8000 );
-
-    /* Video */
-    UPDATE_INT( vdecoded_stat,     stats.i_decoded_video );
-    UPDATE_INT( vdisplayed_stat,   stats.i_displayed_pictures );
-    UPDATE_INT( vlate_stat,        stats.i_late_pictures );
-    UPDATE_INT( vlost_frames_stat, stats.i_lost_pictures );
-
-    /* Audio*/
-    UPDATE_INT( adecoded_stat, stats.i_decoded_audio );
-    UPDATE_INT( aplayed_stat,  stats.i_played_abuffers );
-    UPDATE_INT( alost_stat,    stats.i_lost_abuffers );
-
-#undef UPDATE_INT
-#undef UPDATE_FLOAT
+void InputStatsPanel::setStopped(bool value)
+{
+    stopped = value;
+    updateValues();
 }
 
 void InputStatsPanel::clear()
 {
+    stopped = false;
+    snapshot = {};
+    hasSnapshot = false;
+    pendingGraphSample = false;
+    statsView->reset();
+    updateValues();
+}
+
+void InputStatsPanel::copyStatistics()
+{
+    if (!hasSnapshot) return;
+    QStringList text;
+    QLabel *heading = nullptr;
+    for (const auto &row : rows)
+    {
+        if (row.heading != heading)
+        {
+            if (heading) text << QString();
+            heading = row.heading;
+            text << heading->text();
+        }
+        text << row.label->text() + QStringLiteral(": ") + row.value->text();
+    }
+    QApplication::clipboard()->setText(text.join(QLatin1Char('\n')));
 }

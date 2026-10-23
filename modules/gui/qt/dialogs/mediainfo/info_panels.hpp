@@ -33,6 +33,7 @@
 #include "util/shared_input_item.hpp"
 
 #include <vlc_common.h>
+#include <vlc_input_item.h>
 #include <QWidget>
 #include <QVector>
 #include <QPair>
@@ -134,39 +135,45 @@ class InputStatsPanel: public QWidget
 {
     Q_OBJECT
 public:
-    InputStatsPanel( QWidget * );
+    InputStatsPanel(QWidget *, MainCtx *);
 protected:
-    void hideEvent( QHideEvent * ) override;
-    void changeEvent( QEvent * ) override;
+    void showEvent(QShowEvent *) override;
+    bool eventFilter(QObject *, QEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
+    void changeEvent(QEvent *) override;
 private:
+    struct Row {
+        const char *name;
+        const char *unit;
+        QLabel *label;
+        QLabel *value;
+        QLabel *heading;
+    };
     void retranslate();
-    void updateGraphLegend();
-    QLabel *graphLegend = nullptr;
-    QTreeWidget *StatsTree;
-    QTreeWidgetItem *input;
-    QTreeWidgetItem *read_media_stat;
-    QTreeWidgetItem *input_bitrate_stat;
-    QTreeWidgetItem *input_bitrate_graph;
-    QTreeWidgetItem *demuxed_stat;
-    QTreeWidgetItem *stream_bitrate_stat;
-    QTreeWidgetItem *corrupted_stat;
-    QTreeWidgetItem *discontinuity_stat;
-
-    QTreeWidgetItem *video;
-    QTreeWidgetItem *vdecoded_stat;
-    QTreeWidgetItem *vdisplayed_stat;
-    QTreeWidgetItem *vlate_stat;
-    QTreeWidgetItem *vlost_frames_stat;
-    QTreeWidgetItem *vfps_stat;
-
-    QTreeWidgetItem *audio;
-    QTreeWidgetItem *adecoded_stat;
-    QTreeWidgetItem *aplayed_stat;
-    QTreeWidgetItem *alost_stat;
-
+    void updateLayout();
+    void updateValues();
+    void showSnapshot();
+    void copyStatistics();
+    QPointer<MainCtx> ctx;
+    QLabel *summary;
+    QPushButton *copyButton;
+    QWidget *inputCard;
+    QWidget *audioCard;
+    QWidget *videoCard;
+    QLabel *inputHeading;
+    QLabel *audioHeading;
+    QLabel *videoHeading;
+    QLabel *graphLegend;
+    QGridLayout *cards;
+    QVector<Row> rows;
     VLCStatsView *statsView;
+    input_stats_t snapshot{};
+    bool hasSnapshot = false;
+    bool pendingGraphSample = false;
+    bool stopped = false;
 public slots:
-    void update(const input_stats_t &stats );
+    void update(const input_stats_t &);
+    void setStopped(bool);
     void clear();
 };
 
@@ -175,8 +182,17 @@ class InfoPanel: public QWidget
     Q_OBJECT
 public:
     InfoPanel( QWidget * );
+protected:
+    bool eventFilter(QObject *, QEvent *) override;
 private:
+    void retranslate();
+    void filterInformation();
+    void copyInformation(bool selectionOnly = false);
     QTreeWidget *InfoTree;
+    QLineEdit *filter;
+    QPushButton *copyButton;
+    QLabel *emptyMessage;
+    SharedInputItem currentItem;
 public slots:
     void update( input_item_t * );
     void clear();

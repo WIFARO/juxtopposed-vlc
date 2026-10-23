@@ -20,36 +20,23 @@
 #ifndef INFO_WIDGETS_HPP
 #define INFO_WIDGETS_HPP
 
-#include <QGraphicsView>
+#include <QWidget>
+#include <QElapsedTimer>
+#include <QPointF>
+#include <QVector>
 
-class QGraphicsScene;
-class QGraphicsPolygonItem;
-class QGraphicsLineItem;
-
-class VLCStatsView: public QGraphicsView
+class VLCStatsView: public QWidget
 {
     Q_OBJECT
-
 public:
-    VLCStatsView( QWidget * );
-    void addValue( float );
+    VLCStatsView(QWidget *);
+    void addValue(double);
     void reset();
-
 protected:
-    void changeEvent( QEvent * ) override;
-
+    void paintEvent(QPaintEvent *) override;
 private:
-    void updateColors();
-    void addHistoryValue( float );
-    void drawRulers( const QRectF & );
-    QGraphicsScene *viewScene;
-    QGraphicsPolygonItem *totalbitrateShape = nullptr;
-    QGraphicsPolygonItem *historyShape = nullptr;
-    QGraphicsLineItem *rulers[3] = {};
-    unsigned int historymergepointer;
-    unsigned int blocksize;
-    float valuesaccumulator;
-    unsigned int valuesaccumulatorcount;
+    QElapsedTimer clock;
+    QVector<QPointF> samples;
 };
 
 #endif // INFO_WIDGETS_HPP

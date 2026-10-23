@@ -21,187 +21,99 @@
 #include "qt.hpp"
 #include "info_widgets.hpp"
 
-#include <QLabel>
-#include <QGraphicsView>
-#include <QGraphicsScene>
-#include <QPolygonF>
-#include <QGraphicsPolygonItem>
-#include <QGraphicsLineItem>
-#include <QEvent>
+#include <QPainter>
+#include <QPainterPath>
+#include <QLocale>
+#include <algorithm>
+#include <cmath>
 
-#define STATS_LENGTH 60
-#define ADD_LABEL(row, color, text) \
-label = new QLabel( QString( "<font color=\"%1\">%2</font>" ) \
-                    .arg( color.name() ) \
-                    .arg( text ) \
-                    ); \
-layout->addWidget( label, row, 0, 1, 1, 0 );
-
-VLCStatsView::VLCStatsView( QWidget *parent ) : QGraphicsView( parent )
+VLCStatsView::VLCStatsView(QWidget *parent) : QWidget(parent)
 {
-    QColor history(0, 0, 0, 255),
-        total(237, 109, 0, 160);
-
-    scale( 1.0, -1.0 ); /* invert our Y axis */
-    setOptimizationFlags( QGraphicsView::DontAdjustForAntialiasing );
-    setAlignment( Qt::AlignLeft );
-    setVerticalScrollBarPolicy( Qt::ScrollBarAlwaysOff );
-    setHorizontalScrollBarPolicy( Qt::ScrollBarAlwaysOff );
-    viewScene = new QGraphicsScene( this );
-    historyShape = viewScene->addPolygon( QPolygonF(), QPen(Qt::NoPen),
-                                             QBrush(history) );
-    totalbitrateShape = viewScene->addPolygon( QPolygonF(), QPen(Qt::NoPen),
-                                           QBrush(total) );
-    setScene( viewScene );
-    reset();
-
-    QPen linepen( Qt::DotLine );
-    linepen.setCosmetic( true );
-    linepen.setBrush( QBrush( QColor( 33, 33, 33 ) ) );
-    for ( int i=0; i<3; i++ )
-        rulers[i] = viewScene->addLine( QLineF(), linepen );
-    updateColors();
-}
-#undef ADD_LABEL
-
-void VLCStatsView::updateColors()
-{
-    if ( !historyShape || !totalbitrateShape )
-        return;
-    QColor history = palette().color( QPalette::Text );
-    history.setAlpha( 100 );
-    historyShape->setBrush( history );
-    QColor total = palette().color( QPalette::Highlight );
-    total.setAlpha( 160 );
-    totalbitrateShape->setBrush( total );
-    for ( auto *ruler : rulers )
-    {
-        if ( !ruler )
-            continue;
-        QPen pen = ruler->pen();
-        pen.setColor( history );
-        ruler->setPen( pen );
-    }
-}
-
-void VLCStatsView::changeEvent( QEvent *event )
-{
-    QGraphicsView::changeEvent( event );
-    if ( event->type() == QEvent::PaletteChange )
-        updateColors();
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    clock.start();
 }
 
 void VLCStatsView::reset()
 {
-    historymergepointer = 0;
-    blocksize = 4;
-    valuesaccumulator = 0;
-    valuesaccumulatorcount = 0;
-    historyShape->setPolygon( QPolygonF() );
-    totalbitrateShape->setPolygon( QPolygonF() );
+    samples.clear();
+    clock.restart();
+    update();
 }
 
-void VLCStatsView::addValue( float value )
+void VLCStatsView::addValue(double value)
 {
-    value /= 1000;
-
-    QPolygonF shape = totalbitrateShape->polygon();
-    if ( shape.count() > ( STATS_LENGTH + 2 ) ) /* keep only STATS_LENGTH samples */
-    {
-        shape.remove( 1 );
-        for(int i=1; i<( STATS_LENGTH + 2 ); i++)
-            ( (QPointF &) shape.at(i) ).setX( i - 1 ); /*move back values*/
-    }
-
-    int count = shape.count();
-    if ( count == 0 )
-    {
-        shape << QPointF( 0, 0 ); /* begin and close shape */
-        shape << QPointF( count, 0 );
-    }
-
-    shape.insert( shape.end() - 1, QPointF( count, value ) );
-    ( (QPointF &) shape.last() ).setX( count );
-    totalbitrateShape->setPolygon( shape );
-
-    addHistoryValue( value );
-
-    QRectF maxsizes = scene()->itemsBoundingRect();
-    maxsizes.setRight( STATS_LENGTH );
-    fitInView( maxsizes ); /* fix viewport */
-    drawRulers( maxsizes );
+    if (!std::isfinite(value) || value < 0) return;
+    const double now = clock.elapsed() / 1000.;
+    samples.append(QPointF(now, value));
+    // Keep the visible minute bounded even if updates arrive more often than
+    // the player's normal one-second statistics callback.
+    while (samples.size() > 600 || (!samples.isEmpty() && samples.front().x() < now - 60))
+        samples.removeFirst();
+    update();
 }
 
-void VLCStatsView::drawRulers( const QRectF &maxsizes )
+void VLCStatsView::paintEvent(QPaintEvent *)
 {
-    float height = maxsizes.height() * 1000;
-    int texp = 0;
-    while( height > 1.0 ) { height /= 10; texp++; }
-    height = 1.0;
-    while( texp-- ) height *= 10;
-    for ( int i=0; i<3; i++ )
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const auto metrics = fontMetrics();
+    const qreal padding = std::max(4, metrics.height() / 3);
+    qreal maximum = 1;
+    qreal average = 0;
+    for (const auto &sample : samples)
     {
-        float y = ( height / 5 ) * ( i + 1 ) / 1000;
-        rulers[i]->setLine( QLineF( 0, y, STATS_LENGTH, y ) );
+        maximum = std::max(maximum, sample.y());
+        average += sample.y() / samples.size();
     }
-}
-
-void VLCStatsView::addHistoryValue( float value )
-{
-    /* We keep a full history by creating virtual blocks for inserts, growing
-       by power of 2 when no more space is available. At this time, we also
-       free space by agregating the oldest values 2 by 2.
-       Each shown value finally being a mean of blocksize samples.
-    */
-    bool doinsert = false;
-    int next_blocksize = blocksize;
-    QPolygonF shape = historyShape->polygon();
-    int count = shape.count();
-    if ( count == 0 )
+    const QString top = locale().toString(maximum, 'g', 3);
+    const qreal left = std::min(width() * .35, metrics.horizontalAdvance(top) + padding);
+    const QRectF plot(left + padding, metrics.height() / 2. + padding,
+                      width() - left - 2 * padding, height() - metrics.height() * 1.5 - 2 * padding);
+    if (plot.width() <= 0 || plot.height() <= 0) return;
+    painter.setPen(palette().color(QPalette::Text));
+    painter.drawText(QRectF(0, plot.top() - metrics.height() / 2., left, metrics.height()),
+                     Qt::AlignRight | Qt::AlignVCenter, top);
+    painter.drawText(QRectF(0, plot.bottom() - metrics.height() / 2., left, metrics.height()),
+                     Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("0"));
+    const double end = samples.isEmpty() ? 0 : samples.back().x();
+    const double span = std::clamp(std::ceil(end / 10) * 10, 10., 60.);
+    painter.drawText(QRectF(plot.left(), plot.bottom() + padding, plot.width(), metrics.height()),
+                     Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("−%1 s").arg(int(span)));
+    painter.drawText(QRectF(plot.left(), plot.bottom() + padding, plot.width(), metrics.height()),
+                     Qt::AlignRight | Qt::AlignVCenter, qtr("Now"));
+    QPen grid(palette().color(QPalette::Mid));
+    grid.setStyle(Qt::DotLine);
+    painter.setPen(grid);
+    for (int i = 0; i <= 2; ++i)
     {
-        shape << QPointF( 0, 0 ); /* begin and close shape */
-        shape << QPointF( count, 0 );
+        const qreal y = plot.top() + plot.height() * i / 2;
+        painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y));
     }
-
-    valuesaccumulator += ( value / blocksize );
-    valuesaccumulatorcount++;
-
-    if ( valuesaccumulatorcount == blocksize )
-    {
-        valuesaccumulator = 0;
-        valuesaccumulatorcount = 0;
-        doinsert = true;
-    }
-
-    if ( doinsert )
-    {
-        if ( count > ( STATS_LENGTH + 2 ) )
-        {
-            float y = 0;
-            y += ((QPointF &) shape.at( historymergepointer + 1 )).y();
-            y += ((QPointF &) shape.at( historymergepointer + 2 )).y();
-            y /= 2;
-
-            /* merge */
-            shape.remove( historymergepointer + 2 );
-            ( (QPointF &) shape.at( historymergepointer + 1 ) ).setY( y );
-            for(int i=historymergepointer +1; i<( STATS_LENGTH + 2 ); i++)
-                ( (QPointF &) shape.at(i) ).setX( i - 1 ); /*move back values*/
-            historymergepointer++;
-            if ( historymergepointer > ( STATS_LENGTH - 1 ) )
-            {
-                historymergepointer = 0;
-                next_blocksize = ( blocksize << 1 );
-            }
-        }
-
-        shape.insert( shape.end() - 1, QPointF( count, value ) );
-        ( (QPointF &) shape.last() ).setX( count );
-    }
-    else
-        ( (QPointF &) shape.last() ).setX( count - 1 );
-
-    historyShape->setPolygon( shape );
-
-    blocksize = next_blocksize;
+    if (samples.isEmpty()) return;
+    const auto position = [&](const QPointF &sample) {
+        return QPointF(plot.left() + (sample.x() - end + span) / span * plot.width(),
+                       plot.bottom() - sample.y() / maximum * plot.height());
+    };
+    QPainterPath line;
+    line.moveTo(position(samples.front()));
+    for (qsizetype i = 1; i < samples.size(); ++i) line.lineTo(position(samples[i]));
+    QPainterPath area = line;
+    area.lineTo(plot.right(), plot.bottom());
+    area.lineTo(position(samples.front()).x(), plot.bottom());
+    area.closeSubpath();
+    painter.setClipRect(plot.adjusted(-1, -1, 1, 1));
+    QColor fill = palette().color(QPalette::Highlight);
+    fill.setAlpha(48);
+    painter.fillPath(area, fill);
+    QPen curve(palette().color(QPalette::Highlight));
+    curve.setWidthF(1.5);
+    painter.setPen(curve);
+    painter.drawPath(line);
+    painter.setBrush(palette().color(QPalette::Highlight));
+    painter.drawEllipse(position(samples.back()), 2, 2);
+    QPen mean(palette().color(QPalette::Text));
+    mean.setStyle(Qt::DashLine);
+    painter.setPen(mean);
+    const qreal y = plot.bottom() - average / maximum * plot.height();
+    painter.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y));
 }
