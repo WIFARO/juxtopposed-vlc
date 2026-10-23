@@ -22,6 +22,7 @@
 #include "util/shared_input_item.hpp"
 #include "util/playlist_cover_store.hpp"
 #include "util/track_matching.hpp"
+#include "util/media_identity_ml.hpp"
 #include "util/subtitle_matching.hpp"
 #include "util/local_file_url.hpp"
 #include "../../../misc/medialibrary/track_rules.hpp"
@@ -535,23 +536,8 @@ void MediaLib::trackAssignmentRows(const QVariantMap& target, bool subtitles, QJ
                     initial.append(trackStrings(target.value("runtimeTracks")));
                     initial.removeDuplicates();
                 }
-                QVariantMap metadata;
+                QVariantMap metadata = MediaIdentity::libraryMetadata(media.get(), url);
                 if (media) {
-                    metadata.insert("durationMs", qint64(media->i_duration));
-                    if (media->i_subtype == VLC_ML_MEDIA_SUBTYPE_MOVIE) {
-                        metadata.insert("type", "movie");
-                        if (media->i_year > 0) metadata.insert("year", media->i_year);
-                        metadata.insert("imdbId", qfu(media->movie.psz_imdb_id));
-                        // Filename-derived library titles carry no additional identity evidence.
-                        if (media->psz_title && qfu(media->psz_title) != url.fileName()
-                            && qfu(media->psz_title) != QFileInfo(url.fileName()).completeBaseName())
-                            metadata.insert("title", qfu(media->psz_title));
-                    } else if (media->i_subtype == VLC_ML_MEDIA_SUBTYPE_SHOW_EPISODE) {
-                        metadata.insert("type", "episode");
-                        metadata.insert("season", media->show_episode.i_season_number);
-                        metadata.insert("episode", media->show_episode.i_episode_nb);
-                        metadata.insert("tvdbId", qfu(media->show_episode.psz_tvdb_id));
-                    }
                     QVariantMap release;
                     QStringList languages;
                     if (media->p_tracks) for (const auto& track : ml_range_iterate<vlc_ml_media_track_t>(media->p_tracks)) {

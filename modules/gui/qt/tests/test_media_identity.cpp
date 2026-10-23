@@ -143,6 +143,38 @@ private slots:
         QVERIFY(file.open(QIODevice::WriteOnly)); QVERIFY(file.resize(1024)); file.close();
         QVERIFY(MediaFingerprint::openSubtitles(url).hash.isEmpty());
     }
+    void audioIdentityAndConflicts() {
+        const auto song = identify(QUrl("file:///music/Album/Disc%202/03%20-%20Artist%20-%20Song.flac"));
+        QCOMPARE(song.kind, Kind::MusicTrack); QCOMPARE(song.title, "Song"); QCOMPARE(song.artist, "Artist");
+        QCOMPARE(song.album, "Album"); QCOMPARE(song.disc, 2); QCOMPARE(song.track, 3);
+        QCOMPARE(parse("1984.flac").title, "1984");
+        const auto tags = identify(QUrl("file:///music/song.flac"), {{"title", "Correct title"}, {"artist", "Singer"},
+            {"album", "Record"}, {"albumArtist", "Various Artists"}, {"track", "2/12"}, {"disc", 1}});
+        QCOMPARE(tags.title, "Correct title"); QCOMPARE(tags.track, 2);
+        QCOMPARE(fromMap(toMap(tags)).albumArtist, "Various Artists");
+        QVERIFY(compare(tags, fromMap(toMap(tags))).strong);
+        auto other = tags; other.artist = "Someone else";
+        QVERIFY(compare(tags, other).conflict); QVERIFY(!compare(tags, other).strong);
+        other = tags; other.album = "Different album"; QVERIFY(compare(tags, other).conflict);
+        QVERIFY(!compare(parse("Song.flac"), parse("Song.flac")).strong);
+        QCOMPARE(parse("Book.m4b").kind, Kind::Audiobook);
+        for (auto kind : {Kind::Album, Kind::Artist, Kind::Podcast, Kind::PodcastEpisode, Kind::Audiobook}) {
+            Identity value; value.kind = kind; value.title = "Title";
+            QCOMPARE(fromMap(toMap(value)).kind, kind);
+        }
+    }
+    void podcastIdentity() {
+        const auto episode = identify(QUrl("file:///podcasts/Science.2026.10.23.mp3"),
+            {{"type", "podcastEpisode"}, {"title", "A conversation"}, {"series", "Science"},
+             {"guid", "episode-42"}, {"feedUrl", "https://example.com/feed"}, {"airDate", "2026-10-23"}});
+        QCOMPARE(episode.kind, Kind::PodcastEpisode); QCOMPARE(episode.series, "Science");
+        QCOMPARE(episode.title, "A conversation"); QCOMPARE(episode.airDate, QDate(2026,10,23));
+        auto other = fromMap(toMap(episode));
+        QVERIFY(compare(episode, other).strong);
+        other.guid = "episode-43"; QVERIFY(compare(episode, other).conflict);
+        other = episode; other.series = "Other podcast"; QVERIFY(compare(episode, other).conflict);
+        auto track = episode; track.kind = Kind::MusicTrack; QVERIFY(compare(episode, track).conflict);
+    }
     void localMatchingKeepsAmbiguityGuards() {
         const QUrl film("file:///Dune.2021.1080p.WEB-DL.mkv"), subtitle("file:///Dune.2021.720p.BluRay.srt");
         QCOMPARE(TrackMatching::match({film},{subtitle}).value(film),QList<QUrl>{subtitle});

@@ -928,6 +928,24 @@ private slots:
         input_item_SetMeta(item.get(), vlc_meta_ShowName, nullptr);
         input_item_SetMeta(item.get(), vlc_meta_Episode, nullptr);
         QCOMPARE(MediaIdentity::inputMetadata(item.get()).value("year").toInt(), 2024);
+        input_item_SetMeta(item.get(), vlc_meta_Artist, "Artist");
+        input_item_SetMeta(item.get(), vlc_meta_Album, "Album");
+        input_item_SetMeta(item.get(), vlc_meta_AlbumArtist, "Album artist");
+        input_item_SetMeta(item.get(), vlc_meta_TrackNumber, "3/12");
+        input_item_SetMeta(item.get(), vlc_meta_DiscNumber, "2");
+        const auto audio = MediaIdentity::inputMetadata(item.get());
+        QCOMPARE(audio.value("artist").toString(), "Artist");
+        QCOMPARE(audio.value("album").toString(), "Album");
+        QCOMPARE(audio.value("track").toString(), "3/12");
+        input_item_SetMetaExtra(item.get(), "podcast", "1");
+        input_item_SetMetaExtra(item.get(), "purl", "https://example.com/feed");
+        input_item_SetMetaExtra(item.get(), "egid", "episode-3");
+        const auto podcast = MediaIdentity::inputMetadata(item.get());
+        QCOMPARE(podcast.value("type").toString(), "podcastEpisode");
+        QCOMPARE(podcast.value("series").toString(), "Album");
+        QCOMPARE(podcast.value("guid").toString(), "episode-3");
+        QVERIFY(!podcast.contains("year"));
+        QCOMPARE(podcast.value("airDate").toString(), "2024-03-15");
     }
 
     void testSubtitleMatchingUsesProviderFacts()

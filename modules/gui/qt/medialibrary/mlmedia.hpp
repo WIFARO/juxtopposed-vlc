@@ -27,6 +27,7 @@
 #include "qt.hpp"
 #include "mlqmltypes.hpp"
 #include "mlhelper.hpp"
+#include "util/media_identity_ml.hpp"
 #include "util/vlctick.hpp"
 
 #include <QObject>
@@ -71,11 +72,14 @@ public:
             m_discNumber = std::max(0, media->album_track.i_disc_nb);
         }
         m_mrl = getMRL();
+        m_identityMetadata = MediaIdentity::libraryMetadata(media, m_mrl);
         m_type = media->i_type;
         m_isFavorite = media->b_is_favorite;
         m_lastPlayedDate = QDateTime::fromSecsSinceEpoch(media->i_last_played_date, QTimeZone::systemTimeZone());
     }
 
+    QVariantMap identityMetadata() const { return m_identityMetadata; }
+    void setIdentityMetadata(const QVariantMap& metadata) { m_identityMetadata = metadata; }
     QString title() const { return m_title; }
     QString fileName() const { return m_fileName; }
     VLCDuration duration() const { return m_duration; }
@@ -117,6 +121,7 @@ protected:
         vlc_ml_thumbnail_status_t status = VLC_ML_THUMBNAIL_STATUS_MISSING;
     };
 
+    QVariantMap m_identityMetadata;
     QString m_title;
     QString m_fileName;
     MLThumbnail m_smallThumbnail;

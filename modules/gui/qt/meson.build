@@ -507,6 +507,7 @@ qt_plugin_sources = files(
     'util/playlist_cover_store.hpp',
     'util/track_matching.hpp',
     'util/media_identity.hpp',
+    'util/media_identity_ml.hpp',
     'util/media_fingerprint.hpp',
     'util/media_identity_vlc.hpp',
     'util/subtitle_matching.hpp',

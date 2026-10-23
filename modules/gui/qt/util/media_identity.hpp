@@ -14,7 +14,34 @@
 #include <numeric>
 
 namespace MediaIdentity {
-enum class Kind { Unknown, Movie, Episode };
+enum class Kind { Unknown, Movie, Episode, MusicTrack, Album, Artist, Podcast, PodcastEpisode, Audiobook };
+
+inline QString kindName(Kind kind)
+{
+    switch (kind) {
+    case Kind::Movie: return QStringLiteral("movie");
+    case Kind::Episode: return QStringLiteral("episode");
+    case Kind::MusicTrack: return QStringLiteral("musicTrack");
+    case Kind::Album: return QStringLiteral("album");
+    case Kind::Artist: return QStringLiteral("artist");
+    case Kind::Podcast: return QStringLiteral("podcast");
+    case Kind::PodcastEpisode: return QStringLiteral("podcastEpisode");
+    case Kind::Audiobook: return QStringLiteral("audiobook");
+    default: return QStringLiteral("unknown");
+    }
+}
+inline Kind kindFromName(const QString& name)
+{
+    for (auto kind : {Kind::Movie, Kind::Episode, Kind::MusicTrack, Kind::Album, Kind::Artist,
+                      Kind::Podcast, Kind::PodcastEpisode, Kind::Audiobook})
+        if (kindName(kind).compare(name, Qt::CaseInsensitive) == 0) return kind;
+    return Kind::Unknown;
+}
+inline bool isAudio(Kind kind)
+{
+    return kind == Kind::MusicTrack || kind == Kind::Album || kind == Kind::Artist
+        || kind == Kind::Podcast || kind == Kind::PodcastEpisode || kind == Kind::Audiobook;
+}
 
 struct Identity {
     Kind kind = Kind::Unknown;
@@ -29,6 +56,14 @@ struct Identity {
     QMap<QString, QString> release;
     QMap<QString, QString> provenance;
     QStringList conflicts;
+    QString artist;
+    QString albumArtist;
+    QString album;
+    QString series; // Podcast/feed title; separate from the episode title.
+    QString guid;
+    QString feedUrl;
+    int track = -1;
+    int disc = -1;
 };
 
 inline QString normalize(QString value)
@@ -58,14 +93,36 @@ inline bool genericTitle(const QString& title)
     return title.isEmpty() || generic.match(title).hasMatch();
 }
 
-inline Identity parse(QString name)
+inline Identity parse(QString name, Kind hint = Kind::Unknown)
 {
     Identity result;
     name = name.left(1024).normalized(QString::NormalizationForm_C).trimmed();
+    const auto extension = QFileInfo(name).suffix().toLower();
+    const bool audioFile = QStringList{"mp3", "flac", "m4a", "m4b", "aac", "ogg", "oga", "opus", "wav", "wma", "aiff", "ape", "alac"}.contains(extension);
+    if (hint == Kind::Unknown && audioFile) hint = extension == "m4b" ? Kind::Audiobook : Kind::MusicTrack;
+    if (isAudio(hint) && hint != Kind::PodcastEpisode) {
+        result.kind = hint;
+        if (audioFile) name = QFileInfo(name).completeBaseName();
+        // Only an explicit track prefix is removed; numeric titles remain titles.
+        const auto numbered = QRegularExpression(QStringLiteral("^(\\d{1,3})(?:[ ._-]+)(.+)$")).match(name);
+        if (hint == Kind::MusicTrack && numbered.hasMatch()) {
+            result.track = numbered.captured(1).toInt(); name = numbered.captured(2);
+        }
+        const auto parts = name.split(QStringLiteral(" - "));
+        if (hint == Kind::MusicTrack && parts.size() == 2) {
+            result.artist = displayTitle(parts[0]); name = parts[1];
+            result.provenance.insert("artist", "filename");
+        }
+        if (hint == Kind::MusicTrack && QRegularExpression(QStringLiteral("^\\d{1,3}$")).match(name).hasMatch()) result.track = name.toInt();
+        result.title = displayTitle(name);
+        if (genericTitle(result.title)) result.title.clear();
+        if (!result.title.isEmpty()) result.provenance.insert("title", "filename");
+        return result;
+    }
     // Release names need not have extensions. Do not remove arbitrary final dotted words.
     const auto originalName = name;
     name.remove(QRegularExpression(QStringLiteral(
-        "\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|srt|ass|ssa|vtt|sub|idx|smi)$"),
+        "\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|srt|ass|ssa|vtt|sub|idx|smi|mp3|m4a|ogg|opus|flac)$"),
         QRegularExpression::CaseInsensitiveOption));
     const bool hasExtension = name != originalName;
     const auto insensitive = QRegularExpression::CaseInsensitiveOption;
@@ -190,13 +247,22 @@ inline Identity parse(QString name)
     if (!result.title.isEmpty()) result.provenance.insert("title", "filename");
     if (result.year >= 0) result.provenance.insert("year", "filename");
     if (result.kind == Kind::Episode) result.provenance.insert("episode", "filename");
+    if (hint == Kind::PodcastEpisode) {
+        result.kind = hint;
+        result.series = result.title;
+        result.year = -1; // An episode's publication year does not identify its feed.
+    }
     return result;
 }
 
 inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const QString& source = QStringLiteral("metadata"))
 {
     const auto text = [&](const char* key) { return metadata.value(QLatin1String(key)).toString().trimmed(); };
+    const auto requestedKind = kindFromName(text("type"));
+    if (isAudio(requestedKind)) identity.kind = requestedKind;
+    const bool audio = isAudio(identity.kind);
     auto title = text("showName");
+    if (audio) title = text("title");
     // In episode metadata, Title commonly names the episode rather than the series.
     if (title.isEmpty() && (source == "user" || (identity.kind != Kind::Episode
         && text("type") != "episode" && !metadata.contains("episode")))) title = text("title");
@@ -208,7 +274,26 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
     }
     const auto type = text("type");
     if (type == "movie") identity.kind = Kind::Movie;
-    if (type == "episode" || !text("showName").isEmpty()) identity.kind = Kind::Episode;
+    if (!audio && (type == "episode" || !text("showName").isEmpty())) identity.kind = Kind::Episode;
+    for (const auto& field : {qMakePair("artist", &identity.artist), qMakePair("albumArtist", &identity.albumArtist),
+             qMakePair("album", &identity.album), qMakePair("series", &identity.series),
+             qMakePair("guid", &identity.guid), qMakePair("feedUrl", &identity.feedUrl)}) {
+        const auto value = text(field.first);
+        if (value.isEmpty()) continue;
+        if (!field.second->isEmpty() && normalize(*field.second) != normalize(value)) identity.conflicts.append(QLatin1String(field.first));
+        *field.second = value.left(1024); identity.provenance.insert(QLatin1String(field.first), source);
+    }
+    if (audio && identity.series.isEmpty() && !text("showName").isEmpty()) {
+        identity.series = text("showName"); identity.provenance.insert("series", source);
+    }
+    for (const auto& field : {qMakePair("track", &identity.track), qMakePair("disc", &identity.disc)}) {
+        bool ok = false;
+        const int number = text(field.first).section('/', 0, 0).toInt(&ok);
+        if (ok && number > 0 && number <= 9999) {
+            if (*field.second >= 0 && *field.second != number) identity.conflicts.append(QLatin1String(field.first));
+            *field.second = number; identity.provenance.insert(QLatin1String(field.first), source);
+        }
+    }
     for (const auto& key : {QStringLiteral("year"), QStringLiteral("season")}) {
         if (!metadata.contains(key)) continue;
         bool ok = false; const int number = metadata.value(key).toInt(&ok);
@@ -227,7 +312,7 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
         std::sort(episodes.begin(), episodes.end());
         if (!episodes.isEmpty()) {
             if (!identity.episodes.isEmpty() && identity.episodes != episodes) identity.conflicts.append("episode");
-            identity.episodes = episodes; identity.kind = Kind::Episode; identity.provenance.insert("episode", source);
+            identity.episodes = episodes; if (!audio) identity.kind = Kind::Episode; identity.provenance.insert("episode", source);
         }
     }
     const QMap<QString, QString> idKeys{{"imdbId", "imdb"}, {"seriesImdbId", "seriesImdb"},
@@ -242,19 +327,24 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
         if (it.value().contains("imdb", Qt::CaseInsensitive)) value.prepend("tt");
         identity.ids.insert(it.value(), value); identity.provenance.insert(it.value(), source);
     }
+    for (const auto& key : {QStringLiteral("musicBrainzTrackId"), QStringLiteral("musicBrainzAlbumId"), QStringLiteral("musicBrainzArtistId")}) {
+        const auto value = metadata.value(key).toString();
+        static const QRegularExpression uuid(QStringLiteral("^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$"));
+        if (uuid.match(value).hasMatch()) { identity.ids.insert(key, value.toLower()); identity.provenance.insert(key, source); }
+    }
     if (metadata.contains("absoluteEpisode")) {
         const auto absolute = metadata.value("absoluteEpisode").toString();
         static const QRegularExpression pattern(QStringLiteral("^\\d{1,4}(?:\\.\\d{1,2})?$"));
         if (absolute.isEmpty() || pattern.match(absolute).hasMatch()) {
             identity.absoluteEpisode = absolute;
-            if (!absolute.isEmpty()) { identity.kind = Kind::Episode; identity.provenance.insert("absoluteEpisode", source); }
+            if (!absolute.isEmpty()) { if (!audio) identity.kind = Kind::Episode; identity.provenance.insert("absoluteEpisode", source); }
         }
     }
     if (metadata.contains("airDate")) {
         const auto date = QDate::fromString(metadata.value("airDate").toString(), Qt::ISODate);
         if (date.isValid() || metadata.value("airDate").toString().isEmpty()) {
             identity.airDate = date;
-            if (date.isValid()) { identity.kind = Kind::Episode; identity.provenance.insert("airDate", source); }
+            if (date.isValid()) { if (!audio) identity.kind = Kind::Episode; identity.provenance.insert("airDate", source); }
         }
     }
     const auto release = metadata.value("release").toMap();
@@ -265,11 +355,22 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
 
 inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
 {
-    auto result = parse(url.fileName());
+    auto result = parse(url.fileName(), kindFromName(metadata.value("type").toString()));
     auto parent = url.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
     auto folder = parse(parent.fileName());
+    if (result.kind == Kind::MusicTrack) {
+        auto albumFolder = parent;
+        const auto disc = QRegularExpression(QStringLiteral("^(?:disc|disk|cd)[ ._-]*(\\d+)$"), QRegularExpression::CaseInsensitiveOption).match(parent.fileName());
+        if (disc.hasMatch()) {
+            result.disc = disc.captured(1).toInt();
+            albumFolder = parent.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash);
+        }
+        result.album = displayTitle(albumFolder.fileName());
+        if (!result.album.isEmpty()) result.provenance.insert("album", "folder");
+        // Artist folders are not proof of artist identity; tags or explicit names supply that.
+    }
     // Only consult nearby folders for incomplete identities. Never scan the filesystem.
-    if (result.title.isEmpty()) {
+    if (result.title.isEmpty() && !isAudio(result.kind)) {
         if (folder.kind == Kind::Episode && folder.title.isEmpty()) {
             if (result.season < 0) result.season = folder.season;
             folder = parse(parent.adjusted(QUrl::RemoveFilename | QUrl::StripTrailingSlash).fileName());
@@ -300,7 +401,10 @@ inline QVariantMap toMap(const Identity& identity)
     for (auto it = identity.release.cbegin(); it != identity.release.cend(); ++it) release.insert(it.key(), it.value());
     for (auto it = identity.provenance.cbegin(); it != identity.provenance.cend(); ++it) provenance.insert(it.key(), it.value());
     return {{"title", identity.title}, {"aliases", identity.aliases}, {"year", identity.year},
-        {"type", identity.kind == Kind::Movie ? "movie" : identity.kind == Kind::Episode ? "episode" : "unknown"},
+        {"type", kindName(identity.kind)},
+        {"artist", identity.artist}, {"albumArtist", identity.albumArtist}, {"album", identity.album},
+        {"series", identity.series}, {"guid", identity.guid}, {"feedUrl", identity.feedUrl},
+        {"track", identity.track}, {"disc", identity.disc},
         {"season", identity.season}, {"episodes", episodes}, {"absoluteEpisode", identity.absoluteEpisode},
         {"airDate", identity.airDate.toString(Qt::ISODate)}, {"ids", ids}, {"release", release},
         {"provenance", provenance}, {"conflicts", identity.conflicts}};
@@ -364,6 +468,37 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
     if (!target.episodes.isEmpty() && !candidate.episodes.isEmpty() && target.episodes != candidate.episodes) reject("episode");
     if (!target.absoluteEpisode.isEmpty() && !candidate.absoluteEpisode.isEmpty() && target.absoluteEpisode != candidate.absoluteEpisode) reject("absoluteEpisode");
     if (target.airDate.isValid() && candidate.airDate.isValid() && target.airDate != candidate.airDate) reject("airDate");
+    if (isAudio(target.kind) || isAudio(candidate.kind)) {
+        for (const auto& field : {qMakePair("artist", qMakePair(target.artist, candidate.artist)),
+                 qMakePair("albumArtist", qMakePair(target.albumArtist, candidate.albumArtist)),
+                 qMakePair("album", qMakePair(target.album, candidate.album)),
+                 qMakePair("series", qMakePair(target.series, candidate.series))})
+            if (!field.second.first.isEmpty() && !field.second.second.isEmpty()
+                && normalize(field.second.first) != normalize(field.second.second)) reject(QLatin1String(field.first));
+        if (target.track > 0 && candidate.track > 0 && target.track != candidate.track) reject("track");
+        if (target.disc > 0 && candidate.disc > 0 && target.disc != candidate.disc) reject("disc");
+        if (!target.guid.isEmpty() && !candidate.guid.isEmpty() && target.guid != candidate.guid) reject("guid");
+        if (!target.feedUrl.isEmpty() && !candidate.feedUrl.isEmpty() && target.feedUrl != candidate.feedUrl) reject("feedUrl");
+        result.exactTitle = !target.title.isEmpty() && normalize(target.title) == normalize(candidate.title);
+        const bool artist = (!target.artist.isEmpty() && normalize(target.artist) == normalize(candidate.artist))
+            || (!target.albumArtist.isEmpty() && normalize(target.albumArtist) == normalize(candidate.albumArtist));
+        const bool series = !target.series.isEmpty() && normalize(target.series) == normalize(candidate.series);
+        const bool guid = !target.guid.isEmpty() && target.guid == candidate.guid;
+        const bool feed = !target.feedUrl.isEmpty() && target.feedUrl == candidate.feedUrl;
+        const bool episode = (!target.episodes.isEmpty() && target.episodes == candidate.episodes)
+            || (target.airDate.isValid() && target.airDate == candidate.airDate);
+        const bool workId = result.agreements.contains("musicBrainzTrackId")
+            || (target.kind == Kind::Album && result.agreements.contains("musicBrainzAlbumId"))
+            || (target.kind == Kind::Artist && result.agreements.contains("musicBrainzArtistId"));
+        result.strong = !result.conflict && (workId || (result.exactTitle && artist)
+            || (target.kind == Kind::Podcast && feed && result.exactTitle)
+            || (target.kind == Kind::PodcastEpisode && ((guid && (feed || series)) || (series && result.exactTitle && episode))));
+        result.score = result.conflict ? 0 : workId || guid ? 120 : result.strong ? 90 : result.exactTitle ? 70 : 0;
+        if (result.exactTitle) result.agreements.append("title");
+        if (artist) result.agreements.append("artist");
+        if (series) result.agreements.append("series");
+        return result;
+    }
     double title = similarity(target.title, candidate.title);
     for (const auto& alias : candidate.aliases) title = std::max(title, similarity(target.title, alias));
     for (const auto& alias : target.aliases) title = std::max(title, similarity(alias, candidate.title));

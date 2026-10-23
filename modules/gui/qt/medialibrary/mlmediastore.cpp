@@ -31,7 +31,7 @@ static const char *UPDATE_QUEUE = "MLMEDIASTORE_UPDATEQUEUE";
 MLMediaStore::~MLMediaStore() = default;
 
 MLMediaStore::Details MLMediaStore::details(vlc_medialibrary_t* ml, const vlc_ml_media_t* media, bool audioMetadata,
-                                          QHash<int64_t, QString>* artists)
+                                          QHash<int64_t, QString>* artists, bool identityMetadata)
 {
     if (!media) return {};
     Details result {MLMedia(media), {}};
@@ -44,6 +44,16 @@ MLMediaStore::Details MLMediaStore::details(vlc_medialibrary_t* ml, const vlc_ml
             if (artist) result.artist = qfu(artist->psz_name);
             if (artists) artists->insert(id, result.artist);
         }
+    }
+    if (identityMetadata && media->i_subtype == VLC_ML_MEDIA_SUBTYPE_ALBUMTRACK && media->album_track.i_album_id > 0) {
+        auto metadata = result.media.identityMetadata();
+        if (!result.artist.isEmpty()) metadata.insert("artist", result.artist);
+        ml_unique_ptr<vlc_ml_album_t> album(vlc_ml_get_album(ml, media->album_track.i_album_id));
+        if (album) {
+            if (album->psz_title) metadata.insert("album", qfu(album->psz_title));
+            if (album->psz_artist) metadata.insert("albumArtist", qfu(album->psz_artist));
+        }
+        result.media.setIdentityMetadata(metadata);
     }
     return result;
 }
@@ -79,13 +89,13 @@ void MLMediaStore::insert(const QString &mrl, bool createMissing)
 
     m_ml->runOnMLThread<Ctx>(this,
     //ML thread
-    [mrl, createMissing, audioMetadata = m_readAudioMetadata](vlc_medialibrary_t *ml, Ctx &ctx)
+    [mrl, createMissing, audioMetadata = m_readAudioMetadata, identityMetadata = m_readIdentityMetadata](vlc_medialibrary_t *ml, Ctx &ctx)
     {
         ml_unique_ptr<vlc_ml_media_t> media {vlc_ml_get_media_by_mrl(ml, qtu(mrl))};
         if (!media && createMissing)
             media.reset(vlc_ml_new_external_media(ml, qtu(mrl)));
         if (media)
-            ctx = details(ml, media.get(), audioMetadata);
+            ctx = details(ml, media.get(), audioMetadata, nullptr, identityMetadata);
     },
     //UI thread
     [this, mrl, revision, generation = m_generation](quint64, Ctx &ctx)
@@ -262,10 +272,10 @@ void MLMediaStore::update(const MLItemId &id)
 
     m_ml->runOnMLThread<Ctx>(this,
     //ML thread
-    [id, audioMetadata = m_readAudioMetadata](vlc_medialibrary_t *ml, Ctx &ctx)
+    [id, audioMetadata = m_readAudioMetadata, identityMetadata = m_readIdentityMetadata](vlc_medialibrary_t *ml, Ctx &ctx)
     {
         ml_unique_ptr<vlc_ml_media_t> media {vlc_ml_get_media(ml, id.id)};
-        ctx = details(ml, media.get(), audioMetadata);
+        ctx = details(ml, media.get(), audioMetadata, nullptr, identityMetadata);
     },
     //UI thread
     [this, id, mrl, revision, generation = m_generation](quint64, Ctx &ctx)
