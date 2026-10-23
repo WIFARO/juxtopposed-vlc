@@ -280,6 +280,11 @@ QString ConvertDialog::extensionFor(const QString &input) const
 void ConvertDialog::profileChanged()
 {
     const auto nextMux = extensionFor(incomingMRLs.value(0));
+    if (nextMux.isEmpty())
+    {
+        validate();
+        return;
+    }
     if (singleFileSelected && !previousExtension.isEmpty())
     {
         auto path = outputPathText();

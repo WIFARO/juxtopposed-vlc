@@ -27,6 +27,8 @@
 #include "util/redesign_widget_theme.hpp"
 #include "util/interface_translator.hpp"
 #include "maininterface/mainctx.hpp"
+#include "util/colorizedsvgicon.hpp"
+#include "util/color_scheme_model.hpp"
 
 #include <QHBoxLayout>
 #include <QToolButton>
@@ -41,6 +43,13 @@
 #include <QListWidgetItem>
 #include <QFontMetrics>
 #include <QSignalBlocker>
+#include <QStyleHints>
+#include <QApplication>
+#include <QScrollArea>
+#include <QScreen>
+#include <QKeyEvent>
+#include <QLocale>
+#include <cmath>
 
 #include <cassert>
 #include <vlc_modules.h>
@@ -52,6 +61,8 @@
 namespace {
 constexpr int FilterNameRole = Qt::UserRole + 1;
 constexpr int FilterHelpRole = Qt::UserRole + 2;
+constexpr int MissingFilterRole = Qt::UserRole + 3;
+constexpr int OtherValueRole = Qt::UserRole + 1;
 }
 
 VLCProfileSelector::VLCProfileSelector( QWidget *_parent ): QWidget( _parent )
@@ -62,19 +73,26 @@ VLCProfileSelector::VLCProfileSelector( QWidget *_parent ): QWidget( _parent )
     layout->addWidget( prLabel );
 
     profileBox = new QComboBox( this );
-    layout->addWidget( profileBox );
+    profileBox->setObjectName(QStringLiteral("profileChoice"));
+    profileBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    profileBox->setMinimumContentsLength(8);
+    prLabel->setBuddy(profileBox);
+    layout->addWidget(profileBox, 1);
 
-    QToolButton *editButton = new QToolButton( this );
+    QToolButton *editButton = m_editButton = new QToolButton(this);
+    editButton->setObjectName(QStringLiteral("profileEdit"));
     editButton->setIcon( QIcon( ":/menu/preferences.svg" ) );
     editButton->setToolTip( qtr( "Edit selected profile" ) );
     layout->addWidget( editButton );
 
-    QToolButton *deleteButton = new QToolButton( this );
+    QToolButton *deleteButton = m_deleteButton = new QToolButton(this);
+    deleteButton->setObjectName(QStringLiteral("profileDelete"));
     deleteButton->setIcon( QIcon( ":/menu/clear.svg" ) );
-    deleteButton->setToolTip( qtr( "Delete selected profile" ) );
+    deleteButton->setToolTip( qtr("Remove selected profile") );
     layout->addWidget( deleteButton );
 
-    QToolButton *newButton = new QToolButton( this );
+    QToolButton *newButton = m_newButton = new QToolButton(this);
+    newButton->setObjectName(QStringLiteral("profileNew"));
     newButton->setIcon( QIcon( ":/menu/profile_new.svg" ) );
     newButton->setToolTip( qtr( "Create a new profile" ) );
     layout->addWidget(newButton);
@@ -84,17 +102,20 @@ VLCProfileSelector::VLCProfileSelector( QWidget *_parent ): QWidget( _parent )
     BUTTONACT( deleteButton, &VLCProfileSelector::deleteProfile );
     fillProfilesCombo();
 
-    connect( profileBox, QOverload<int>::of(&QComboBox::activated),
+    connect( profileBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
              this, &VLCProfileSelector::updateOptions );
-    updateOptions( qMax(profileBox->currentIndex(), 0) );
+    updateOptions(profileBox->currentIndex());
 
+    for (auto *button : {editButton, deleteButton, newButton}) button->setAccessibleName(button->toolTip());
+    updateActionIcons();
     if (auto* translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this,
                 [prLabel, editButton, deleteButton, newButton] {
             prLabel->setText(qtr("Profile"));
             editButton->setToolTip(qtr("Edit selected profile"));
-            deleteButton->setToolTip(qtr("Delete selected profile"));
+            deleteButton->setToolTip(qtr("Remove selected profile"));
             newButton->setToolTip(qtr("Create a new profile"));
+            for (auto *button : {editButton, deleteButton, newButton}) button->setAccessibleName(button->toolTip());
         });
 }
 
@@ -113,7 +134,36 @@ VLCProfileSelector::~VLCProfileSelector()
 
 void VLCProfileSelector::setThemeContext(MainCtx* ctx)
 {
+    if (m_themeContext == ctx) return;
     m_themeContext = ctx;
+    if (ctx)
+    {
+        connect(ctx, &MainCtx::intfScaleFactorChanged, this, &VLCProfileSelector::updateActionIcons);
+        connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, &VLCProfileSelector::updateActionIcons);
+        connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, &VLCProfileSelector::updateActionIcons);
+    }
+    updateActionIcons();
+}
+
+void VLCProfileSelector::updateActionIcons()
+{
+    QColor color = palette().color(QPalette::WindowText);
+    if (const auto ctx = m_themeContext)
+    {
+        const auto scheme = ctx->getColorScheme()->currentScheme();
+        const bool light = scheme == ColorSchemeModel::Day ||
+            (scheme == ColorSchemeModel::System && qApp->styleHints()->colorScheme() == Qt::ColorScheme::Light);
+        color = QColor(light ? "#404040" : "#8f8f8f");
+    }
+    const QString foreground = color.name();
+    const int size = qRound(20 * (m_themeContext ? m_themeContext->getIntfScaleFactor() : 1));
+    m_editButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/menu/preferences.svg"), {}, {}, {},
+        {{QStringLiteral("#747474"), foreground}}));
+    m_deleteButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/menu/redesign/remove.svg"), {}, {}, {},
+        {{QStringLiteral("#8f8f8f"), foreground}}));
+    m_newButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/menu/profile_new.svg"), {}, {}, {},
+        {{QStringLiteral("#747474"), foreground}, {QStringLiteral("#ff950d"), foreground}}));
+    for (auto *button : {m_editButton, m_deleteButton, m_newButton}) button->setIconSize(QSize(size,size));
 }
 
 inline void VLCProfileSelector::fillProfilesCombo()
@@ -126,6 +176,7 @@ inline void VLCProfileSelector::fillProfilesCombo()
 #endif
             QSettings::UserScope, "vlc", "vlc-qt-interface" );
 
+    const bool savedProfiles = settings.contains(QStringLiteral("codecs-profiles/size"));
     int i_size = settings.beginReadArray( "codecs-profiles" );
 
     for( int i = 0; i < i_size; i++ )
@@ -135,7 +186,7 @@ inline void VLCProfileSelector::fillProfilesCombo()
         profileBox->addItem( settings.value( "Profile-Name" ).toString(),
                 settings.value( "Profile-Value" ) );
     }
-    if( i_size == 0 )
+    if (i_size == 0 && !savedProfiles)
     {
         for( size_t i = 0; i < NB_PROFILE; i++ )
         {
@@ -158,45 +209,56 @@ void VLCProfileSelector::newProfile()
 
 void VLCProfileSelector::editProfile()
 {
+    if (profileBox->currentIndex() < 0) return;
     editProfilePrivate( profileBox->currentText(),
                  profileBox->itemData( profileBox->currentIndex() ).toString() );
 }
 
-void VLCProfileSelector::editProfilePrivate( const QString& qs, const QString& value )
+void VLCProfileSelector::editProfilePrivate(const QString& original, const QString& value)
 {
-    /* Create the Profile Editor */
-    QWidget* windowWidget = window();
-    QWindow* parentWindow = windowWidget ? windowWidget->windowHandle() : nullptr;
-    VLCProfileEditor *editor = new VLCProfileEditor( qs, value,  parentWindow );
-    applyRedesignWidgetTheme(editor, m_themeContext.data());
-
-    /* Show it */
-    if( QDialog::Accepted == editor->exec() )
+    QWidget *owner = window();
+    QStringList names;
+    for (int i = 0; i < profileBox->count(); ++i) names.append(profileBox->itemText(i));
+    VLCProfileEditor editor(original, value, owner ? owner->windowHandle() : nullptr,
+                            m_themeContext.data(), names);
+    if (editor.exec() != QDialog::Accepted) return;
     {
-        /* New Profile */
-        if( qs.isEmpty() )
-            profileBox->addItem( editor->name, QVariant( editor->transcodeValue() ) );
-        /* Update old profile */
+        const QSignalBlocker blocker(profileBox);
+        if (original.isEmpty())
+        {
+            profileBox->addItem(editor.name, editor.transcodeValue());
+            profileBox->setCurrentIndex(profileBox->count() - 1);
+        }
         else
         {
-            /* Look for the profile */
-            int i_profile = profileBox->findText( qs );
-            assert( i_profile != -1 );
-            profileBox->setItemText( i_profile, editor->name );
-            profileBox->setItemData( i_profile, editor->transcodeValue() );
-            /* Force mrl recreation */
-            updateOptions( i_profile );
+            const int index = profileBox->findText(original);
+            if (index < 0) return;
+            profileBox->setItemText(index, editor.name);
+            profileBox->setItemData(index, editor.transcodeValue());
         }
     }
-    delete editor;
-
+    updateOptions(profileBox->currentIndex());
     saveProfiles();
-    emit optionsChanged();
 }
 
 void VLCProfileSelector::deleteProfile()
 {
-    profileBox->removeItem( profileBox->currentIndex() );
+    const int index = profileBox->currentIndex();
+    if (index < 0) return;
+    const QString selected = profileBox->itemText(index);
+    QMessageBox question(QMessageBox::Question, qtr("Remove profile"),
+        qtr("Remove the profile \"%1\"?").arg(selected), QMessageBox::NoButton, window());
+    question.setTextFormat(Qt::PlainText);
+    auto *remove = question.addButton(qtr("&Remove"), QMessageBox::DestructiveRole);
+    question.setDefaultButton(question.addButton(QMessageBox::Cancel));
+    applyRedesignWidgetTheme(&question, m_themeContext.data());
+    question.exec();
+    if (question.clickedButton() != remove || profileBox->itemText(index) != selected) return;
+    {
+        const QSignalBlocker blocker(profileBox);
+        profileBox->removeItem(index);
+    }
+    updateOptions(profileBox->currentIndex());
     saveProfiles();
 }
 
@@ -219,13 +281,18 @@ void VLCProfileSelector::saveProfiles()
         settings.setValue( "Profile-Value", profileBox->itemData( i ).toString() );
     }
     settings.endArray();
+    settings.setValue("codecs-profiles-selected", profileBox->currentText());
 }
 
 void VLCProfileSelector::updateOptions( int i )
 {
-    QString options = profileBox->itemData( i ).toString();
+    mux.clear();
+    transcode.clear();
+    m_editButton->setEnabled(i >= 0 && i < profileBox->count());
+    m_deleteButton->setEnabled(i >= 0 && i < profileBox->count());
+    const QString options = profileBox->itemData(i).toString();
+    if (options.isEmpty()) { emit optionsChanged(); return; }
     QRegularExpression rx(QStringLiteral(OLDFORMAT));
-    if ( !options.contains( ";" ) ) return;
     if ( rx.match( options ).hasMatch() )
         return updateOptionsOldFormat( i );
 
@@ -240,11 +307,11 @@ void VLCProfileSelector::updateOptions( int i )
     /* Build a double hash structure because we need to make ordered lookups */
     foreach ( const QString &tuple, tuples )
     {
-        QStringList keyvalue = tuple.split( "=" );
-        if ( keyvalue.count() != 2 ) continue;
-        QString key = keyvalue[0];
-        value = keyvalue[1];
-        keyvalue = key.split( "_" );
+        const int equal = tuple.indexOf(QLatin1Char('='));
+        if (equal <= 0) continue;
+        QString key = tuple.left(equal);
+        value = tuple.mid(equal + 1);
+        QStringList keyvalue = key.split( "_" );
         if ( keyvalue.count() != 2 ) continue;
         QString categ = keyvalue[0];
         QString prop = keyvalue[1];
@@ -293,7 +360,7 @@ void VLCProfileSelector::updateOptions( int i )
             HASHPICK( "video", "filters" );
             if ( !value.isEmpty() )
             {
-                QStringList valuesList = QUrl::fromPercentEncoding( value.toLatin1() ).split( ";" );
+                QStringList valuesList = QUrl::fromPercentEncoding( value.toUtf8() ).split( ";" );
                 transcode.option( "vfilter", valuesList.join( ":" ) );
             }
 
@@ -308,7 +375,7 @@ void VLCProfileSelector::updateOptions( int i )
 
                 HASHPICK( "vcodec", "custom" );
                 if( !value.isEmpty() )
-                    codecoptions << QUrl::fromPercentEncoding( value.toLatin1() );
+                    codecoptions << QUrl::fromPercentEncoding( value.toUtf8() );
 
                 if ( codecoptions.count() )
                     transcode.option( "venc",
@@ -316,8 +383,8 @@ void VLCProfileSelector::updateOptions( int i )
             }
 
             HASHPICK( "vcodec", "framerate" );
-            if ( !value.isEmpty() && value.toInt() > 0 )
-                transcode.option( "fps", value );
+            if (!value.isEmpty() && value.toDouble() > 0)
+                transcode.option("fps", value);
 
             HASHPICK( "vcodec", "scale" );
             if ( !value.isEmpty() )
@@ -358,7 +425,7 @@ void VLCProfileSelector::updateOptions( int i )
 
                 HASHPICK( "audio", "filters" );
                 if ( !value.isEmpty() )
-                    audioFilters << QUrl::fromPercentEncoding( value.toLatin1() ).split( ";" );
+                    audioFilters << QUrl::fromPercentEncoding( value.toUtf8() ).split( ";" );
 
                 HASHPICK( "acodec", "gain" );
                 if ( !value.isEmpty() )
@@ -403,6 +470,7 @@ void VLCProfileSelector::updateOptions( int i )
 #undef HASHPICK
 
     cleanup:
+    if (mux.isEmpty()) transcode.clear();
     /* Temp hash tables cleanup */
     foreach( proptovalueHashType *hash, categtopropHash )
         delete hash;
@@ -413,8 +481,7 @@ void VLCProfileSelector::updateOptions( int i )
 void VLCProfileSelector::updateOptionsOldFormat( int i )
 {
     QStringList options = profileBox->itemData( i ).toString().split( ";" );
-    if( options.count() < 16 )
-        return;
+    if (options.count() < 16) { emit optionsChanged(); return; }
 
     mux = options[0];
 
@@ -468,66 +535,235 @@ void VLCProfileSelector::updateOptionsOldFormat( int i )
 /**
  * VLCProfileEditor
  **/
-VLCProfileEditor::VLCProfileEditor( const QString& qs_name, const QString& value,
-        QWindow *_parent )
-                 : QVLCDialog( _parent, NULL )
+VLCProfileEditor::VLCProfileEditor(const QString& original, const QString& value,
+        QWindow *parent, MainCtx *ctx, const QStringList& existingNames)
+    : QVLCDialog(parent, nullptr), m_themeContext(ctx), m_originalName(original), m_existingNames(existingNames)
 {
-    ui.setupUi( this );
-    setWindowTitle(qs_name.isEmpty() ? qtr("Create Profile") : qtr("Edit Profile"));
-    ui.buttonGroup->setObjectName( CATPROP2NAME( CATANDPROP( "muxer", "mux" ) ) );
-    if( !qs_name.isEmpty() )
-    {
-        ui.profileLine->setText( qs_name );
-        ui.profileLine->setReadOnly( true );
-    }
+    ui.setupUi(this);
+    setObjectName(QStringLiteral("redesignProfileEditor"));
+    setWindowRole("vlc-profile-editor");
+    ui.buttonGroup->setObjectName(CATPROP2NAME(CATANDPROP("muxer","mux")));
+    ui.profileLine->setText(original);
     loadCapabilities();
     registerCodecs();
     registerFilters();
-
-    QPushButton *saveButton = new QPushButton(
-                ( qs_name.isEmpty() ) ? qtr( "Create" ) : qtr( "Save" ) );
-    saveButton->setProperty("redesignPrimary", true);
-    saveButton->setDefault(true);
-    ui.buttonBox->addButton( saveButton, QDialogButtonBox::AcceptRole );
-    connect( ui.buttonBox, &QDialogButtonBox::accepted, this, &VLCProfileEditor::accept );
-    QPushButton *cancelButton = new QPushButton( qtr( "Cancel" ) );
-    ui.buttonBox->addButton( cancelButton, QDialogButtonBox::RejectRole );
-    connect( ui.buttonBox, &QDialogButtonBox::rejected, this, &VLCProfileEditor::reject );
-
-    connect( ui.valueholder_video_copy, &QtCheckboxChanged,
-             this, &VLCProfileEditor::activatePanels );
-    connect( ui.valueholder_audio_copy, &QtCheckboxChanged,
-             this, &VLCProfileEditor::activatePanels );
-    connect( ui.valueholder_subtitles_overlay, &QtCheckboxChanged,
-             this, &VLCProfileEditor::activatePanels );
-    connect( ui.valueholder_vcodec_bitrate, &QSpinBox::editingFinished,
-             this, &VLCProfileEditor::fixBirateState );
-    connect( ui.valueholder_vcodec_qp, &QSpinBox::editingFinished,
-             this, &VLCProfileEditor::fixQPState );
-    connect( ui.valueholder_video_codec, QOverload<int>::of(&QComboBox::currentIndexChanged),
-             this, &VLCProfileEditor::codecSelected );
+    for (auto *combo : findChildren<QComboBox*>())
+    {
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        combo->setMinimumContentsLength(8);
+    }
+    m_saveButton = new QPushButton(this);
+    m_saveButton->setObjectName(QStringLiteral("profileSave"));
+    m_saveButton->setProperty("redesignPrimary", true);
+    m_saveButton->setAutoDefault(false);
+    ui.buttonBox->addButton(m_saveButton, QDialogButtonBox::AcceptRole);
+    auto *cancel = new QPushButton(qtr("&Cancel"), this);
+    cancel->setObjectName(QStringLiteral("profileCancel"));
+    cancel->setAutoDefault(false);
+    ui.buttonBox->addButton(cancel, QDialogButtonBox::RejectRole);
+    connect(ui.buttonBox, &QDialogButtonBox::accepted, this, &VLCProfileEditor::accept);
+    connect(ui.buttonBox, &QDialogButtonBox::rejected, this, &VLCProfileEditor::reject);
+    connect(ui.valueholder_video_copy, &QtCheckboxChanged, this, &VLCProfileEditor::activatePanels);
+    connect(ui.valueholder_audio_copy, &QtCheckboxChanged, this, &VLCProfileEditor::activatePanels);
+    connect(ui.valueholder_subtitles_overlay, &QtCheckboxChanged, this, &VLCProfileEditor::activatePanels);
+    connect(ui.valueholder_vcodec_bitrate, &QSpinBox::editingFinished, this, &VLCProfileEditor::fixBirateState);
+    connect(ui.valueholder_vcodec_qp, &QSpinBox::editingFinished, this, &VLCProfileEditor::fixQPState);
+    connect(ui.valueholder_video_codec, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VLCProfileEditor::codecSelected);
     reset();
-
-    fillProfile( value );
+    fillProfile(value);
     muxSelected();
     codecSelected();
-
-    if (auto* translator = InterfaceTranslator::instance())
-        connect(translator, &InterfaceTranslator::languageChanged, this,
-                [this, editing = !qs_name.isEmpty(), saveButton, cancelButton] {
-            auto* scale = ui.valueholder_vcodec_scale;
-            const QString customScale = scale->currentText();
-            const bool hasCustomScale = customScale != scale->itemText(scale->currentIndex());
+    for (auto *group : {ui.valueholder_video_enable, ui.valueholder_audio_enable, ui.valueholder_subtitles_enable})
+        connect(group, &QGroupBox::toggled, this, &VLCProfileEditor::updateValidation);
+    for (auto *box : {ui.valueholder_video_copy, ui.valueholder_audio_copy})
+        connect(box, &QtCheckboxChanged, this, &VLCProfileEditor::updateValidation);
+    connect(ui.profileLine, &QLineEdit::textChanged, this, &VLCProfileEditor::updateValidation);
+    connect(ui.valueholder_vcodec_scale, &QComboBox::currentTextChanged, this, &VLCProfileEditor::updateValidation);
+    connect(ui.profileVideoFilterFind,&QLineEdit::textChanged,this,&VLCProfileEditor::updateFilterSearch);
+    connect(ui.profileAudioFilterFind,&QLineEdit::textChanged,this,&VLCProfileEditor::updateFilterSearch);
+    for (auto *list : {ui.valueholder_video_filters, ui.valueholder_audio_filters})
+    {
+        connect(list,&QListWidget::itemChanged,this,&VLCProfileEditor::updateFilterSearch);
+        list->installEventFilter(this);
+    }
+    ui.profileVideoFilterFind->installEventFilter(this);
+    ui.profileAudioFilterFind->installEventFilter(this);
+    updateEditorText();
+    applyRedesignWidgetTheme(this, ctx);
+    updateLayoutMetrics();
+    if (ctx) connect(ctx, &MainCtx::intfScaleFactorChanged, this, &VLCProfileEditor::updateLayoutMetrics);
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, [this,cancel] {
+            auto *scale = ui.valueholder_vcodec_scale;
+            const bool automatic = scaleValue() == QStringLiteral("0");
+            const QString previous = scale->currentText();
             const QSignalBlocker blocker(scale);
             ui.retranslateUi(this);
-            setWindowTitle(editing ? qtr("Edit Profile") : qtr("Create Profile"));
-            saveButton->setText(editing ? qtr("Save") : qtr("Create"));
-            cancelButton->setText(qtr("Cancel"));
             scale->setItemText(0, qtr("Auto"));
-            if (hasCustomScale) scale->setEditText(customScale);
+            if (automatic) { scale->setCurrentIndex(0); scale->setEditText(scale->itemText(0)); }
+            else scale->setEditText(previous);
+            cancel->setText(qtr("&Cancel"));
             retranslateFilters();
-            updateMuxerWarning();
+            updateEditorText();
+            muxSelected();
         });
+    const auto dp = [ctx](int n) { return qRound(n * (ctx ? ctx->getIntfScaleFactor() : 1)); };
+    resize(dp(760),dp(620));
+    if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
+    ui.profileLine->setFocus();
+    ui.profileLine->selectAll();
+}
+
+void VLCProfileEditor::updateEditorText()
+{
+    const QString title = m_originalName.isEmpty() ? qtr("Create profile") : qtr("Edit profile");
+    setWindowTitle(title);
+    ui.profileHeading->setText(title);
+    ui.profileHelp->setText(qtr("Select a file format. Turn on each track that you want to keep."));
+    m_saveButton->setText(m_originalName.isEmpty() ? qtr("&Create") : qtr("&Save"));
+    ui.valueholder_acodec_bitrate->setSpecialValueText(qtr("Auto"));
+    ui.valueholder_acodec_channels->setSpecialValueText(qtr("Auto"));
+    ui.valueholder_acodec_samplerate->setItemText(0,qtr("Auto"));
+    ui.valueholder_video_enable->setToolTip(qtr("Turn off to remove the video track from the output."));
+    ui.valueholder_audio_enable->setToolTip(qtr("Turn off to remove the audio track from the output."));
+    ui.valueholder_subtitles_enable->setToolTip(qtr("Turn off to remove subtitles from the output."));
+    for (auto *field : {ui.profileVideoFilterFind,ui.profileAudioFilterFind})
+    {
+        field->setPlaceholderText(qtr("Find a filter"));
+        field->setAccessibleName(qtr("Find a filter"));
+    }
+    for (auto *button : ui.buttonGroup->buttons())
+        if (button->property("profileCustomMux").toBool()) button->setText(qtr("Other: %1").arg(button->property("sout").toString()));
+    for (auto *combo : findChildren<QComboBox*>())
+        for (int row = 0; row < combo->count(); ++row)
+            if (combo->itemData(row,OtherValueRole).toBool()) combo->setItemText(row,qtr("Other: %1").arg(combo->itemData(row).toString()));
+    updateFilterSearch();
+    updateValidation();
+}
+
+void VLCProfileEditor::updateFilterSearch()
+{
+    const auto update = [](QListWidget *list,QLineEdit *field,QLabel *status) {
+        int shown = 0, selected = 0;
+        const QString query = field->text().trimmed();
+        for (int row = 0; row < list->count(); ++row)
+        {
+            auto *item = list->item(row);
+            const bool match = query.isEmpty() || item->text().contains(query,Qt::CaseInsensitive)
+                || item->data(Qt::UserRole).toString().contains(query,Qt::CaseInsensitive);
+            item->setHidden(!match);
+            shown += match;
+            selected += item->checkState() == Qt::Checked;
+        }
+        const auto text = qtr("Filters shown: %1 of %2. Selected: %3.").arg(shown).arg(list->count()).arg(selected);
+        status->setText(shown || query.isEmpty() ? text : qtr("No filters match this text.") + QLatin1Char('\n') + text);
+    };
+    update(ui.valueholder_video_filters,ui.profileVideoFilterFind,ui.profileVideoFilterInfo);
+    update(ui.valueholder_audio_filters,ui.profileAudioFilterFind,ui.profileAudioFilterInfo);
+}
+
+void VLCProfileEditor::updateLayoutMetrics()
+{
+    const auto dp = [this](int n) { return qRound(n * (m_themeContext ? m_themeContext->getIntfScaleFactor() : 1)); };
+    layout()->setContentsMargins(dp(24),dp(24),dp(24),dp(24));
+    layout()->setSpacing(dp(12));
+    for (auto *scroll : findChildren<QScrollArea*>()) scroll->setFrameShape(QFrame::NoFrame);
+    ui.muxerwarning->ensurePolished();
+    updateMuxerWarning();
+}
+
+QString VLCProfileEditor::scaleValue(bool *valid) const
+{
+    const QString text = ui.valueholder_vcodec_scale->currentText().trimmed();
+    if (text == ui.valueholder_vcodec_scale->itemText(0))
+    {
+        if (valid) *valid = true;
+        return QStringLiteral("0");
+    }
+    bool ok;
+    double value = text.toDouble(&ok);
+    if (!ok) value = QLocale().toDouble(text,&ok);
+    ok = ok && std::isfinite(value) && value >= 0;
+    if (valid) *valid = ok;
+    return ok ? QString::number(value,'g',15) : QString();
+}
+
+QString VLCProfileEditor::validationError() const
+{
+    const QString candidate = ui.profileLine->text().trimmed();
+    if (candidate.isEmpty()) return qtr("Enter a profile name.");
+    if (ui.profileLine->text() != m_originalName)
+        for (const auto& name : m_existingNames)
+            if (name != m_originalName && candidate.compare(name.trimmed(),Qt::CaseInsensitive) == 0)
+                return qtr("This profile name is in use. Enter another name.");
+    if (!ui.buttonGroup->checkedButton() || ui.buttonGroup->checkedButton()->property("sout").toString().isEmpty())
+        return qtr("Select a file format.");
+    if (!ui.valueholder_video_enable->isChecked() && !ui.valueholder_audio_enable->isChecked()
+        && !ui.valueholder_subtitles_enable->isChecked()) return qtr("Turn on video, audio, or subtitles.");
+    if (ui.valueholder_video_enable->isChecked() && !ui.valueholder_video_copy->isChecked())
+    {
+        bool valid;
+        scaleValue(&valid);
+        if (!valid) return qtr("Enter %1 or a scale greater than zero.").arg(ui.valueholder_vcodec_scale->itemText(0));
+    }
+    return {};
+}
+
+void VLCProfileEditor::updateValidation()
+{
+    const auto error = validationError();
+    ui.profileFeedback->setText(error.isEmpty() ? qtr("Ready to save the profile.") : error);
+    m_saveButton->setEnabled(error.isEmpty());
+}
+
+bool VLCProfileEditor::eventFilter(QObject *watched,QEvent *event)
+{
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent*>(event);
+        const bool video = watched == ui.valueholder_video_filters || watched == ui.profileVideoFilterFind;
+        auto *field = video ? ui.profileVideoFilterFind : ui.profileAudioFilterFind;
+        const bool find = key->matches(QKeySequence::Find);
+        const bool reset = watched == field && key->key() == Qt::Key_Escape && !field->text().isEmpty();
+        if (find || reset)
+        {
+            if (event->type() == QEvent::KeyPress)
+            {
+                if (find) { field->setFocus(); field->selectAll(); }
+                else field->clear();
+            }
+            key->accept();
+            return true;
+        }
+    }
+    return QVLCDialog::eventFilter(watched,event);
+}
+
+void VLCProfileEditor::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+    {
+        if (focusWidget() == ui.profileVideoFilterFind) ui.valueholder_video_filters->setFocus();
+        else if (focusWidget() == ui.profileAudioFilterFind) ui.valueholder_audio_filters->setFocus();
+        else if (auto *button = qobject_cast<QAbstractButton*>(focusWidget())) button->click();
+        event->accept();
+        return;
+    }
+    QVLCDialog::keyPressEvent(event);
+}
+
+void VLCProfileEditor::selectComboValue(QComboBox *box, const QString& value)
+{
+    int index = box->findData(value);
+    if (index < 0 && !box->isEditable())
+    {
+        box->addItem(qtr("Other: %1").arg(value), value);
+        index = box->count() - 1;
+        box->setItemData(index,QStringLiteral("<qt>%1</qt>").arg(value.toHtmlEscaped()),Qt::ToolTipRole);
+        box->setItemData(index,true,OtherValueRole);
+    }
+    box->setCurrentIndex(index);
+    if (box->isEditable() && index < 0) box->setEditText(value);
 }
 
 void VLCProfileEditor::loadCapabilities()
@@ -593,6 +829,12 @@ void VLCProfileEditor::retranslateFilters()
         for (int row = 0; row < list->count(); ++row)
         {
             auto* item = list->item(row);
+            if (item->data(MissingFilterRole).toBool())
+            {
+                item->setText(qtr("Other: %1").arg(item->data(Qt::UserRole).toString()));
+                item->setToolTip(qtr("Keep this filter from the saved profile."));
+                continue;
+            }
             item->setText(qtr(item->data(FilterNameRole).toByteArray().constData()));
             item->setToolTip(qtr(item->data(FilterHelpRole).toByteArray().constData()));
         }
@@ -676,11 +918,16 @@ inline void VLCProfileEditor::registerCodecs()
 #undef ADD_SCALING
 
 #define ADD_SAMPLERATE( sample, val ) ui.valueholder_acodec_samplerate->addItem( sample, val );
+    ADD_SAMPLERATE(qtr("Auto"),0)
     ADD_SAMPLERATE( "8000 Hz", 8000 )
     ADD_SAMPLERATE( "11025 Hz", 11025 )
     ADD_SAMPLERATE( "22050 Hz", 22050 )
     ADD_SAMPLERATE( "44100 Hz", 44100 )
     ADD_SAMPLERATE( "48000 Hz", 48000 )
+    ADD_SAMPLERATE("88200 Hz",88200)
+    ADD_SAMPLERATE("96000 Hz",96000)
+    ADD_SAMPLERATE("176400 Hz",176400)
+    ADD_SAMPLERATE("192000 Hz",192000)
 #undef ADD_SAMPLERATE
 
 #define ADD_SCODEC( name, fourcc ) ui.valueholder_subtitles_codec->addItem( name, QVariant( fourcc ) );
@@ -695,18 +942,16 @@ void VLCProfileEditor::muxSelected()
     QRadioButton *current =
             qobject_cast<QRadioButton *>( ui.buttonGroup->checkedButton() );
 
-#define SETYESNOSTATE( name, prop ) \
-    ui.name->setChecked( current->property( prop ).toBool() )
-
-    /* dumb :/ */
-    SETYESNOSTATE( capvideo, "capvideo" );
-    SETYESNOSTATE( capaudio, "capaudio" );
-    SETYESNOSTATE( capmenu, "capmenu" );
-    SETYESNOSTATE( capsubs, "capsubs" );
-    SETYESNOSTATE( capstream, "capstream" );
-    SETYESNOSTATE( capchaps, "capchaps" );
-
-#undef SETYESNOSTATE
+    const bool unknown = current->property("profileCustomMux").toBool();
+#define SETCAP(name,prop,title) ui.name->setText(qtr("%1: %2").arg(qtr(title), \
+    unknown ? qtr("Unknown") : current->property(prop).toBool() ? qtr("Yes") : qtr("No")))
+    SETCAP(capvideo,"capvideo","Video");
+    SETCAP(capaudio,"capaudio","Audio");
+    SETCAP(capmenu,"capmenu","Menus");
+    SETCAP(capsubs,"capsubs","Subtitles");
+    SETCAP(capstream,"capstream","Streamable");
+    SETCAP(capchaps,"capchaps","Chapters");
+#undef SETCAP
     updateMuxerWarning();
 }
 
@@ -714,17 +959,19 @@ void VLCProfileEditor::updateMuxerWarning()
 {
     const auto* current = ui.buttonGroup->checkedButton();
     int textsize = QFontMetrics(ui.muxerwarning->font()).ascent();
-    if( current->property("module").toString() == "avformat" )
+    if (current->property("profileCustomMux").toBool())
+        ui.muxerwarning->setText(qtr("This file format uses a saved value. Check that it is available on this device."));
+    else if( current->property("module").toString() == "avformat" )
         ui.muxerwarning->setText(
                     QString( "<img src=\":/menu/info.svg\" width=%2 height=%2/> %1" )
-                    .arg( qtr( "This muxer is not provided directly by VLC: It could be missing." ) )
+                    .arg( qtr( "This file format may not be available in this build." ) )
                     .arg(textsize)
                     );
     else if ( !caps["muxers"].contains( current->property("module").toString() ) &&
               !caps["muxers"].contains( "mux_" + current->property("module").toString() ) )
         ui.muxerwarning->setText(
                     QString( "<img src=\":/menu/clear.svg\" width=%2 height=%2/> %1" )
-                    .arg( qtr( "This muxer is missing. Using this profile will fail" ) )
+                    .arg( qtr( "This file format is not available in this build." ) )
                     .arg(textsize)
                     );
     else
@@ -747,23 +994,37 @@ void VLCProfileEditor::fillProfile( const QString& qs )
     QStringList tuples = qs.split( ";" );
     foreach ( const QString &tuple, tuples )
     {
-        QStringList keyvalue = tuple.split( "=" );
-        if ( keyvalue.count() != 2 ) continue;
-        QString key = keyvalue[0];
-        QString value = keyvalue[1];
+        const int equal = tuple.indexOf(QLatin1Char('='));
+        if (equal <= 0) continue;
+        const QString key = tuple.left(equal);
+        const QString value = tuple.mid(equal + 1);
         QObject *object = findChild<QObject *>( CATPROP2NAME( key ) );
         if ( object )
         {
             if( object->inherits( "QButtonGroup" ) )
             { /* Buttongroup for Radios */
                 const QButtonGroup *group = qobject_cast<const QButtonGroup *>( object );
+                bool found = false;
                 foreach( QAbstractButton *button, group->buttons() )
                 {
                     if ( button->property("sout").toString() == value )
                     {
                         button->setChecked( true );
+                        found = true;
                         break;/* radios are exclusive */
                     }
+                }
+                if (!found && group == ui.buttonGroup)
+                {
+                    auto *other = new QRadioButton(qtr("Other: %1").arg(value),ui.muxer);
+                    other->setProperty("sout",value);
+                    other->setProperty("profileCustomMux",true);
+                    other->setToolTip(QStringLiteral("<qt>%1</qt>").arg(value.toHtmlEscaped()));
+                    ui.buttonGroup->addButton(other);
+                    auto *grid = qobject_cast<QGridLayout*>(ui.muxer->layout());
+                    grid->addWidget(other,grid->rowCount(),0,1,grid->columnCount());
+                    connect(other,&QRadioButton::clicked,this,&VLCProfileEditor::muxSelected);
+                    other->setChecked(true);
                 }
             }
             else if( object->inherits( "QCheckBox" ) )
@@ -779,17 +1040,21 @@ void VLCProfileEditor::fillProfile( const QString& qs )
             else if( object->inherits( "QSpinBox" ) )
             {
                 QSpinBox *box = qobject_cast<QSpinBox *>( object );
-                box->setValue( value.toInt() );
+                const int number = value.toInt();
+                if (number > box->maximum()) box->setMaximum(number);
+                box->setValue(number);
             }
             else if( object->inherits( "QDoubleSpinBox" ) )
             {
                 QDoubleSpinBox *box = qobject_cast<QDoubleSpinBox *>( object );
-                box->setValue( value.toDouble() );
+                const double number = value.toDouble();
+                if (std::isfinite(number) && number > box->maximum()) box->setMaximum(number);
+                box->setValue(number);
             }
             else if( object->inherits( "QComboBox" ) )
             {
                 QComboBox *box = qobject_cast<QComboBox *>( object );
-                box->setCurrentIndex( box->findData( value ) );
+                selectComboValue(box,value);
                 if (box == ui.valueholder_vcodec_scale)
                 {
                     // Old profiles can contain a translated Auto caption.
@@ -807,12 +1072,26 @@ void VLCProfileEditor::fillProfile( const QString& qs )
             else if( object->inherits( "QLineEdit" ) )
             {
                 QLineEdit *box = qobject_cast<QLineEdit *>( object );
-                box->setText( QUrl::fromPercentEncoding( value.toLatin1() ) );
+                box->setText( QUrl::fromPercentEncoding( value.toUtf8() ) );
             }
             else if ( object->inherits( "QListWidget" ) )
             {
-                QStringList valuesList = QUrl::fromPercentEncoding( value.toLatin1() ).split( ";" );
+                QStringList valuesList = QUrl::fromPercentEncoding( value.toUtf8() ).split( ";" );
                 const QListWidget *list = qobject_cast<const QListWidget *>( object );
+                for (const auto& value : valuesList)
+                {
+                    bool found = false;
+                    for (int row = 0; row < list->count(); ++row)
+                        found |= list->item(row)->data(Qt::UserRole).toString() == value;
+                    if (!found && !value.isEmpty())
+                    {
+                        auto *extra = new QListWidgetItem(qtr("Other: %1").arg(value),const_cast<QListWidget*>(list));
+                        extra->setData(Qt::UserRole,value);
+                        extra->setData(MissingFilterRole,true);
+                        extra->setToolTip(qtr("Keep this filter from the saved profile."));
+                        extra->setFlags(extra->flags() | Qt::ItemIsUserCheckable);
+                    }
+                }
                 for( int i=0; i < list->count(); i++ )
                 {
                     QListWidgetItem *item = list->item( i );
@@ -823,6 +1102,7 @@ void VLCProfileEditor::fillProfile( const QString& qs )
                 }
             }
         }
+        else m_extraOptions.append(tuple);
     }
 }
 
@@ -832,18 +1112,11 @@ void VLCProfileEditor::fillProfileOldFormat( const QString& qs )
     if( options.count() < 16 )
         return;
 
-    const QString mux = options[0];
-    for ( int i=0; i< ui.muxer->layout()->count(); i++ )
-    {
-        QRadioButton *current =
-                qobject_cast<QRadioButton *>(ui.muxer->layout()->itemAt(i)->widget());
-        if ( unlikely( !current ) ) continue;/* someone is messing up with ui */
-        if ( current->property("sout").toString() == mux )
-        {
-            current->setChecked( true );
-            break;/* radios are exclusive */
-        }
-    }
+    fillProfile(QStringLiteral("muxer_mux=") + options[0]);
+    const auto setStoredValue = [](auto *box, auto value) {
+        if (value > box->maximum()) box->setMaximum(value);
+        box->setValue(value);
+    };
 
     ui.valueholder_video_copy->setChecked( !options[1].toInt() );
     ui.valueholder_video_enable->setChecked( ( options[4] != "none" ) );
@@ -851,39 +1124,31 @@ void VLCProfileEditor::fillProfileOldFormat( const QString& qs )
     ui.valueholder_audio_enable->setChecked( ( options[10] != "none" ) );
     ui.valueholder_subtitles_enable->setChecked( options[3].toInt() );
 
-    ui.valueholder_video_codec->setCurrentIndex( ui.valueholder_video_codec->findData( options[4] ) );
-    ui.valueholder_vcodec_bitrate->setValue( options[5].toInt() );
+    selectComboValue(ui.valueholder_video_codec,options[4]);
+    setStoredValue(ui.valueholder_vcodec_bitrate,options[5].toInt());
     if ( options[6].toDouble() > 0 )
         ui.valueholder_vcodec_scale->setEditText( options[6] );
     else
         ui.valueholder_vcodec_scale->setCurrentIndex( 0 );
-    ui.valueholder_vcodec_framerate->setValue( options[7].toDouble() );
-    ui.valueholder_vcodec_width->setValue( options[8].toInt() );
-    ui.valueholder_vcodec_height->setValue( options[9].toInt() );
+    setStoredValue(ui.valueholder_vcodec_framerate,options[7].toDouble());
+    setStoredValue(ui.valueholder_vcodec_width,options[8].toInt());
+    setStoredValue(ui.valueholder_vcodec_height,options[9].toInt());
 
-    ui.valueholder_audio_codec->setCurrentIndex( ui.valueholder_audio_codec->findData( options[10] ) );
-    ui.valueholder_acodec_bitrate->setValue( options[11].toInt() );
-    ui.valueholder_acodec_channels->setValue( options[12].toInt() );
+    selectComboValue(ui.valueholder_audio_codec,options[10]);
+    setStoredValue(ui.valueholder_acodec_bitrate,options[11].toInt());
+    setStoredValue(ui.valueholder_acodec_channels,options[12].toInt());
 
-    int index = ui.valueholder_acodec_samplerate->findData( options[13] );
-    if ( index == -1 ) index = ui.valueholder_acodec_samplerate->findData( 44100 );
-    ui.valueholder_acodec_samplerate->setCurrentIndex( index );
+    selectComboValue(ui.valueholder_acodec_samplerate,options[13]);
 
-    ui.valueholder_subtitles_codec->setCurrentIndex( ui.valueholder_subtitles_codec->findData( options[14] ) );
+    selectComboValue(ui.valueholder_subtitles_codec,options[14]);
     ui.valueholder_subtitles_overlay->setChecked( options[15].toInt() );
 }
 
 void VLCProfileEditor::accept()
 {
-    if( ui.profileLine->text().isEmpty() )
-    {
-        QMessageBox::warning( this, qtr(" Profile Name Missing" ),
-                qtr( "You must set a name for the profile." ) );
-        ui.profileLine->setFocus();
-        return;
-    }
-    name = ui.profileLine->text();
-
+    updateValidation();
+    if (!validationError().isEmpty()) return;
+    name = ui.profileLine->text() == m_originalName ? m_originalName : ui.profileLine->text().trimmed();
     QVLCDialog::accept();
 }
 
@@ -940,6 +1205,7 @@ QString VLCProfileEditor::transcodeValue()
             if (box->isEditable() && box->currentText() != box->itemText(box->currentIndex()))
                 value = box->currentText();
             if ( value.isEmpty() && box->lineEdit() ) value = box->lineEdit()->text();
+            if (box == ui.valueholder_vcodec_scale) value = scaleValue();
         }
         else if( object->inherits( "QLineEdit" ) )
         {
@@ -964,6 +1230,7 @@ QString VLCProfileEditor::transcodeValue()
                              .arg( categ ).arg( prop ).arg( value );
     }
 
+    configuration.append(m_extraOptions);
     return configuration.join( ";" );
 }
 

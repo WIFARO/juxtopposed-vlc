@@ -38,6 +38,8 @@
 
 class QComboBox;
 class MainCtx;
+class QToolButton;
+class QPushButton;
 
 class VLCProfileSelector : public QWidget
 {
@@ -57,6 +59,10 @@ private:
     QString mux;
     SoutChain transcode;
     QPointer<MainCtx> m_themeContext;
+    QToolButton *m_editButton;
+    QToolButton *m_deleteButton;
+    QToolButton *m_newButton;
+    void updateActionIcons();
 private slots:
     void newProfile();
     void editProfile();
@@ -73,13 +79,26 @@ class VLCProfileEditor : public QVLCDialog
 
     Ui::Profiles ui;
 public:
-    VLCProfileEditor(const QString&, const QString&, QWindow * );
+    VLCProfileEditor(const QString&, const QString&, QWindow *, MainCtx* = nullptr,
+                     const QStringList& existingNames = {});
 
     QString name;
     QString muxValue;
     QString transcodeValue();
     QStringList qpcodecsList;
 private:
+    QPointer<MainCtx> m_themeContext;
+    const QString m_originalName;
+    const QStringList m_existingNames;
+    QStringList m_extraOptions;
+    QPushButton *m_saveButton;
+    void updateEditorText();
+    void updateValidation();
+    QString validationError() const;
+    QString scaleValue(bool *valid = nullptr) const;
+    void updateLayoutMetrics();
+    void updateFilterSearch();
+    void selectComboValue(QComboBox*, const QString&);
     void registerCodecs();
     void registerFilters();
     void retranslateFilters();
@@ -90,6 +109,9 @@ private:
     QHash<QString, resultset> caps;
     void loadCapabilities();
     void reset();
+protected:
+    bool eventFilter(QObject*, QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
 public slots:
     void accept() override;
 private slots:
