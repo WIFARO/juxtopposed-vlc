@@ -17,6 +17,7 @@
  *****************************************************************************/
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls.Basic as C
 import QtQuick.Templates as T
 
 import VLC.MainInterface
@@ -27,6 +28,7 @@ import VLC.Style
 
 Item {
     id: root
+    objectName: "interactionDialogs"
 
     //---------------------------------------------------------------------------------------------
     // Properties
@@ -49,94 +51,139 @@ Item {
                                errorPopup.state = "visible"
                            }
 
-    Component.onDestruction: {
-        if (questionDialog.dialogId !== null) {
-            vlcDialog.dismiss(questionDialog.dialogId)
-            questionDialog.dialogId = null
-        } if (loginDialog.dialogId !== null) {
-            vlcDialog.dismiss(loginDialog.dialogId)
-            loginDialog.dialogId = null
-        }
-    }
+    property var requests: []
+    property var activeRequest: null
+    property bool shuttingDown: false
 
-    //---------------------------------------------------------------------------------------------
-    // Functions
-    //---------------------------------------------------------------------------------------------
+    property bool cancelingAll: false
+    Component.onDestruction: {
+        shuttingDown = true
+        cancelAllRequests()
+    }
+    function cancelAllRequests() {
+        if (cancelingAll) return
+        cancelingAll = true
+        const remaining = requests
+        requests = []
+        activeRequest = null
+        loginDialog.close()
+        questionDialog.close()
+        progressDialog.close()
+        customDialog.close()
+        for (const request of remaining) {
+            if (request.kind === "custom") {
+                if (request.reject) request.reject()
+            } else vlcDialog.dismiss(request.id)
+        }
+        cancelingAll = false
+    }
 
     function ask(text, acceptCb, rejectCb, buttons) {
-        customDialog.ask(text, acceptCb, rejectCb, buttons)
+        enqueue({kind: "custom", text: text, accept: acceptCb, reject: rejectCb, buttons: buttons})
     }
-
-    //---------------------------------------------------------------------------------------------
-    // Connections
-    //---------------------------------------------------------------------------------------------
-
-    VLCDialog
-    {
-        id: vlcDialog
-
-        Component.onCompleted: {
-            VLCDialogModel.provider = vlcDialog
-        }
-
-        Component.onDestruction: {
-            // Only clear the provider if we are still the current one.
-            if (VLCDialogModel.provider === vlcDialog)
-                VLCDialogModel.provider = null
-        }
-
-        onLogin: (dialogId, title, text, defaultUsername, askStore) => {
-            loginDialog.dialogId = dialogId
-            loginDialog.title = title
-            loginDialog.defaultUsername = defaultUsername
-            loginDialog.open()
-        }
-
-        onQuestion: (dialogId, title, text, type, cancel, action1, action2) => {
-            questionDialog.dialogId = dialogId
-            questionDialog.title = title
-            questionDialog.text = text
-            questionDialog.cancelTxt = cancel
-            questionDialog.action1Txt = action1
-            questionDialog.action2Txt = action2
-            questionDialog.open()
-        }
-
-        onProgress: (dialogId, title, text, indeterminate, position, cancel) => {
-            progressDialog.dialogId = dialogId
-            progressDialog.title = title
-            progressDialog.text = text
-            progressDialog.cancelTxt = cancel
-            progressDialog.position = position
-            progressDialog.interderminate = indeterminate
-            progressDialog.open()
-        }
-
-        onProgressUpdated: (dialogId, position, text) => {
-            if (progressDialog.dialogId !== dialogId) {
-                console.warn("progress event on an inexisting dialog")
-                return
-            }
-            progressDialog.text = text
-            progressDialog.position = position
-        }
-
-        onCancelled: (dialogId) => {
-            if (questionDialog.dialogId === dialogId) {
-                questionDialog.close()
-                questionDialog.dialogId = null
-                dismiss(dialogId)
-            } else if (loginDialog.dialogId === dialogId)  {
-                loginDialog.close()
-                loginDialog.dialogId = null
-                dismiss(dialogId)
-            } else if (progressDialog.dialogId === dialogId) {
+    function enqueue(request) {
+        if (shuttingDown || cancelingAll) return
+        requests = requests.concat([request])
+        showNext()
+    }
+    function findRequest(id) {
+        return requests.find(request => request.kind !== "custom" && request.id === id)
+    }
+    function showNext() {
+        if (shuttingDown || (activeRequest && activeRequest.kind !== "progress")) return
+        // A background operation may need a sign-in or an answer to continue.
+        // Hide its progress view while retaining its ID and latest updates.
+        const next = requests.find(request => request.kind !== "progress") || requests[0]
+        if (loginDialog.visible || questionDialog.visible || progressDialog.visible || customDialog.visible) {
+            if (activeRequest && activeRequest.kind === "progress" && next && next.kind !== "progress") {
+                activeRequest = null
                 progressDialog.close()
-                progressDialog.dialogId = null
-                dismiss(dialogId)
-            } else {
-                dismiss(dialogId)
             }
+            return
+        }
+        if (!next) return
+        activeRequest = next
+        if (next.kind === "login") {
+            loginDialog.request = next
+            loginDialog.title = next.title
+            username.text = next.username
+            password.clear()
+            savePassword.checked = false
+            loginDialog.open()
+        } else if (next.kind === "question") {
+            questionDialog.request = next
+            questionDialog.title = next.title
+            questionDialog.open()
+        } else if (next.kind === "progress") {
+            progressDialog.request = next
+            progressDialog.title = next.title
+            progressDialog.text = next.text
+            progressDialog.position = next.position
+            progressDialog.open()
+        } else {
+            customDialog.ask(next.text, () => finishRequest(next, "accept"),
+                             () => finishRequest(next, "dismiss"), next.buttons)
+        }
+    }
+    function finishRequest(request, action, result) {
+        if (!request || requests.indexOf(request) < 0) return
+        requests = requests.filter(item => item !== request)
+        if (activeRequest === request) {
+            activeRequest = null
+            if (request.kind === "login") loginDialog.close()
+            else if (request.kind === "question") questionDialog.close()
+            else if (request.kind === "progress") progressDialog.close()
+        }
+        // Remove the request before posting: posting releases its native ID.
+        if (request.kind === "custom") {
+            const callback = action === "accept" ? request.accept : request.reject
+            if (callback) callback()
+        } else if (action === "login") vlcDialog.post_login(request.id, result.username, result.password, request.askStore && result.store)
+        else if (action === "action1") vlcDialog.post_action1(request.id)
+        else if (action === "action2") vlcDialog.post_action2(request.id)
+        else vlcDialog.dismiss(request.id)
+        Qt.callLater(showNext)
+    }
+    function requestClosed() {
+        if (!shuttingDown && VLCDialogModel.provider === vlcDialog && requests.length === 0) restoreFocus()
+        Qt.callLater(showNext)
+    }
+    function progressValue(value) { return isFinite(value) ? Math.max(0, Math.min(1, value)) : 0 }
+
+    VLCDialog {
+        id: vlcDialog
+        objectName: "interactionProvider"
+        Component.onCompleted: VLCDialogModel.provider = vlcDialog
+        Component.onDestruction: {
+            root.shuttingDown = true
+            root.cancelAllRequests()
+            if (VLCDialogModel.provider === vlcDialog) VLCDialogModel.provider = null
+        }
+        onCancelAll: root.cancelAllRequests()
+        onLogin: (dialogId, title, text, defaultUsername, askStore) => {
+            root.enqueue({kind: "login", id: dialogId, title: title, text: text, username: defaultUsername, askStore: askStore})
+        }
+        onQuestion: (dialogId, title, text, type, cancel, action1, action2) => {
+            root.enqueue({kind: "question", id: dialogId, title: title, text: text, severity: type, cancel: cancel, action1: action1, action2: action2})
+        }
+        onProgress: (dialogId, title, text, indeterminate, position, cancel) => {
+            root.enqueue({kind: "progress", id: dialogId, title: title, text: text, indeterminate: indeterminate, position: root.progressValue(position), cancel: cancel})
+        }
+        onProgressUpdated: (dialogId, position, text) => {
+            const request = root.findRequest(dialogId)
+            if (!request || request.kind !== "progress") return
+            request.text = text
+            request.position = root.progressValue(position)
+            if (root.activeRequest === request) {
+                progressDialog.text = text
+                progressDialog.position = request.position
+            }
+        }
+        onCancelled: (dialogId) => {
+            const request = root.findRequest(dialogId)
+            // A queued cancellation can arrive after the user has replied.
+            // Its ID must not be released a second time.
+            if (request) root.finishRequest(request, "dismiss")
         }
     }
 
@@ -292,339 +339,290 @@ Item {
 
     ModalDialog {
         id: loginDialog
-
-        //use var here as DialogId is a QGadget and passed by value
-        property var dialogId: null
-        property string defaultUsername: ""
-
-        onAboutToHide: restoreFocus()
+        objectName: "interactionLogin"
+        property var request: null
         rootWindow: root.bgContent
+        onOpened: { username.forceActiveFocus(); username.selectAll() }
+        onAccepted: root.finishRequest(request, "login", {username: username.text, password: password.text, store: savePassword.checked})
+        onRejected: root.finishRequest(request, "dismiss")
+        onClosed: { if (root.activeRequest === request) root.finishRequest(request, "dismiss"); password.clear(); savePassword.checked = false; request = null; root.requestClosed() }
 
-        contentItem: GridLayout {
-            columns: 2
-
-            readonly property ColorContext colorContext: ColorContext {
-                id: loginContentTheme
-                palette: VLCStyle.palette
-                colorSet: ColorContext.Window
-            }
-
+        TextEdit {
+            objectName: "interactionLoginMessage"
+            Layout.fillWidth: true
+            visible: text.length > 0
+            text: loginDialog.request ? loginDialog.request.text : ""
+            textFormat: TextEdit.PlainText
+            readOnly: true; selectByMouse: true; activeFocusOnTab: true
+            wrapMode: TextEdit.Wrap
+            color: loginDialog.theme.foreground
+            selectionColor: loginDialog.theme.accent
+            selectedTextColor: loginDialog.onAccent
+            font.pixelSize: loginDialog.theme.dp(14)
+        }
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: loginDialog.theme.dp(8)
             Text {
-                text: qsTr("User")
-                color: loginContentTheme.fg.primary
-                font.pixelSize: VLCStyle.fontSize_normal
+                Layout.fillWidth: true
+                text: qsTr("User name")
+                color: loginDialog.theme.foreground
+                font.pixelSize: loginDialog.theme.dp(14)
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
             }
-
-            Widgets.TextFieldExt {
+            ModalDialog.Field {
                 id: username
-
-                focus: true
-                text: loginDialog.defaultUsername
-
-                Layout.fillWidth:true
-
-                Navigation.downItem: password
-                Keys.priority: Keys.AfterItem
-                Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
-            }
-
-            Text {
-                text: qsTr("Password")
-                color: loginContentTheme.fg.primary
-                font.pixelSize: VLCStyle.fontSize_normal
-            }
-
-            Widgets.TextFieldExt {
-                id: password
-
-                echoMode: TextInput.Password
-                font.pixelSize: VLCStyle.fontSize_normal
-                Layout.fillWidth:true
-
-                Navigation.upItem: username
-                Navigation.downItem: savePassword
-                Keys.priority: Keys.AfterItem
-                Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
-            }
-
-            Text {
-                text: qsTr("Save password")
-                color: loginContentTheme.fg.primary
-                font.pixelSize: VLCStyle.fontSize_normal
-            }
-            Widgets.CheckBoxExt {
-                id: savePassword
-
-                Navigation.upItem: password
-                Navigation.downItem: loginButtons
-                Keys.priority: Keys.AfterItem
-                Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
+                objectName: "interactionUsername"
+                dialog: loginDialog
+                Accessible.name: qsTr("User name")
+                Keys.onReturnPressed: event => { if (!event.isAutoRepeat) password.forceActiveFocus() }
+                Keys.onEnterPressed: event => { if (!event.isAutoRepeat) password.forceActiveFocus() }
             }
         }
-
-        footer: FocusScope {
-            id: loginButtons
-            implicitHeight: VLCStyle.icon_normal
-
-            readonly property ColorContext colorContext: ColorContext {
-                id: loginFooterTheme
-                palette: VLCStyle.palette
-                colorSet: ColorContext.Window
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: loginDialog.theme.dp(8)
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Password")
+                color: loginDialog.theme.foreground
+                font.pixelSize: loginDialog.theme.dp(14)
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
             }
-
-            Rectangle {
-                color: loginFooterTheme.bg.primary
-                anchors.fill: parent
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: VLCStyle.margin_xxsmall
-                    anchors.rightMargin: VLCStyle.margin_xxsmall
-
-                    Widgets.TextToolButton {
-                        id: loginCancel
-                        Layout.fillWidth: true
-                        text: qsTr("cancel")
-
-                        Navigation.upItem: savePassword
-                        Navigation.rightItem: loginOk
-                        Keys.priority: Keys.AfterItem
-                        Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
-
-                        onClicked: {
-                            loginDialog.reject()
-                            loginDialog.close()
-                        }
-                    }
-
-                    Widgets.TextToolButton {
-                        id: loginOk
-                        Layout.fillWidth: true
-                        text: qsTr("Ok")
-                        focus: true
-
-                        Navigation.upItem: savePassword
-                        Navigation.leftItem: loginCancel
-                        Keys.priority: Keys.AfterItem
-                        Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
-
-                        onClicked: {
-                            loginDialog.accept()
-                            loginDialog.close()
-                        }
-                    }
+            ModalDialog.Field {
+                id: password
+                objectName: "interactionPassword"
+                dialog: loginDialog
+                echoMode: TextInput.Password
+                inputMethodHints: Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
+                Accessible.name: qsTr("Password")
+                Keys.onReturnPressed: event => { if (!event.isAutoRepeat) loginDialog.accept() }
+                Keys.onEnterPressed: event => { if (!event.isAutoRepeat) loginDialog.accept() }
+            }
+        }
+        C.CheckBox {
+            id: savePassword
+            objectName: "interactionStore"
+            Layout.fillWidth: true
+            visible: !!loginDialog.request && loginDialog.request.askStore
+            text: qsTr("Save password")
+            spacing: loginDialog.theme.dp(8)
+            padding: loginDialog.theme.dp(4)
+            indicator: Rectangle {
+                implicitWidth: loginDialog.theme.dp(16)
+                implicitHeight: implicitWidth
+                x: savePassword.leftPadding
+                y: (savePassword.height - height) / 2
+                color: savePassword.checked ? loginDialog.theme.accent : loginDialog.theme.field
+                radius: loginDialog.theme.dp(3)
+                border.width: loginDialog.theme.dp(1)
+                border.color: savePassword.visualFocus ? loginDialog.theme.accent : loginDialog.theme.border
+                Text {
+                    anchors.centerIn: parent
+                    visible: savePassword.checked
+                    text: "✓"; color: loginDialog.onAccent
+                    font.pixelSize: loginDialog.theme.dp(13)
                 }
             }
-        }
-
-        onAccepted: {
-            if (loginDialog.dialogId !== null) {
-                vlcDialog.post_login(loginDialog.dialogId, username.text, password.text, savePassword.checked)
-                loginDialog.dialogId = null
+            contentItem: Text {
+                text: savePassword.text
+                textFormat: Text.PlainText
+                leftPadding: savePassword.indicator.width + savePassword.spacing
+                color: loginDialog.theme.foreground
+                font.pixelSize: loginDialog.theme.dp(14)
+                wrapMode: Text.Wrap
+            }
+            onActiveFocusChanged: {
+                if (!loginDialog) return
+                if (activeFocus) { loginDialog.activeField = savePassword; Qt.callLater(loginDialog.revealActiveField) }
+                else if (loginDialog.activeField === savePassword) loginDialog.activeField = null
             }
         }
-        onRejected: {
-            if (loginDialog.dialogId !== null) {
-                vlcDialog.dismiss(loginDialog.dialogId)
-                loginDialog.dialogId = null
+        footer: Item {
+            visible: true
+            implicitHeight: visible ? actions1.implicitHeight + loginDialog.bottomPadding : 0
+            GridLayout {
+                id: actions1
+                objectName: "interactionLoginActions"
+                anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: loginDialog.leftPadding; rightMargin: loginDialog.rightPadding }
+                columns: width < loginCancel.naturalWidth + loginOk.naturalWidth + columnSpacing ? 1 : 2
+                columnSpacing: loginDialog.theme.dp(8); rowSpacing: columnSpacing
+                ModalDialog.ActionButton {
+                    id: loginCancel
+                    objectName: "interactionLoginCancel"
+                    dialog: loginDialog
+                    caption: qsTr("Cancel")
+                    onClicked: loginDialog.reject()
+                }
+                ModalDialog.ActionButton {
+                    id: loginOk
+                    objectName: "interactionLoginAccept"
+                    dialog: loginDialog
+                    caption: qsTr("Sign in")
+                    primaryAction: true
+                    onClicked: loginDialog.accept()
+                }
+
             }
         }
     }
 
     ModalDialog {
         id: progressDialog
-
-        property var dialogId: null
-
-        property string text : ""
-        property string cancelTxt: ""
-        property bool interderminate: false
-        property real position: 0.0
-
-        onAboutToHide: restoreFocus()
+        objectName: "interactionProgress"
+        property var request: null
+        property string text: ""
+        property real position: 0
+        readonly property bool canCancel: !!request && request.cancel.length > 0
         rootWindow: root.bgContent
-
-        contentItem:  ColumnLayout {
-
-            readonly property ColorContext colorContext: ColorContext {
-                id: progressContentTheme
-                palette: VLCStyle.palette
-                colorSet: ColorContext.Window
-            }
-
-            Text {
-                focus: false
-                font.pixelSize: VLCStyle.fontSize_normal
-                color: progressContentTheme.fg.primary
-                text: progressDialog.text
-                wrapMode: Text.WordWrap
-            }
-
-            Widgets.ProgressBarExt {
-                Layout.fillWidth:true
-
-                from: 0.0
-                to: 1.0
-
-                indeterminate: progressDialog.interderminate
-                value: progressDialog.position
+        closePolicy: canCancel ? C.Popup.CloseOnEscape : C.Popup.NoAutoClose
+        onOpened: { if (canCancel) progressCancel.forceActiveFocus(); else bodyViewport.forceActiveFocus() }
+        onRejected: if (canCancel) root.finishRequest(request, "dismiss")
+        onClosed: { if (root.activeRequest === request) root.finishRequest(request, "dismiss"); request = null; root.requestClosed() }
+        TextEdit {
+            objectName: "interactionProgressMessage"
+            visible: text.length > 0
+            Layout.fillWidth: true
+            text: progressDialog.text
+            textFormat: TextEdit.PlainText
+            readOnly: true; selectByMouse: true; activeFocusOnTab: true
+            wrapMode: TextEdit.Wrap
+            color: progressDialog.theme.foreground
+            selectionColor: progressDialog.theme.accent
+            selectedTextColor: progressDialog.onAccent
+            font.pixelSize: progressDialog.theme.dp(14)
+        }
+        C.ProgressBar {
+            id: progressBar
+            objectName: "interactionProgressBar"
+            Layout.fillWidth: true
+            implicitHeight: progressDialog.theme.dp(8)
+            padding: 0
+            from: 0; to: 1
+            value: progressDialog.position
+            indeterminate: !!progressDialog.request && progressDialog.request.indeterminate
+            background: Rectangle { color: progressDialog.theme.field; radius: progressDialog.theme.dp(4) }
+            contentItem: Item {
+                clip: true
+                Rectangle {
+                    id: progressChunk
+                    width: progressBar.indeterminate ? parent.width / 3 : parent.width * progressBar.position
+                    height: parent.height
+                    x: progressBar.indeterminate ? -width : progressBar.mirrored ? parent.width - width : 0
+                    color: progressDialog.theme.accent
+                    radius: progressDialog.theme.dp(4)
+                }
+                NumberAnimation {
+                    target: progressChunk; property: "x"
+                    from: -progressChunk.width; to: progressBar.availableWidth
+                    duration: 1200; loops: Animation.Infinite
+                    running: progressBar.indeterminate && progressDialog.visible
+                }
             }
         }
-
-
-        footer: FocusScope {
-            focus: true
-            implicitHeight: VLCStyle.icon_normal
-
-            readonly property ColorContext colorContext: ColorContext {
-                palette: VLCStyle.palette
-                colorSet: ColorContext.Window
-            }
-
-            Rectangle {
-                color: questionDialog.colorContext.bg.primary
-                anchors.fill: parent
-                anchors.leftMargin: VLCStyle.margin_xxsmall
-                anchors.rightMargin: VLCStyle.margin_xxsmall
-
-                Widgets.TextToolButton {
-                    anchors.right: parent.right
-                    focus: true
-                    visible: text !== ""
-                    text: progressDialog.cancelTxt
-
-                    onClicked: {
-                        vlcDialog.dismiss(progressDialog.dialogId)
-                        progressDialog.dialogId = null
-                        progressDialog.close()
-                    }
+        Text {
+            objectName: "interactionProgressPercent"
+            Layout.fillWidth: true
+            visible: !progressBar.indeterminate
+            text: qsTr("%1%").arg(Math.round(progressDialog.position * 100))
+            color: progressDialog.theme.foreground
+            font.pixelSize: progressDialog.theme.dp(14)
+            textFormat: Text.PlainText
+        }
+        footer: Item {
+            visible: progressDialog.canCancel
+            implicitHeight: visible ? actions2.implicitHeight + progressDialog.bottomPadding : 0
+            GridLayout {
+                id: actions2
+                objectName: "interactionProgressActions"
+                anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: progressDialog.leftPadding; rightMargin: progressDialog.rightPadding }
+                columns: 1
+                ModalDialog.ActionButton {
+                    id: progressCancel
+                    objectName: "interactionProgressCancel"
+                    dialog: progressDialog
+                    caption: progressDialog.request ? progressDialog.request.cancel : ""
+                    onClicked: progressDialog.reject()
                 }
+
             }
         }
     }
 
     ModalDialog {
         id: questionDialog
-
-        //use var here as DialogId is a QGadget and passed by value
-        property var dialogId: null
-        property alias text: content.text
-        property alias cancelTxt: cancel.text
-        property alias action1Txt: action1.text
-        property alias action2Txt: action2.text
-
+        objectName: "interactionQuestion"
+        property var request: null
         rootWindow: root.bgContent
-
-        onAboutToHide: restoreFocus()
-
-        contentItem: Text {
-            id: content
-            focus: false
-            font.pixelSize: VLCStyle.fontSize_normal
-            color: questionDialog.colorContext.fg.primary
-            wrapMode: Text.WordWrap
+        onOpened: { if (cancel.visible) cancel.forceActiveFocus(); else if (action1.visible) action1.forceActiveFocus(); else action2.forceActiveFocus() }
+        onRejected: root.finishRequest(request, "dismiss")
+        onClosed: { if (root.activeRequest === request) root.finishRequest(request, "dismiss"); request = null; root.requestClosed() }
+        Text {
+            objectName: "interactionSeverity"
+            Layout.fillWidth: true
+            visible: !!questionDialog.request && questionDialog.request.severity !== VLCDialog.QUESTION_NORMAL
+            text: questionDialog.request && questionDialog.request.severity === VLCDialog.QUESTION_CRITICAL ? qsTr("Error") : qsTr("Warning")
+            color: questionDialog.request && questionDialog.request.severity === VLCDialog.QUESTION_CRITICAL ? questionDialog.theme.danger : questionDialog.theme.accent
+            font.pixelSize: questionDialog.theme.dp(14)
+            font.weight: Font.DemiBold
         }
-
-        footer: FocusScope {
-            focus: true
-            id: questionButtons
-            implicitHeight: VLCStyle.icon_normal
-
-            readonly property ColorContext colorContext: ColorContext {
-                palette: VLCStyle.palette
-                colorSet: ColorContext.Window
-            }
-
-            Rectangle {
-                color: questionDialog.colorContext.bg.primary
-                anchors.fill: parent
-                anchors.leftMargin: VLCStyle.margin_xxsmall
-                anchors.rightMargin: VLCStyle.margin_xxsmall
-
-                RowLayout {
-                    anchors.fill: parent
-
-                    Widgets.TextToolButton {
-                        id: cancel
-
-                        focus: true
-                        visible: cancel.text !== ""
-
-                        Layout.fillWidth: true
-
-                        Navigation.rightItem: action1
-                        Keys.priority: Keys.AfterItem
-                        Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
-
-                        onClicked: {
-                            vlcDialog.dismiss(questionDialog.dialogId)
-                            questionDialog.dialogId = null
-                            questionDialog.close()
-                        }
-                    }
-
-                    Widgets.TextToolButton {
-                        id: action1
-
-                        visible: action1.text !== ""
-
-                        Layout.fillWidth: true
-
-                        Navigation.leftItem: cancel
-                        Navigation.rightItem: action2
-                        Keys.priority: Keys.AfterItem
-                        Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
-
-                        onClicked: {
-                            vlcDialog.post_action1(questionDialog.dialogId)
-                            questionDialog.dialogId = null
-                            questionDialog.close()
-                        }
-                    }
-
-                    Widgets.TextToolButton {
-                        id: action2
-                        visible: action2.text !== ""
-
-                        Layout.fillWidth: true
-
-                        Navigation.leftItem: action1
-                        Keys.priority: Keys.AfterItem
-                        Keys.onPressed: (event) => Navigation.defaultKeyAction(event)
-
-                        onClicked: {
-                            vlcDialog.post_action2(questionDialog.dialogId)
-                            questionDialog.dialogId = null
-                            questionDialog.close()
-                        }
-                    }
+        TextEdit {
+            objectName: "interactionQuestionMessage"
+            visible: text.length > 0
+            Layout.fillWidth: true
+            text: questionDialog.request ? questionDialog.request.text : ""
+            textFormat: TextEdit.PlainText
+            readOnly: true; selectByMouse: true; activeFocusOnTab: true
+            wrapMode: TextEdit.Wrap
+            color: questionDialog.theme.foreground
+            selectionColor: questionDialog.theme.accent
+            selectedTextColor: questionDialog.onAccent
+            font.pixelSize: questionDialog.theme.dp(14)
+        }
+        footer: Item {
+            visible: true
+            implicitHeight: visible ? actions3.implicitHeight + questionDialog.bottomPadding : 0
+            GridLayout {
+                id: actions3
+                objectName: "interactionQuestionActions"
+                anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: questionDialog.leftPadding; rightMargin: questionDialog.rightPadding }
+                columns: width < (cancel.visible ? cancel.naturalWidth : 0) + (action1.visible ? action1.naturalWidth : 0) + (action2.visible ? action2.naturalWidth : 0) + columnSpacing * Math.max(0, (cancel.visible ? 1 : 0) + (action1.visible ? 1 : 0) + (action2.visible ? 1 : 0) - 1) ? 1 : 3
+                columnSpacing: questionDialog.theme.dp(8); rowSpacing: columnSpacing
+                ModalDialog.ActionButton {
+                    id: cancel
+                    objectName: "interactionQuestionCancel"
+                    dialog: questionDialog
+                    caption: questionDialog.request ? questionDialog.request.cancel : ""
+                    visible: caption.length > 0
+                    onClicked: questionDialog.reject()
                 }
+                ModalDialog.ActionButton {
+                    id: action1
+                    objectName: "interactionAction1"
+                    dialog: questionDialog
+                    caption: questionDialog.request ? questionDialog.request.action1 : ""
+                    visible: caption.length > 0
+                    primaryAction: true
+                    onClicked: root.finishRequest(questionDialog.request, "action1")
+                }
+                ModalDialog.ActionButton {
+                    id: action2
+                    objectName: "interactionAction2"
+                    dialog: questionDialog
+                    caption: questionDialog.request ? questionDialog.request.action2 : ""
+                    visible: caption.length > 0
+                    onClicked: root.finishRequest(questionDialog.request, "action2")
+                }
+
             }
         }
     }
-
     CustomDialog {
         id: customDialog
+        objectName: "interactionCustom"
         rootWindow: root.bgContent
-        onAboutToHide: restoreFocus()
-    }
-
-    Loader {
-        id: toolbarEditorDialogLoader
-        active: false
-        source: "qrc:///qt/qml/VLC/Dialogs/ToolbarEditorDialog.qml"
-
-        Connections {
-            target: DialogsProvider
-
-            function onShowToolbarEditorDialog() {
-                if (root.bgContent && typeof root.bgContent.beginCustomization === "function") {
-                    root.bgContent.beginCustomization()
-                    return
-                }
-                toolbarEditorDialogLoader.active = true
-                toolbarEditorDialogLoader.item.open()
-            }
-        }
+        onClosed: root.requestClosed()
     }
 }

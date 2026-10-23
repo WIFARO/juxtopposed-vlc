@@ -19,104 +19,72 @@
 import QtQuick
 import QtQuick.Layouts
 
-import VLC.MainInterface
-import VLC.Style
-import VLC.Widgets as Widgets
-
 ModalDialog {
     id: root
-
     property string text
-
-    property alias cancelTxt: cancelBtn.text
-    property alias okTxt: okBtn.text
-
+    property alias cancelTxt: cancelButton.caption
+    property alias okTxt: okButton.caption
     property var _acceptCb: undefined
     property var _rejectCb: undefined
 
     function ask(text, acceptCb, rejectCb, buttons) {
-        //TODO: use a Promise here when dropping support of Qt 5.11
-        let okTxt = qsTr("OK")
-        let cancelTxt = qsTr("cancel")
-        if (buttons) {
-            if (buttons.cancel) {
-                cancelTxt = buttons.cancel
-            }
-            if (buttons.ok) {
-                okTxt = buttons.ok
-            }
-        }
-        root.cancelTxt = cancelTxt
-        root.okTxt = okTxt
+        root.title = qsTr("Confirm")
+        root.cancelTxt = buttons && typeof buttons.cancel === "string" ? buttons.cancel : qsTr("Cancel")
+        root.okTxt = buttons && typeof buttons.ok === "string" ? buttons.ok : qsTr("OK")
         root.text = text
         root._acceptCb = acceptCb
         root._rejectCb = rejectCb
         root.open()
     }
-
-    onAccepted: {
-        if (_acceptCb)
-            _acceptCb()
+    function answer(accepted) {
+        const callback = accepted ? _acceptCb : _rejectCb
+        _acceptCb = undefined
+        _rejectCb = undefined
+        if (callback) callback()
     }
-
-    onRejected: {
-        if (_rejectCb)
-            _rejectCb()
-    }
-
-    contentItem: Text {
-        focus: false
-        font.pixelSize: VLCStyle.fontSize_normal
-        color: root.colorContext.fg.primary
-        wrapMode: Text.WordWrap
+    onAccepted: answer(true)
+    onRejected: answer(false)
+    onClosed: if (_acceptCb || _rejectCb) answer(false)
+    onOpened: { if (cancelButton.visible) cancelButton.forceActiveFocus(); else okButton.forceActiveFocus() }
+    TextEdit {
+        objectName: "interactionCustomMessage"
+        visible: text.length > 0
+        Layout.fillWidth: true
         text: root.text
+        textFormat: TextEdit.PlainText
+        readOnly: true; selectByMouse: true; activeFocusOnTab: true
+        wrapMode: TextEdit.Wrap
+        color: root.theme.foreground
+        selectionColor: root.theme.accent
+        selectedTextColor: root.onAccent
+        font.pixelSize: root.theme.dp(14)
     }
-
-    footer: FocusScope {
-        focus: true
-        id: questionButtons
-        implicitHeight: VLCStyle.icon_normal
-
-        readonly property ColorContext colorContext: ColorContext {
-            id: footerTheme
-            palette: root.colorContext.palette
-            colorSet: ColorContext.Window
-        }
-
-        Rectangle {
-            color: footerTheme.bg.primary
-            anchors.fill: parent
-            anchors.leftMargin: VLCStyle.margin_xxsmall
-            anchors.rightMargin: VLCStyle.margin_xxsmall
-
-            RowLayout {
-                anchors.fill: parent
-
-                Widgets.ButtonExt {
-                    id: cancelBtn
-                    Layout.fillWidth: true
-                    focus: true
-                    visible: cancelBtn.text !== ""
-
-                    onClicked: root.reject()
-
-                    Navigation.rightItem: okBtn
-                    Keys.priority: Keys.AfterItem
-                    Keys.onPressed: (event) => okBtn.Navigation.defaultKeyAction(event)
-                }
-
-                Widgets.ButtonExt {
-                    id: okBtn
-                    Layout.fillWidth: true
-                    visible: okBtn.text !== ""
-
-                    onClicked: root.accept()
-
-                    Navigation.leftItem: cancelBtn
-                    Keys.priority: Keys.AfterItem
-                    Keys.onPressed: (event) => cancelBtn.Navigation.defaultKeyAction(event)
-                }
+    footer: Item {
+        visible: true
+        implicitHeight: visible ? actions1.implicitHeight + root.bottomPadding : 0
+        GridLayout {
+            id: actions1
+            anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: root.leftPadding; rightMargin: root.rightPadding }
+            columns: width < cancelButton.naturalWidth + okButton.naturalWidth + columnSpacing ? 1 : 2
+            columnSpacing: root.theme.dp(8); rowSpacing: columnSpacing
+            ModalDialog.ActionButton {
+                id: cancelButton
+                objectName: "interactionCustomCancel"
+                dialog: root
+                caption: qsTr("Cancel")
+                visible: caption.length > 0
+                onClicked: root.reject()
             }
+            ModalDialog.ActionButton {
+                id: okButton
+                objectName: "interactionCustomAccept"
+                dialog: root
+                caption: qsTr("OK")
+                primaryAction: true
+                visible: caption.length > 0
+                onClicked: root.accept()
+            }
+
         }
     }
 }
