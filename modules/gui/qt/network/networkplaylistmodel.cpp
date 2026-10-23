@@ -4,6 +4,7 @@
 #include "medialibrary/medialib.hpp"
 #include "medialibrary/mlmediastore.hpp"
 #include "util/podcast_metadata.hpp"
+#include "util/media_identity.hpp"
 #include "playlist/media.hpp"
 #include "playlist/playlist_controller.hpp"
 #include <vlc_preparser.h>
@@ -286,8 +287,8 @@ void NetworkPlaylistModel::rebuild()
         std::stable_sort(m_rows.begin(), m_rows.end(), [&](const Row& a, const Row& b) {
             int result;
             if (m_sort == QLatin1String("published")) {
-                const auto left = QDateTime::fromString(a.podcast.value("date").toString(), Qt::RFC2822Date);
-                const auto right = QDateTime::fromString(b.podcast.value("date").toString(), Qt::RFC2822Date);
+                const auto left = MediaIdentity::publicationDate(a.podcast.value("date").toString());
+                const auto right = MediaIdentity::publicationDate(b.podcast.value("date").toString());
                 result = left == right ? 0 : left < right ? -1 : 1;
             } else if (m_sort == QLatin1String("episode")) {
                 const auto left = std::make_pair(a.podcast.value("season").toInt(), a.podcast.value("episode").toDouble());

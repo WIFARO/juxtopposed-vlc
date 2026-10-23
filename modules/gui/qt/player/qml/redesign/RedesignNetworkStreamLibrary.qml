@@ -20,6 +20,20 @@ Item {
     readonly property int count: model ? model.count : 0
     readonly property bool loading: linked ? linkedModel.loading : !!model && !atRoot && !saved && model.loading
     readonly property bool podcast: location.source.startsWith("podcast")
+    property bool hasPodcasts: false
+    function refreshPodcastKind() {
+        const first = dataAt(0)
+        hasPodcasts = !!first && !!first.podcast && !!first.podcast.feed
+    }
+    onCountChanged: podcastKindRefresh.restart()
+    onModelChanged: podcastKindRefresh.restart()
+    Timer { id: podcastKindRefresh; interval: 0; onTriggered: root.refreshPodcastKind() }
+    Connections {
+        target: root.model || null
+        ignoreUnknownSignals: true
+        function onDataChanged() { podcastKindRefresh.restart() }
+        function onModelReset() { podcastKindRefresh.restart() }
+    }
     readonly property var sourceTitles: [qsTr("Podcasts"), qsTr("Radio"), qsTr("Saved streams")]
 
     function rebuild() {

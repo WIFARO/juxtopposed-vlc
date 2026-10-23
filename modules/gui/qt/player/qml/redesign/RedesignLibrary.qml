@@ -18,11 +18,7 @@ RedesignLibraryView {
     playlistEditing: !!selectedPlaylist && playlistEditKey === playlistKey && sortState.selection.id === "original" && !searchText.length && !grid
     playlistBusy: playlistMedia.transactionPending
     onGridChanged: if (grid) playlistEditKey = ""
-    podcastView: {
-        if (category !== 3 || network.count < 1) return false
-        const first = network.dataAt(0)
-        return !!first && !!first.podcast && !!first.podcast.feed
-    }
+    podcastView: category === 3 && network.hasPodcasts
     singleClickActivate: !!MainCtx.redesignPlayerPreferences.singleClickActivate
     addLabel: selectedPlaylist ? qsTr("Add files") : category === 4 ? qsTr("Create playlist") : category === 3 ? network.podcast ? qsTr("Add podcast") : qsTr("Add Network Stream") : qsTr("Add")
     onPlaylistEditRequested: {
@@ -84,7 +80,7 @@ RedesignLibraryView {
             {action: "play", label: target.progress > 0 ? qsTr("Resume") : qsTr("Play"), icon: "play-outline"},
             {action: "restart", label: qsTr("Play from the start"), icon: "play-outline"},
             {action: "queue", label: qsTr("Add to queue"), icon: "queue"},
-            {action: "podcast-played", label: target.played ? qsTr("Mark as not listened") : qsTr("Mark as listened"), icon: "watched"},
+            {action: "podcast-played", label: target.podcast.videoEpisode ? target.played ? qsTr("Mark as not watched") : qsTr("Mark as watched") : target.played ? qsTr("Mark as not listened") : qsTr("Mark as listened"), icon: "watched"},
             {action: "episode-info", label: qsTr("Episode details"), icon: "info-two-tone"},
             {action: "podcast-playlist", label: qsTr("Add to playlist"), icon: "playlist"}
         ].concat(target.podcast.video ? [{action: "podcast-video", label: qsTr("Play video"), icon: "video"}] : [])}
@@ -457,7 +453,7 @@ RedesignLibraryView {
         else MediaLib.addAndPlay(MediaLib.deserializeMlItemIdFromString(target.key))
     }
     function snapshot() { return { category: category, homeSection: homeSection, playlist: selectedPlaylist, collection: selectedCollection, folder: currentFolder, musicSection: musicSection, networkLocation: networkLocation, name: selectedName, search: searchText, view: viewState() } }
-    function remember() { backStack = [...backStack, snapshot()]; forwardStack = [] }
+    function remember() { backStack = [...backStack, snapshot()]; forwardStack = []; pointerSelection = false }
     function restore(state) { category = state.category; homeSection = state.homeSection || ""; selectedPlaylist = state.playlist; selectedCollection = state.collection; currentFolder = state.folder; musicSection = state.musicSection; networkLocation = state.networkLocation || {source: "", title: "", nodes: []}; selectedName = state.name; searchText = state.search; if (currentFolder) visits.record("folders", currentFolder, nameFromUrl(currentFolder), category); else if (selectedPlaylist) visits.record("playlists", selectedPlaylist.toString(), selectedName); pendingViewState = state.view; restoreViewTimer.restart() }
     property var pendingViewState
     Timer { id: restoreViewTimer; interval: 50; onTriggered: { if (root.loading) restart(); else { root.restoreViewState(root.pendingViewState); root.pendingViewState = null } } }

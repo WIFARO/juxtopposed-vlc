@@ -10,7 +10,8 @@ inline QVariantMap podcastMetadata(input_item_t* item)
 {
     const auto feed = vlc::wrap_cptr(input_item_GetMetaExtra(item, "podcast:feed"));
     if (!feed || !*feed) return {};
-    QVariantMap data{{"feed", QString::fromUtf8(feed.get())},
+    const auto mime = vlc::wrap_cptr(input_item_GetMetaExtra(item, "podcast:mime"));
+    QVariantMap data{{"videoEpisode", mime && QByteArray(mime.get()).startsWith("video/")}, {"feed", QString::fromUtf8(feed.get())},
         {"duration", QVariant::fromValue(VLCDuration(input_item_GetDuration(item)))}};
     const auto meta = [&](const char* name, vlc_meta_type_t type) {
         const auto value = vlc::wrap_cptr(input_item_GetMeta(item, type));

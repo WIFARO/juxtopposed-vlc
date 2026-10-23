@@ -473,6 +473,12 @@ static void TestResumeProgress(vlc_object_t *root, vlc_medialibrary_t *ml)
     ResumeOpen(player, &test, item, 1);
     ResumeWaitPosition(player, &test, .37);
     ResumeStop(player, &test);
+    input_item_t *direct = input_item_New(item->psz_uri, "Direct episode URL");
+    assert(direct);
+    ResumeOpen(player, &test, direct, 1);
+    ResumeWaitPosition(player, &test, .37);
+    ResumeStop(player, &test);
+    input_item_Release(direct);
     input_item_Release(item);
 
     vlc_player_RemoveListener(player, listener);

@@ -3,6 +3,7 @@
 
 // Provider-independent media evidence. QtCore only: no player, UI or network state.
 #include <QDate>
+#include <QDateTime>
 #include <QFileInfo>
 #include <QMap>
 #include <QRegularExpression>
@@ -14,6 +15,20 @@
 #include <numeric>
 
 namespace MediaIdentity {
+// RSS permits named zones that Qt's RFC 2822 parser does not accept.
+inline QDateTime publicationDate(QString value)
+{
+    static const QMap<QString, QString> zones{{"UT", "+0000"}, {"UTC", "+0000"}, {"GMT", "+0000"}, {"Z", "+0000"},
+        {"EST", "-0500"}, {"EDT", "-0400"}, {"CST", "-0600"}, {"CDT", "-0500"},
+        {"MST", "-0700"}, {"MDT", "-0600"}, {"PST", "-0800"}, {"PDT", "-0700"}};
+    value = value.simplified();
+    const auto space = value.lastIndexOf(QLatin1Char(' '));
+    const auto zone = zones.constFind(value.mid(space + 1).toUpper());
+    if (space >= 0 && zone != zones.cend()) value = value.left(space + 1) + zone.value();
+    auto date = QDateTime::fromString(value, Qt::RFC2822Date);
+    return date.isValid() ? date : QDateTime::fromString(value, Qt::ISODate);
+}
+
 enum class Kind { Unknown, Movie, Episode, MusicTrack, Album, Artist, Podcast, PodcastEpisode, Audiobook };
 
 inline QString kindName(Kind kind)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "media_identity.hpp"
+#include <QDateTime>
 #include <vlc_common.h>
 #include <vlc_input_item.h>
 
@@ -32,15 +33,18 @@ inline QVariantMap inputMetadata(input_item_t* item)
     auto feed = extra("PODCASTURL");
     if (feed.isEmpty()) feed = extra("ITUNESPODCASTURL");
     if (feed.isEmpty()) feed = extra("PURL");
+    if (feed.isEmpty()) feed = extra("podcast:feed");
     if (podcast == "1" || podcast.compare("true", Qt::CaseInsensitive) == 0 || !feed.isEmpty()) {
         metadata.insert("type", "podcastEpisode");
         metadata.insert("feedUrl", feed);
         metadata.insert("series", metadata.value("showName", metadata.value("album")));
         auto guid = extra("GUID");
         if (guid.isEmpty()) guid = extra("EGID");
+        if (guid.isEmpty()) guid = extra("podcast:guid");
         metadata.insert("guid", guid);
         char* value = input_item_GetMeta(item, vlc_meta_Date);
-        const auto date = value ? QDate::fromString(QString::fromUtf8(value).left(10), Qt::ISODate) : QDate();
+        auto date = value ? QDate::fromString(QString::fromUtf8(value).left(10), Qt::ISODate) : QDate();
+        if (!date.isValid() && value) date = publicationDate(QString::fromUtf8(value)).date();
         free(value);
         if (date.isValid()) metadata.insert("airDate", date.toString(Qt::ISODate));
     }

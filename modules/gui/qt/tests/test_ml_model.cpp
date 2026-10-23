@@ -1018,6 +1018,18 @@ private slots:
         QCOMPARE(podcast.value("guid").toString(), "episode-3");
         QVERIFY(!podcast.contains("year"));
         QCOMPARE(podcast.value("airDate").toString(), "2024-03-15");
+        SharedInputItem feedItem(input_item_New("https://example.test/episode.mp3", "Feed episode"), false);
+        input_item_SetShowName(feedItem.get(), "Feed show");
+        input_item_SetMetaExtra(feedItem.get(), "podcast:feed", "https://example.test/feed.xml");
+        input_item_SetMetaExtra(feedItem.get(), "podcast:guid", "feed-episode-8");
+        input_item_SetDate(feedItem.get(), "Fri, 23 Oct 2026 12:50:14 GMT");
+        const auto feedMetadata = MediaIdentity::inputMetadata(feedItem.get());
+        QCOMPARE(feedMetadata.value("type").toString(), "podcastEpisode");
+        QCOMPARE(feedMetadata.value("guid").toString(), "feed-episode-8");
+        QCOMPARE(feedMetadata.value("airDate").toString(), "2026-10-23");
+        vlc_ml_media_t feedMedia{};
+        feedMedia.p_podcast = feedItem.get();
+        QCOMPARE(MediaIdentity::libraryMetadata(&feedMedia, QUrl("https://example.test/episode.mp3")).value("type").toString(), "podcastEpisode");
     }
 
     void testSubtitleMatchingUsesProviderFacts()

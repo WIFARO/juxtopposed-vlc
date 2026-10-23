@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 #include "media_identity.hpp"
+#include "media_identity_vlc.hpp"
 #include <vlc_media_library.h>
 
 namespace MediaIdentity {
@@ -9,7 +10,9 @@ inline QVariantMap libraryMetadata(const vlc_ml_media_t* media, const QUrl& url)
 {
     QVariantMap metadata;
     if (!media) return metadata;
+    if (media->p_podcast) metadata = inputMetadata(media->p_podcast);
     metadata.insert("durationMs", qint64(media->i_duration));
+    if (media->p_podcast) return metadata;
     const QString title = QString::fromUtf8(media->psz_title ? media->psz_title : "");
     const bool episode = media->i_subtype == VLC_ML_MEDIA_SUBTYPE_SHOW_EPISODE;
     if (!episode && !title.isEmpty() && title != url.fileName() && title != QFileInfo(url.fileName()).completeBaseName())

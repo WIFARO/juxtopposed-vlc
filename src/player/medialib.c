@@ -54,6 +54,12 @@ vlc_player_input_RestoreMlStates(struct vlc_player_input* input, bool force_pos)
     if (!media) media = vlc_ml_get_media_by_mrl( ml, item->psz_uri);
     if (!media)
         return;
+    if (media->p_podcast && !input->ml.podcast) {
+        input->ml.podcast = true;
+        vlc_mutex_lock(&item->lock);
+        vlc_meta_Merge(item->p_meta, media->p_podcast->p_meta);
+        vlc_mutex_unlock(&item->lock);
+    }
     if (media->b_subtitle_track_selection)
     {
         /* An explicit empty choice must also suppress the filesystem's

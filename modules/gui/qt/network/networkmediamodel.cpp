@@ -26,6 +26,7 @@
 
 #include "util/locallistbasemodel.hpp"
 #include "util/podcast_metadata.hpp"
+#include "util/media_identity.hpp"
 
 #include "playlist/media.hpp"
 #include "playlist/playlist_controller.hpp"
@@ -292,8 +293,8 @@ public:
         if (m_sortCriteria == "published" || m_sortCriteria == "episode") {
             return [field = m_sortCriteria, descending = m_sortOrder == Qt::DescendingOrder](const NetworkMediaItemPtr& a, const NetworkMediaItemPtr& b) {
                 if (field == "published") {
-                    const auto left = QDateTime::fromString(a->podcast.value("date").toString(), Qt::RFC2822Date);
-                    const auto right = QDateTime::fromString(b->podcast.value("date").toString(), Qt::RFC2822Date);
+                    const auto left = MediaIdentity::publicationDate(a->podcast.value("date").toString());
+                    const auto right = MediaIdentity::publicationDate(b->podcast.value("date").toString());
                     return descending ? left > right : left < right;
                 }
                 const auto left = std::make_pair(a->podcast.value("season").toInt(), a->podcast.value("episode").toDouble());
