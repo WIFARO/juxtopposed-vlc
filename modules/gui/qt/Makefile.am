@@ -344,7 +344,7 @@ libqt_plugin_la_SOURCES = \
 	util/color_scheme_model.cpp util/color_scheme_model.hpp \
 	util/redesign_widget_theme.cpp util/redesign_widget_theme.hpp \
 	util/playlist_cover_store.hpp \
-	util/track_matching.hpp \
+	util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp \
 	util/local_file_url.hpp \
 	util/gettext_translator.cpp util/gettext_translator.hpp \
 	util/interface_translator.cpp util/interface_translator.hpp \
@@ -2455,9 +2455,31 @@ test_qt_github_releases_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_qt_github_releases
 TESTS += test_qt_github_releases
 
+test_qt_media_identity_SOURCES = tests/test_media_identity.cpp util/media_identity.hpp util/media_fingerprint.hpp util/track_matching.hpp
+nodist_test_qt_media_identity_SOURCES = tests/test_media_identity.moc
+BUILT_SOURCES += tests/test_media_identity.moc
+CLEANFILES += tests/test_media_identity.moc
+test_qt_media_identity_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_media_identity_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_media_identity_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_qt_media_identity_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_qt_media_identity
+TESTS += test_qt_media_identity
+
 test_qt_subtitle_sources_SOURCES = \
 	tests/test_subtitle_sources.cpp util/subtitle_source_service.cpp util/subtitle_source_service.hpp
-nodist_test_qt_subtitle_sources_SOURCES = \
+nodist_test_qt_media_identity_SOURCES = tests/test_media_identity.cpp util/media_identity.hpp util/media_fingerprint.hpp util/track_matching.hpp
+nodist_test_qt_media_identity_SOURCES = tests/test_media_identity.moc
+BUILT_SOURCES += tests/test_media_identity.moc
+CLEANFILES += tests/test_media_identity.moc
+test_qt_media_identity_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_media_identity_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_media_identity_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_qt_media_identity_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_qt_media_identity
+TESTS += test_qt_media_identity
+
+test_qt_subtitle_sources_SOURCES = \
 	tests/test_subtitle_sources.moc util/subtitle_source_service.moc.cpp
 BUILT_SOURCES += tests/test_subtitle_sources.moc
 CLEANFILES += tests/test_subtitle_sources.moc

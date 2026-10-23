@@ -506,6 +506,8 @@ qt_plugin_sources = files(
     'util/redesign_widget_theme.hpp',
     'util/playlist_cover_store.hpp',
     'util/track_matching.hpp',
+    'util/media_identity.hpp',
+    'util/media_fingerprint.hpp',
     'util/local_file_url.hpp',
     'util/gettext_translator.cpp',
     'util/gettext_translator.hpp',
@@ -1620,6 +1622,14 @@ if qt6_dep.found()
             'include_directories': qt_include_dir,
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
             'link_args': qt_link_args,
+        }
+        vlc_tests += {
+            'name': 'test_qt_media_identity',
+            'sources': files('tests/test_media_identity.cpp'),
+            'moc_sources': files('tests/test_media_identity.cpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
         }
         vlc_tests += {
             'name': 'test_qt_subtitle_sources',

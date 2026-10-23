@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
+#include "media_identity.hpp"
 #include <QFileInfo>
 #include <QMap>
 #include <QRegularExpression>
@@ -22,23 +23,6 @@ inline QString stem(const QUrl& url)
     return normalize(QFileInfo(url.fileName()).completeBaseName());
 }
 
-struct Episode {
-    QString show;
-    int season = -1;
-    int number = -1;
-};
-
-inline Episode episode(const QString& name)
-{
-    static const QRegularExpression pattern(QStringLiteral(
-        "(?:^| )(?:(?:s(?:eason)? ?(\\d{1,3}) ?e(?:pisode)? ?(\\d{1,4}))|(?:(\\d{1,3})x(\\d{1,4})))(?: |$)"));
-    const auto match = pattern.match(name);
-    if (!match.hasMatch()) return {};
-    const bool longForm = !match.captured(1).isEmpty();
-    return {name.left(match.capturedStart()).trimmed(),
-        match.captured(longForm ? 1 : 3).toInt(), match.captured(longForm ? 2 : 4).toInt()};
-}
-
 inline const QSet<QString>& labels()
 {
     static const QSet<QString> labels = [] {
@@ -58,7 +42,7 @@ struct Name {
     QUrl url;
     QString normalized;
     QString compact;
-    Episode episode;
+    MediaIdentity::Identity identity;
     QStringList words;
 };
 
@@ -75,24 +59,27 @@ inline Name parse(const QUrl& url, bool track = false)
             name = normalize(parent) + QLatin1Char(' ') + name;
         }
     }
+    auto identity = MediaIdentity::parse(url.fileName());
+    if (track) identity = MediaIdentity::parse(name);
     auto compact = name;
     compact.remove(QLatin1Char(' '));
-    return {url, name, compact, episode(name), name.split(QLatin1Char(' '))};
+    return {url, name, compact, identity, name.split(QLatin1Char(' '))};
 }
 
 inline int score(const Name& media, const Name& track)
 {
     const auto& target = media.normalized;
     const auto& source = track.normalized;
-    const auto compact = [](QString value) { return value.remove(QLatin1Char(' ')); };
     if (target.isEmpty() || source.isEmpty()) return 0;
     if (media.compact == track.compact) return 100;
-    const auto& a = media.episode;
-    const auto& b = track.episode;
-    if (a.number >= 0 && b.number >= 0) {
-        if (a.number != b.number || a.season != b.season) return 0;
-        if (compact(a.show) == compact(b.show)) return 90;
-        return a.show.isEmpty() || b.show.isEmpty() ? 50 : 0;
+    const auto& a = media.identity;
+    const auto& b = track.identity;
+    const auto comparison = MediaIdentity::compare(a, b);
+    if (comparison.conflict) return 0;
+    if (comparison.strong) return 90;
+    if (!a.episodes.isEmpty() && !b.episodes.isEmpty()) {
+        if (a.episodes != b.episodes || a.season != b.season) return 0;
+        return a.title.isEmpty() || b.title.isEmpty() ? 50 : 0;
     }
     const auto& words = track.words;
     QString prefix;
