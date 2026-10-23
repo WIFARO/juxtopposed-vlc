@@ -99,7 +99,9 @@ FocusScope {
             contentWidth: availableWidth
             clip: true
             C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
-            C.ScrollBar.vertical: C.ScrollBar { policy: C.ScrollBar.AsNeeded; active: true }
+            C.ScrollBar.vertical.objectName: "noticeScrollBar"
+            C.ScrollBar.vertical.policy: C.ScrollBar.AsNeeded
+            C.ScrollBar.vertical.active: true
             Column {
                 id: body
                 width: scroll.availableWidth
