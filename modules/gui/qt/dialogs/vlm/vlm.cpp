@@ -25,793 +25,459 @@
 #ifdef HAVE_CONFIG_H
 # include "config.h"
 #endif
-
 #ifdef ENABLE_VLM
 #include "dialogs/vlm/vlm.hpp"
 #include "dialogs/open/open.hpp"
 #include "dialogs/sout/sout.hpp"
+#include "maininterface/mainctx.hpp"
+#include "util/interface_translator.hpp"
 #include "util/qt_dirs.hpp"
-#include "util/colorizedsvgicon.hpp"
-
-#include <QString>
-#include <QVBoxLayout>
-#include <QLabel>
-#include <QWidget>
-#include <QGridLayout>
-#include <QToolButton>
-#include <QGroupBox>
-#include <QPushButton>
-#include <QDateTimeEdit>
-#include <QDateTime>
-#include <QSpinBox>
+#include <QApplication>
 #include <QFileDialog>
+#include <QHeaderView>
+#include <QKeyEvent>
+#include <QPlainTextEdit>
+#include <QResizeEvent>
+#include <QSaveFile>
+#include <QScreen>
+#include <QScrollBar>
+#include <QSignalBlocker>
+#include <QTimer>
+#include <vlc_variables.h>
 
-
-VLMDialog::VLMDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
+namespace {
+int dp(qt_intf_t *intf, int n) { return qRound(n * (intf->p_mi ? intf->p_mi->getIntfScaleFactor() : 1.)); }
+QString token(QString value)
 {
-    vlm_t *p_vlm = vlm_New( vlc_object_instance(p_intf), NULL );
-
-    if( !p_vlm )
+    value.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
+    value.replace(QLatin1Char('"'), QStringLiteral("\\\""));
+    return QLatin1Char('"') + value + QLatin1Char('"');
+}
+QStringList lines(const QString &text)
+{
+    QStringList result;
+    for (const auto &line : text.split(QLatin1Char('\n')))
+        if (!line.trimmed().isEmpty()) result.append(line);
+    return result;
+}
+QStringList strings(int count, char **values)
+{
+    QStringList result;
+    for (int i = 0; i < count; ++i) result.append(qfu(values[i]));
+    return result;
+}
+QString outputChain(QString output)
+{
+    output = output.trimmed();
+    if (output.startsWith(QLatin1String(":sout="))) output.remove(0, 6);
+    else if (output.startsWith(QLatin1String("sout="))) output.remove(0, 5);
+    return output;
+}
+struct Description {
+    vlm_media_t value{};
+    QByteArray name, output;
+    QList<QByteArray> inputs, options;
+    QList<char*> inputPointers, optionPointers;
+    Description(qint64 id, const QString &title, const QStringList &sources, const QStringList &flags,
+                const QString &destination, bool enabled, bool loop)
+        : name(title.toUtf8()), output(destination.toUtf8())
     {
-        msg_Warn( p_intf, "Couldn't build VLM object ");
-        vlm = NULL;
-        return;
+        for (const auto &s : sources) inputs.append(s.toUtf8());
+        for (const auto &s : flags) options.append(s.toUtf8());
+        for (auto &s : inputs) inputPointers.append(s.data());
+        for (auto &s : options) optionPointers.append(s.data());
+        value.id = id;
+        value.psz_name = name.data();
+        value.psz_output = output.isEmpty() ? nullptr : output.data();
+        value.i_input = inputPointers.size(); value.ppsz_input = inputPointers.data();
+        value.i_option = optionPointers.size(); value.ppsz_option = optionPointers.data();
+        value.b_enabled = enabled; value.broadcast.b_loop = loop;
     }
-    vlm = new VLMWrapper( p_vlm );
+};
+struct Instances {
+    vlm_media_instance_t **items = nullptr;
+    int count = 0;
+    Instances(vlm_t *vlm, qint64 id) { if (vlm_Control(vlm, VLM_GET_MEDIA_INSTANCES, int64_t(id), &items, &count)) count = 0; }
+    ~Instances() { for (int i = 0; i < count; ++i) vlm_media_instance_Delete(items[i]); free(items); }
+    int paused() const { int n = 0; for (int i = 0; i < count; ++i) n += items[i]->b_paused; return n; }
+};
+}
 
-    // UI stuff
-    ui.setupUi( this );
-    ui.saveButton->hide();
-
-#define ADDMEDIATYPES( str, type ) ui.mediaType->addItem( qfut( str ), QVariant( type ) );
-    ADDMEDIATYPES( N_("Broadcast"), QVLM_Broadcast );
-    ADDMEDIATYPES( N_("Schedule"), QVLM_Schedule );
-#undef ADDMEDIATYPES
-
-    /* Schedule Stuffs */
-    QGridLayout *schetimelayout = new QGridLayout( ui.schedBox );
-    QLabel *schetimelabel = new QLabel( qtr( "Hours / Minutes / Seconds:" ) );
-    schetimelayout->addWidget( schetimelabel, 0, 0 );
-    QLabel *schedatelabel = new QLabel( qtr( "Day / Month / Year:" ) );
-    schetimelayout->addWidget( schedatelabel, 1, 0 );
-    QLabel *scherepeatLabel = new QLabel( qtr( "Repeat:" ) );
-    schetimelayout->addWidget( scherepeatLabel, 2, 0 );
-    QLabel *scherepeatTimeLabel = new QLabel( qtr( "Repeat delay:" ) );
-    schetimelayout->addWidget( scherepeatTimeLabel, 3, 0 );
-
-    time = new QDateTimeEdit( QTime::currentTime() );
-    time->setAlignment( Qt::AlignRight );
-    time->setDisplayFormat( "hh:mm:ss" );
-    schetimelayout->addWidget( time, 0, 1, 1, 3 );
-
-    date = new QDateTimeEdit( QDate::currentDate() );
-    date->setAlignment( Qt::AlignRight );
-    date->setCalendarPopup( true );
-#ifdef _WIN32
-    date->setDisplayFormat( "dd MM yyyy" );
-#else
-    date->setDisplayFormat( "dd MMMM yyyy" );
-#endif
-    schetimelayout->addWidget( date, 1, 1, 1, 3 );
-
-    scherepeatnumber = new QSpinBox;
-    scherepeatnumber->setAlignment( Qt::AlignRight );
-    schetimelayout->addWidget( scherepeatnumber, 2, 1, 1, 3 );
-
-    repeatDays = new QSpinBox;
-    repeatDays->setAlignment( Qt::AlignRight );
-    schetimelayout->addWidget( repeatDays, 3, 1, 1, 1 );
-    repeatDays->setSuffix( qtr(" days") );
-
-    repeatTime = new QDateTimeEdit;
-    repeatTime->setAlignment( Qt::AlignRight );
-    schetimelayout->addWidget( repeatTime, 3, 2, 1, 2 );
-    repeatTime->setDisplayFormat( "hh:mm:ss" );
-
-    /* scrollArea */
-    ui.vlmItemScroll->setFrameStyle( QFrame::NoFrame );
-    ui.vlmItemScroll->setWidgetResizable( true );
-    vlmItemWidget = new QWidget;
-    vlmItemLayout = new QVBoxLayout( vlmItemWidget );
-    vlmItemWidget->setLayout( vlmItemLayout );
-    ui.vlmItemScroll->setWidget( vlmItemWidget );
-
-    QSpacerItem *spacer =
-        new QSpacerItem( 10, 10, QSizePolicy::Minimum, QSizePolicy::Expanding);
-    vlmItemLayout->addItem( spacer );
-
-    QPushButton *importButton = new QPushButton( qtr( "I&mport" ) );
-    ui.buttonBox->addButton( importButton, QDialogButtonBox::ActionRole );
-
-    QPushButton *exportButton = new QPushButton( qtr( "E&xport" ) );
-    ui.buttonBox->addButton( exportButton, QDialogButtonBox::ActionRole );
-
-    QPushButton *closeButton = new QPushButton( qtr( "&Close" ) );
-    ui.buttonBox->addButton( closeButton, QDialogButtonBox::RejectRole );
-
-
-    showScheduleWidget( QVLM_Broadcast );
-
-    /* Connect the comboBox to show the right Widgets */
-    connect( ui.mediaType, QOverload<int>::of(&QComboBox::currentIndexChanged),
-             this, &VLMDialog::showScheduleWidget );
-
-    /* Connect the leftList to show the good VLMItem */
-    connect( ui.vlmListItem, &QListWidget::currentRowChanged,
-             this, &VLMDialog::selectVLMItem );
-
-    BUTTONACT( closeButton, &VLMDialog::close );
-    BUTTONACT( exportButton, &VLMDialog::exportVLMConf );
-    BUTTONACT( importButton, &VLMDialog::importVLMConf );
-    BUTTONACT( ui.addButton, &VLMDialog::addVLMItem );
-    BUTTONACT( ui.clearButton, &VLMDialog::clearWidgets );
-    BUTTONACT( ui.saveButton, &VLMDialog::saveModifications );
-    BUTTONACT( ui.inputButton, &VLMDialog::selectInput );
-    BUTTONACT( ui.outputButton, &VLMDialog::selectOutput );
-
-    if( !restoreGeometry( getSettings()->value("VLM/geometry").toByteArray() ) )
-    {
-        resize( QSize( 700, 500 ) );
-    }
+VLMDialog::VLMDialog(qt_intf_t *intf) : QVLCFrame(intf)
+{
+    setObjectName(QStringLiteral("redesignVLM"));
+    setWindowRole("vlc-vlm");
+    ui.setupUi(this);
+    ready = true;
+    ui.heading->setProperty("redesignHeading", true);
+    ui.saveButton->setProperty("redesignPrimary", true);
+    ui.feedback->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    ui.inputLayout->setContentsMargins(0, 0, 0, 0);
+    ui.outputLayout->setContentsMargins(0, 0, 0, 0);
+    ui.editorActions->setStretch(0, 1);
+    ui.broadcasts->setColumnCount(5);
+    ui.broadcasts->verticalHeader()->hide();
+    ui.broadcasts->setSortingEnabled(true);
+    ui.broadcasts->setWordWrap(false);
+    ui.broadcasts->setShowGrid(false);
+    ui.broadcasts->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    for (int i = 1; i < 5; ++i) ui.broadcasts->horizontalHeader()->setSectionResizeMode(i, QHeaderView::ResizeToContents);
+    ui.broadcasts->sortItems(0, Qt::AscendingOrder);
+    for (auto *button : findChildren<QPushButton*>()) button->setAutoDefault(false);
+    vlm = vlm_New(vlc_object_instance(p_intf), nullptr);
+    if (vlm) var_AddCallback(reinterpret_cast<vlc_object_t*>(vlm), "intf-event", &VLMDialog::vlmEvent, this);
+    connect(ui.search, &QLineEdit::textChanged, this, &VLMDialog::filterRows);
+    connect(ui.broadcasts, &QTableWidget::itemSelectionChanged, this, &VLMDialog::updateActions);
+    connect(ui.broadcasts, &QTableWidget::itemDoubleClicked, this, [this] { startModifyVLMItem(); });
+    connect(ui.newButton, &QPushButton::clicked, this, &VLMDialog::addVLMItem);
+    connect(ui.editButton, &QPushButton::clicked, this, &VLMDialog::startModifyVLMItem);
+    connect(ui.removeButton, &QPushButton::clicked, this, &VLMDialog::removeVLMItem);
+    connect(ui.saveButton, &QPushButton::clicked, this, &VLMDialog::saveModifications);
+    connect(ui.clearButton, &QPushButton::clicked, this, &VLMDialog::clearWidgets);
+    connect(ui.playButton, &QPushButton::clicked, this, [this] { control(0); });
+    connect(ui.pauseButton, &QPushButton::clicked, this, [this] { control(1); });
+    connect(ui.stopButton, &QPushButton::clicked, this, [this] { control(2); });
+    connect(ui.importButton, &QPushButton::clicked, this, &VLMDialog::importVLMConf);
+    connect(ui.exportButton, &QPushButton::clicked, this, &VLMDialog::exportVLMConf);
+    connect(ui.closeButton, &QPushButton::clicked, this, &VLMDialog::close);
+    connect(ui.inputButton, &QPushButton::clicked, this, &VLMDialog::selectInput);
+    connect(ui.outputButton, &QPushButton::clicked, this, &VLMDialog::selectOutput);
+    connect(ui.advancedBox, &QGroupBox::toggled, ui.optionsText, &QWidget::setVisible);
+    const auto changed = [this] { if (!loadingEditor) { dirty = true; updateActions(); } };
+    connect(ui.nameLedit, &QLineEdit::textChanged, this, changed);
+    connect(ui.outputLedit, &QLineEdit::textChanged, this, changed);
+    connect(ui.inputsText, &QPlainTextEdit::textChanged, this, changed);
+    connect(ui.optionsText, &QPlainTextEdit::textChanged, this, changed);
+    connect(ui.enableCheck, &QtCheckboxChanged, this, changed);
+    connect(ui.loopBCast, &QtCheckboxChanged, this, changed);
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, &VLMDialog::updateText);
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &VLMDialog::updateMetrics);
+    clearWidgets(); updateText(); updateMetrics(); refresh();
+    restoreWidgetPosition("VLM", QSize(dp(p_intf, 900), dp(p_intf, 740)));
+    if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
+    for (auto *child : findChildren<QWidget*>()) child->installEventFilter(this);
 }
 
 VLMDialog::~VLMDialog()
 {
-    delete vlm;
-
-    getSettings()->setValue("VLM/geometry", saveGeometry());
+    if (vlm) { var_DelCallback(reinterpret_cast<vlc_object_t*>(vlm), "intf-event", &VLMDialog::vlmEvent, this); vlm_Delete(vlm); }
+    saveWidgetPosition("VLM");
 }
 
-void VLMDialog::showScheduleWidget( int i )
+int VLMDialog::vlmEvent(vlc_object_t*, const char*, vlc_value_t, vlc_value_t value, void *opaque)
 {
-    ui.schedBox->setVisible( ( i == QVLM_Schedule ) );
-    ui.loopBCast->setVisible( ( i == QVLM_Broadcast ) );
+    auto *self = static_cast<VLMDialog*>(opaque);
+    const auto *event = static_cast<const vlm_event_t*>(value.p_address);
+    if (!event) return VLC_SUCCESS;
+    const auto id = event->id;
+    const int type = event->i_type;
+    const int state = type == VLM_EVENT_MEDIA_INSTANCE_STATE ? event->input_state : VLM_INIT_S;
+    const QString instance = qfu(event->psz_instance_name), name = qfu(event->psz_name);
+    QMetaObject::invokeMethod(self, [self, id, type, state, instance, name] {
+        if (type == VLM_EVENT_MEDIA_INSTANCE_STATE) {
+            // A stop notification follows an input failure. Keep the error
+            // until this instance starts again or the user selects Stop.
+            const bool keepError = self->states.value(id).value(instance) == VLM_ERROR_S
+                && (state == VLM_INIT_S || state == VLM_END_S);
+            if (!keepError) self->states[id][instance] = state;
+            if (state == VLM_ERROR_S) self->feedback(qtr("VLC cannot play %1. Check its input and output.").arg(name));
+        } else if (type == VLM_EVENT_MEDIA_REMOVED) self->states.remove(id);
+        self->queueRefresh();
+    }, Qt::QueuedConnection);
+    return VLC_SUCCESS;
 }
 
-void VLMDialog::selectVLMItem( int i )
+void VLMDialog::queueRefresh()
 {
-    if( i >= 0 )
-        ui.vlmItemScroll->ensureWidgetVisible( vlmItems.at( i ) );
+    if (refreshQueued) return;
+    refreshQueued = true;
+    QTimer::singleShot(0, this, [this] { refreshQueued = false; refresh(); });
 }
 
-bool VLMDialog::isNameGenuine( const QString& name )
+vlm_media_t *VLMDialog::find(qint64 id) const
 {
-    for( int i = 0; i < vlmItems.count(); i++ )
-    {
-        if( vlmItems.at( i )->name == name )
-            return false;
+    for (const auto &item : media) if (item->id == id) return item.get();
+    return nullptr;
+}
+vlm_media_t *VLMDialog::selected() const
+{
+    const int row = ui.broadcasts->currentRow();
+    if (row < 0 || ui.broadcasts->isRowHidden(row) || !ui.broadcasts->selectionModel()->hasSelection()) return nullptr;
+    auto *item = ui.broadcasts->item(row, 0);
+    return item ? find(item->data(Qt::UserRole).toLongLong()) : nullptr;
+}
+
+bool VLMDialog::refresh(qint64 selectId)
+{
+    if (!vlm) { feedback(qtr("VLM is not available.")); updateActions(); return false; }
+    if (selectId < 0) if (auto *current = selected()) selectId = current->id;
+    vlm_media_t **items = nullptr; int count = 0;
+    if (vlm_Control(vlm, VLM_GET_MEDIAS, &items, &count)) { feedback(qtr("VLC cannot read the broadcast list.")); return false; }
+    media.clear();
+    for (int i = 0; i < count; ++i) media.emplace_back(items[i], &vlm_media_Delete);
+    free(items);
+    const int position = ui.broadcasts->verticalScrollBar()->value();
+    const QSignalBlocker blocker(ui.broadcasts);
+    ui.broadcasts->setSortingEnabled(false);
+    ui.broadcasts->setRowCount(count);
+    for (int row = 0; row < count; ++row) {
+        const auto *item = media[row].get();
+        Instances instances(vlm, item->id);
+        const auto state = states.value(item->id);
+        bool failed = false, starting = instances.count > 0;
+        for (auto value : state) failed |= value == VLM_ERROR_S;
+        for (int i = 0; i < instances.count; ++i)
+            starting &= state.value(qfu(instances.items[i]->psz_name), VLM_PLAYING_S) <= VLM_OPENING_S;
+        const QString status = failed ? qtr("Error") : instances.count ? (instances.paused() == instances.count ? qtr("Paused") : starting ? qtr("Starting") : qtr("Playing")) : item->i_input ? qtr("Stopped") : qtr("No inputs");
+        const QStringList values = {qfu(item->psz_name), status, QString::number(item->i_input), item->b_enabled ? qtr("Yes") : qtr("No"), item->broadcast.b_loop ? qtr("Yes") : qtr("No")};
+        for (int col = 0; col < values.size(); ++col) ui.broadcasts->setItem(row, col, new QTableWidgetItem(values[col]));
+        ui.broadcasts->item(row, 2)->setData(Qt::DisplayRole, item->i_input);
+        ui.broadcasts->item(row, 0)->setData(Qt::UserRole, qlonglong(item->id));
+        ui.broadcasts->item(row, 0)->setToolTip(strings(item->i_input, item->ppsz_input).join(QLatin1Char('\n')));
     }
+    ui.broadcasts->setSortingEnabled(true);
+    for (int row = 0; row < count; ++row) if (ui.broadcasts->item(row, 0)->data(Qt::UserRole).toLongLong() == selectId) ui.broadcasts->selectRow(row);
+    ui.broadcasts->verticalScrollBar()->setValue(position);
+    filterRows(); updateActions();
     return true;
 }
 
-void VLMDialog::addVLMItem()
+void VLMDialog::filterRows()
 {
-    int vlmItemCount = vlmItems.count();
-
-    /* Take the name and Check it */
-    QString name = ui.nameLedit->text();
-    if( name.isEmpty() || !isNameGenuine( name ) )
-    {
-        msg_Err( p_intf, "VLM Name is empty or already exists, I can't do it" );
-        return;
+    int count = 0;
+    for (int row = 0; row < ui.broadcasts->rowCount(); ++row) {
+        const auto *item = ui.broadcasts->item(row, 0);
+        const QString text = item->text() + QLatin1Char(' ') + item->toolTip();
+        const bool visible = text.contains(ui.search->text().trimmed(), Qt::CaseInsensitive);
+        ui.broadcasts->setRowHidden(row, !visible);
+        if (!visible && item->isSelected()) ui.broadcasts->clearSelection();
+        count += visible;
     }
-
-    int type = ui.mediaType->itemData( ui.mediaType->currentIndex() ).toInt();
-
-    QString typeShortName;
-    QString inputText = ui.inputLedit->text();
-    QString outputText = ui.outputLedit->text();
-    bool b_checked = ui.enableCheck->isChecked();
-    bool b_looped = ui.loopBCast->isChecked();
-    QDateTime schetime = time->dateTime();
-    QDateTime schedate = date->dateTime();
-    int repeatnum = scherepeatnumber->value();
-    int repeatdays = repeatDays->value();
-    VLMAWidget * vlmAwidget;
-    outputText.remove( ":sout=" );
-
-    switch( type )
-    {
-    case QVLM_Broadcast:
-        typeShortName = "Bcast";
-        vlmAwidget = new VLMBroadcast( vlm, name, inputText, inputOptions, outputText,
-                                       b_checked, b_looped, this );
-        vlm->AddBroadcast( name, inputText, inputOptions, outputText,
-                           b_checked, b_looped );
-    break;
-    case QVLM_Schedule:
-        typeShortName = "Sched";
-        vlmAwidget = new VLMSchedule( vlm, name, inputText, inputOptions, outputText,
-                                      schetime, schedate, repeatnum,
-                                      repeatdays, b_checked, this );
-        vlm->AddSchedule( name, inputText, inputOptions, outputText, schetime,
-                          schedate, repeatnum, repeatdays, b_checked);
-        break;
-    default:
-        msg_Warn( p_intf, "Something bad happened" );
-        return;
-    }
-
-    /* Add an Item of the Side List */
-    ui.vlmListItem->addItem( typeShortName + " : " + name );
-    ui.vlmListItem->setCurrentRow( vlmItemCount - 1 );
-
-    /* Add a new VLMAWidget on the main List */
-
-    vlmItemLayout->insertWidget( vlmItemCount, vlmAwidget );
-    vlmItems.append( vlmAwidget );
-    clearWidgets();
+    ui.listInfo->setText(count ? qtr("%1 / %2 broadcasts").arg(count).arg(ui.broadcasts->rowCount()) : ui.search->text().trimmed().isEmpty() ? qtr("No broadcasts yet. Select New to add one.") : qtr("No broadcasts match your search."));
+    updateActions();
 }
 
-bool VLMDialog::exportVLMConf()
+QString VLMDialog::validationError() const
 {
-    QString saveVLMConfFileName = QFileDialog::getSaveFileName( this,
-                                        qtr( "Save VLM configuration as..." ),
-                                        QVLCUserDir( VLC_DOCUMENTS_DIR ),
-                                        qtr( "VLM conf (*.vlm);;All (*)" ) );
-
-    if( !saveVLMConfFileName.isEmpty() )
-    {
-        vlm->SaveConfig( saveVLMConfFileName );
-        return true;
-    }
-
-    return false;
+    if (!vlm) return qtr("VLM is not available.");
+    const QString name = ui.nameLedit->text();
+    if (name.trimmed().isEmpty()) return qtr("Enter a name.");
+    if (name == QLatin1String("all") || name == QLatin1String("media")) return qtr("Choose a name other than all or media.");
+    for (const auto &item : media) if (item->id != editingId && name == qfu(item->psz_name)) return qtr("This name is already in use.");
+    if (editingId >= 0 && !find(editingId)) return qtr("This broadcast was removed. Select Cancel to start again.");
+    for (const auto &value : {name, ui.outputLedit->text()})
+        if (value.contains(QLatin1Char('\n')) || value.contains(QLatin1Char('\r'))) return qtr("Use one line for the name and output.");
+    for (const auto &value : {name, ui.outputLedit->text(), ui.inputsText->toPlainText(), ui.optionsText->toPlainText()})
+        if (value.contains(QChar(0))) return qtr("Remove the null character from this entry.");
+    return {};
 }
 
-void VLMDialog::mediasPopulator()
+void VLMDialog::updateActions()
 {
-    if( vlm != NULL )
-    {
-        QString typeShortName;
-        int vlmItemCount;
-        vlm_media_t **pp_dsc;
-
-        /* Get medias information and numbers */
-        int i_nMedias = vlm->GetMedias( pp_dsc );
-
-        /* Loop on all of them */
-        for( int i = 0; i < i_nMedias; i++ )
-        {
-            VLMAWidget * vlmAwidget;
-            vlmItemCount = vlmItems.count();
-
-            QString mediaName = qfu( pp_dsc[i]->psz_name );
-            /* It may have several inputs, we take the first one by default
-                 - an evolution will be to manage these inputs in the gui */
-            QString inputText = qfu( pp_dsc[i]->ppsz_input[0] );
-
-            QString outputText = qfu( pp_dsc[i]->psz_output );
-
-            /* Schedule media is a quite especial, maybe there is another way to grab information */
-            {
-                typeShortName = "Bcast";
-                vlmAwidget = new VLMBroadcast( vlm, mediaName, inputText, inputOptions,
-                                               outputText, pp_dsc[i]->b_enabled,
-                                               pp_dsc[i]->broadcast.b_loop, this );
-            }
-            /* Add an Item of the Side List */
-            ui.vlmListItem->addItem( typeShortName + " : " + mediaName );
-            ui.vlmListItem->setCurrentRow( vlmItemCount - 1 );
-
-            /* Add a new VLMAWidget on the main List */
-            vlmItemLayout->insertWidget( vlmItemCount, vlmAwidget );
-            vlmItems.append( vlmAwidget );
-            clearWidgets();
-        }
-    }
+    auto *item = selected();
+    ui.newButton->setEnabled(vlm); ui.importButton->setEnabled(vlm); ui.exportButton->setEnabled(vlm);
+    ui.editButton->setEnabled(item); ui.removeButton->setEnabled(item);
+    int active = 0, paused = 0;
+    if (item && vlm) { Instances instances(vlm, item->id); active = instances.count; paused = instances.paused(); }
+    ui.playButton->setEnabled(item && item->b_enabled && item->i_input && (!active || paused));
+    ui.pauseButton->setEnabled(item && active > paused);
+    ui.stopButton->setEnabled(item && active);
+    ui.playButton->setToolTip(item && !item->i_input ? qtr("Add an input before you start this broadcast.") : QString());
+    const auto error = validationError();
+    ui.saveButton->setEnabled(dirty && error.isEmpty());
+    ui.draftInfo->setText(dirty ? error.isEmpty() ? qtr("Changes are not saved.") : error : editingId >= 0 ? error : QString());
 }
 
-bool VLMDialog::importVLMConf()
+void VLMDialog::feedback(const QString &text) { ui.feedback->setText(text); ui.feedback->setVisible(!text.isEmpty()); }
+
+void VLMDialog::edit(vlm_media_t *item)
 {
-    QString openVLMConfFileName = toNativeSeparators(
-            QFileDialog::getOpenFileName(
-            this, qtr( "Open VLM configuration..." ),
-            QVLCUserDir( VLC_DOCUMENTS_DIR ),
-            qtr( "VLM conf (*.vlm);;All (*)" ) ) );
-
-    if( !openVLMConfFileName.isEmpty() )
-    {
-        if( vlm->LoadConfig( openVLMConfFileName ) )
-        {
-            mediasPopulator();
-        }
-        else
-        {
-            msg_Warn( p_intf, "Failed to import vlm configuration file : %s", qtu( openVLMConfFileName ) );
-            return false;
-        }
-        return true;
+    const qint64 id = item ? item->id : -1;
+    if (dirty) {
+        if (editingId != id) feedback(qtr("Save or cancel the current edit first."));
+        ui.tabs->setCurrentIndex(1); return;
     }
-    return false;
+    loadingEditor = true; editingId = id;
+    ui.nameLedit->setText(item ? qfu(item->psz_name) : QString());
+    ui.inputsText->setPlainText(item ? strings(item->i_input, item->ppsz_input).join(QLatin1Char('\n')) : QString());
+    ui.optionsText->setPlainText(item ? strings(item->i_option, item->ppsz_option).join(QLatin1Char('\n')) : QString());
+    ui.outputLedit->setText(item ? qfu(item->psz_output) : QString());
+    ui.enableCheck->setChecked(item ? item->b_enabled : true);
+    ui.loopBCast->setChecked(item && item->broadcast.b_loop);
+    ui.advancedBox->setChecked(!ui.optionsText->toPlainText().isEmpty());
+    ui.optionsText->setVisible(ui.advancedBox->isChecked());
+    loadingEditor = false; dirty = false;
+    ui.tabs->setTabText(1, item ? qtr("Edit broadcast") : qtr("New broadcast"));
+    ui.tabs->setCurrentIndex(1); feedback({}); updateActions(); ui.nameLedit->setFocus();
 }
-
+void VLMDialog::addVLMItem() { edit(nullptr); }
+void VLMDialog::startModifyVLMItem() { if (auto *item = selected()) edit(item); }
 void VLMDialog::clearWidgets()
 {
-    ui.nameLedit->clear();
-    ui.inputLedit->clear();
-    inputOptions.clear();
-    ui.outputLedit->clear();
-    time->setTime( QTime::currentTime() );
-    date->setDate( QDate::currentDate() );
-    ui.enableCheck->setChecked( true );
-    ui.nameLedit->setReadOnly( false );
-    ui.loopBCast->setChecked( false );
-    ui.saveButton->hide();
-    ui.addButton->show();
-}
-
-void VLMDialog::selectInput()
-{
-    QWidget* windowWidget = window();
-    QWindow* parentWindow = windowWidget ? windowWidget->windowHandle() : nullptr;
-    OpenDialog o( p_intf, parentWindow );
-    o.setActionFlag(OpenDialog::SELECT);
-    o.exec();
-    ui.inputLedit->setText( o.getMRL( false ) );
-    inputOptions = o.getOptions();
-}
-
-void VLMDialog::selectOutput()
-{
-    QWidget* windowWidget = window();
-    QWindow* parentWindow = windowWidget ? windowWidget->windowHandle() : nullptr;
-    SoutDialog s( parentWindow, p_intf );
-    if( s.exec() == QDialog::Accepted )
-    {
-        ui.outputLedit->setText(QLatin1Char(':') + s.getOptions().value(0));
-    }
-}
-
-/* Object Modification */
-void VLMDialog::removeVLMItem( VLMAWidget *vlmObj )
-{
-    int index = vlmItems.indexOf( vlmObj );
-    if( index < 0 ) return;
-    delete ui.vlmListItem->takeItem( index );
-    vlmItems.removeAt( index );
-    delete vlmObj;
-
-    /* HERE BE DRAGONS VLM REQUEST */
-}
-
-void VLMDialog::startModifyVLMItem( VLMAWidget *vlmObj )
-{
-    currentIndex = vlmItems.indexOf( vlmObj );
-    if( currentIndex < 0 ) return;
-
-    ui.vlmListItem->setCurrentRow( currentIndex );
-    ui.nameLedit->setText( vlmObj->name );
-    ui.inputLedit->setText( vlmObj->input );
-    ui.outputLedit->setText( vlmObj->output );
-    ui.enableCheck->setChecked( vlmObj->b_enabled );
-
-    switch( vlmObj->type )
-    {
-    case QVLM_Broadcast:
-        ui.loopBCast->setChecked( (qobject_cast<VLMBroadcast *>(vlmObj))->b_looped );
-        break;
-    case QVLM_Schedule:
-        time->setDateTime( ( qobject_cast<VLMSchedule *>(vlmObj))->schetime );
-        date->setDateTime( ( qobject_cast<VLMSchedule *>(vlmObj))->schedate );
-        break;
-    }
-
-    ui.nameLedit->setReadOnly( true );
-    ui.addButton->hide();
-    ui.saveButton->show();
+    dirty = false; edit(nullptr); dirty = false; ui.tabs->setCurrentIndex(0); updateActions();
 }
 
 void VLMDialog::saveModifications()
 {
-    VLMAWidget *vlmObj = vlmItems.at( currentIndex );
-    if( vlmObj )
-    {
-        vlmObj->input = ui.inputLedit->text();
-        vlmObj->output = ui.outputLedit->text().remove( ":sout=" );
-        vlmObj->setChecked( ui.enableCheck->isChecked() );
-        vlmObj->b_enabled = ui.enableCheck->isChecked();
-        switch( vlmObj->type )
-        {
-        case QVLM_Broadcast:
-            (qobject_cast<VLMBroadcast *>(vlmObj))->b_looped = ui.loopBCast->isChecked();
-            break;
-        case QVLM_Schedule:
-            (qobject_cast<VLMSchedule *>(vlmObj))->schetime = time->dateTime();
-            (qobject_cast<VLMSchedule *>(vlmObj))->schedate = date->dateTime();
-            (qobject_cast<VLMSchedule *>(vlmObj))->rNumber = scherepeatnumber->value();
-            (qobject_cast<VLMSchedule *>(vlmObj))->rDays = repeatDays->value();
-            break;
-           //           vlmObj->
-        }
-        vlmObj->update();
+    const auto error = validationError();
+    if (!error.isEmpty()) { feedback(error); return; }
+    const auto output = outputChain(ui.outputLedit->text());
+    Description draft(editingId < 0 ? 0 : editingId, ui.nameLedit->text(), lines(ui.inputsText->toPlainText()), lines(ui.optionsText->toPlainText()), output, ui.enableCheck->isChecked(), ui.loopBCast->isChecked());
+    int64_t id = editingId;
+    const bool active = editingId >= 0 && Instances(vlm, editingId).count > 0;
+    const int result = editingId < 0 ? vlm_Control(vlm, VLM_ADD_MEDIA, &draft.value, &id) : vlm_Control(vlm, VLM_CHANGE_MEDIA, &draft.value);
+    if (result) { refresh(); feedback(qtr("VLC cannot save this broadcast. Check its name and try again.")); return; }
+    if (!active) states.remove(id);
+    clearWidgets(); refresh(id);
+    feedback(active ? qtr("Saved. Stop and start this broadcast to use the new settings.") : qtr("Broadcast saved."));
+}
+void VLMDialog::removeVLMItem()
+{
+    auto *item = selected(); if (!item || !vlm) return;
+    const auto id = item->id;
+    if (vlm_Control(vlm, VLM_DEL_MEDIA, int64_t(id))) { feedback(qtr("VLC cannot remove this broadcast.")); refresh(); return; }
+    if (editingId == id && !dirty) clearWidgets();
+    refresh(); feedback(qtr("Broadcast removed."));
+}
+
+void VLMDialog::control(int action)
+{
+    auto *item = selected(); if (!item || !vlm) return;
+    const auto id = item->id;
+    Instances instances(vlm, id);
+    int result = VLC_SUCCESS;
+    if (action == 2) result = vlm_Control(vlm, VLM_CLEAR_MEDIA_INSTANCES, int64_t(id));
+    else if (action == 0 && !instances.count) result = vlm_Control(vlm, VLM_START_MEDIA_BROADCAST_INSTANCE, int64_t(id), nullptr, 0);
+    else for (int i = 0; i < instances.count; ++i)
+        if (instances.items[i]->b_paused == (action == 0))
+            if (vlm_Control(vlm, VLM_PAUSE_MEDIA_INSTANCE, int64_t(id), instances.items[i]->psz_name)) result = VLC_EGENERIC;
+    if (result) feedback(qtr("VLC cannot complete this playback action."));
+    else { if (action == 2) states.remove(id); feedback({}); }
+    refresh(id);
+}
+
+void VLMDialog::selectInput()
+{
+    OpenDialog dialog(p_intf, windowHandle()); dialog.setActionFlag(OpenDialog::SELECT);
+    if (dialog.exec() != QDialog::Accepted) return;
+    auto sources = lines(ui.inputsText->toPlainText()); sources.append(dialog.getMRLs());
+    ui.inputsText->setPlainText(sources.join(QLatin1Char('\n')));
+    auto options = lines(ui.optionsText->toPlainText());
+    for (auto option : dialog.getOptions().split(QStringLiteral(" :"), Qt::SkipEmptyParts)) {
+        option = option.trimmed(); if (option.startsWith(QLatin1Char(':'))) option.remove(0, 1);
+        if (!option.isEmpty() && !options.contains(option)) options.append(option);
     }
-    clearWidgets();
+    ui.optionsText->setPlainText(options.join(QLatin1Char('\n')));
+    if (!options.isEmpty()) ui.advancedBox->setChecked(true);
 }
-
-/*********************************
- * VLMAWidget - Abstract class
- ********************************/
-
-VLMAWidget::VLMAWidget( VLMWrapper *_vlm, const QString& _name,
-                        const QString& _input, const QString& _inputOptions,
-                        const QString& _output, bool _enabled,
-                        VLMDialog *_parent, int _type )
-                      : QGroupBox( _name, _parent )
+void VLMDialog::selectOutput()
 {
-    parent = _parent;
-    vlm = _vlm;
-    name = _name;
-    input = _input;
-    inputOptions = _inputOptions;
-    output = _output;
-    b_enabled = _enabled;
-    type = _type;
-
-    setCheckable( true );
-    setChecked( b_enabled );
-
-    objLayout = new QGridLayout( this );
-    setSizePolicy( QSizePolicy::Preferred, QSizePolicy::Maximum );
-
-    nameLabel = new QLabel;
-    objLayout->addWidget( nameLabel, 0, 0, 1, 4 );
-
-    /*QLabel *time = new QLabel( "--:--/--:--" );
-    objLayout->addWidget( time, 1, 3, 1, 2 );*/
-
-    QToolButton *modifyButton = new QToolButton;
-    modifyButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( QStringLiteral(":/menu/ic_fluent_options.svg"), modifyButton ) );
-    modifyButton->setToolTip( qtr("Change") );
-    objLayout->addWidget( modifyButton, 0, 5 );
-
-    QToolButton *deleteButton = new QToolButton;
-    deleteButton->setIcon( QIcon( ":/menu/clear.svg" ) );
-    deleteButton->setToolTip( qtr("Delete") );
-    objLayout->addWidget( deleteButton, 0, 6 );
-
-    BUTTONACT( modifyButton, &VLMAWidget::modify );
-    BUTTONACT( deleteButton, &VLMAWidget::del );
-    connect( this, &VLMAWidget::clicked, this, &VLMAWidget::toggleEnabled );
-}
-
-void VLMAWidget::modify()
-{
-    parent->startModifyVLMItem( this );
-}
-
-void VLMAWidget::del()
-{
-    parent->removeVLMItem( this );
-}
-
-void VLMAWidget::toggleEnabled( bool b_enable )
-{
-    vlm->EnableItem( name, b_enable );
-}
-
-/****************
- * VLMBroadcast
- ****************/
-VLMBroadcast::VLMBroadcast( VLMWrapper *vlm, const QString& _name,
-                            const QString& _input,
-                            const QString& _inputOptions,
-                            const QString& _output, bool _enabled,
-                            bool _looped, VLMDialog *_parent )
-                          : VLMAWidget( vlm, _name, _input, _inputOptions,
-                                        _output, _enabled, _parent,
-                                        QVLM_Broadcast )
-{
-    nameLabel->setText( qtr("Broadcast: ") + name );
-    type = QVLM_Broadcast;
-    b_looped = _looped;
-
-    playButton = new QToolButton;
-    playButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( QStringLiteral(":/menu/ic_fluent_play_filled.svg"), playButton ) );
-    playButton->setToolTip( qtr("Play") );
-    objLayout->addWidget( playButton, 1, 0 );
-    b_playing = true;
-
-    QToolButton *stopButton = new QToolButton;
-    stopButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( ":/menu/ic_fluent_stop.svg", stopButton ) );
-    stopButton->setToolTip( qtr("Stop") );
-    objLayout->addWidget( stopButton, 1, 1 );
-
-    loopButton = new QToolButton;
-    loopButton->setToolTip( qtr("Repeat") );
-    objLayout->addWidget( loopButton, 1, 2 );
-
-    BUTTONACT( playButton, &VLMBroadcast::togglePlayPause );
-    BUTTONACT( stopButton, &VLMBroadcast::stop );
-    BUTTONACT( loopButton, &VLMBroadcast::toggleLoop );
-
-    update();
-}
-
-void VLMBroadcast::update()
-{
-    vlm->EditBroadcast( name, input, inputOptions, output, b_enabled, b_looped );
-    if( b_looped )
-        loopButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( ":/menu/ic_fluent_arrow_repeat_all.svg", loopButton ) );
-    else
-        loopButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( ":/menu/repeat_off.svg", loopButton ) );
-}
-
-void VLMBroadcast::togglePlayPause()
-{
-    if( b_playing )
-    {
-        vlm->ControlBroadcast( name, ControlBroadcastPause );
-        playButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( ":/menu/ic_pause_filled.svg", playButton ) );
+    SoutDialog dialog(windowHandle(), p_intf, lines(ui.inputsText->toPlainText()).value(0));
+    if (dialog.exec() != QDialog::Accepted) return;
+    auto options = lines(ui.optionsText->toPlainText());
+    for (const auto &option : dialog.getOptions()) {
+        if (option.startsWith(QLatin1String("sout=")) || option.startsWith(QLatin1String(":sout="))) ui.outputLedit->setText(outputChain(option));
+        else if (!options.contains(option)) options.append(option);
     }
-    else
-    {
-        vlm->ControlBroadcast( name, ControlBroadcastPlay );
-        playButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( QStringLiteral(":/menu/ic_fluent_play_filled.svg"), playButton ) );
+    ui.optionsText->setPlainText(options.join(QLatin1Char('\n')));
+    if (!options.isEmpty()) ui.advancedBox->setChecked(true);
+}
+
+bool VLMDialog::execute(const QString &command)
+{
+    if (!vlm) return false;
+    vlm_message_t *message = nullptr;
+    const int result = vlm_ExecuteCommand(vlm, qtu(command), &message);
+    vlm_MessageDelete(message); return result == VLC_SUCCESS;
+}
+
+bool VLMDialog::importVLMConf()
+{
+    if (!vlm) return false;
+    const auto path = QFileDialog::getOpenFileName(this, qtr("Import VLM configuration"), QVLCUserDir(VLC_DOCUMENTS_DIR), qtr("VLM files (*.vlm);;All files (*)"));
+    if (path.isEmpty()) return false;
+    const bool result = execute(QStringLiteral("load ") + token(path));
+    refresh(); ui.tabs->setCurrentIndex(0);
+    feedback(result ? qtr("Configuration loaded.") : qtr("VLC cannot load the full file. Check the broadcast list."));
+    return result;
+}
+
+bool VLMDialog::exportVLMConf()
+{
+    if (!vlm) return false;
+    QFileDialog dialog(this, qtr("Export VLM configuration"), QVLCUserDir(VLC_DOCUMENTS_DIR), qtr("VLM files (*.vlm);;All files (*)"));
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    dialog.setDefaultSuffix(QStringLiteral("vlm"));
+    dialog.selectFile(QStringLiteral("broadcasts.vlm"));
+    if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return false;
+    const auto path = dialog.selectedFiles().first();
+    if (!refresh()) return false;
+    QString text = QStringLiteral("# VLC broadcast configuration\n");
+    for (const auto &item : media) {
+        const QString name = qfu(item->psz_name);
+        QStringList values = strings(item->i_input, item->ppsz_input) + strings(item->i_option, item->ppsz_option);
+        values << name << qfu(item->psz_output);
+        for (const auto &value : values) if (value.contains(QLatin1Char('\n')) || value.contains(QLatin1Char('\r'))) { feedback(qtr("VLC cannot save a value that contains a line break.")); return false; }
+        text += QStringLiteral("new %1 broadcast %2%3\n").arg(token(name), item->b_enabled ? QStringLiteral("enabled") : QStringLiteral("disabled"), item->broadcast.b_loop ? QStringLiteral(" loop") : QString());
+        for (const auto &input : strings(item->i_input, item->ppsz_input)) text += QStringLiteral("setup %1 input %2\n").arg(token(name), token(input));
+        if (item->psz_output) text += QStringLiteral("setup %1 output %2\n").arg(token(name), token(qfu(item->psz_output)));
+        for (const auto &option : strings(item->i_option, item->ppsz_option)) text += QStringLiteral("setup %1 option %2\n").arg(token(name), token(option));
     }
-    b_playing = !b_playing;
+    QSaveFile file(path); const auto bytes = text.toUtf8();
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) { feedback(qtr("VLC cannot save the file. %1").arg(file.errorString())); return false; }
+    feedback(qtr("Configuration saved.")); return true;
 }
 
-void VLMBroadcast::toggleLoop()
+void VLMDialog::updateText()
 {
-    b_enabled = !b_enabled;
-    update();
+    ui.retranslateUi(this);
+    ui.broadcasts->setHorizontalHeaderLabels({qtr("Name"), qtr("State"), qtr("Inputs"), qtr("Enabled"), qtr("Repeat")});
+    ui.tabs->setTabText(1, editingId < 0 ? qtr("New broadcast") : qtr("Edit broadcast"));
+    ui.search->setAccessibleName(qtr("Search broadcasts"));
+    ui.enableCheck->setToolTip(qtr("Allow this broadcast to start."));
+    refresh(); updateActions();
 }
-
-void VLMBroadcast::stop()
+void VLMDialog::updateMetrics()
 {
-    vlm->ControlBroadcast( name, ControlBroadcastStop );
-    playButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( QStringLiteral(":/menu/ic_fluent_play_filled.svg"), playButton ) );
+    const int margin = dp(p_intf, 24);
+    ui.rootLayout->setContentsMargins(margin, margin, margin, margin); ui.rootLayout->setSpacing(dp(p_intf, 12));
+    ui.inputLayout->setSpacing(dp(p_intf, 6)); ui.outputLayout->setSpacing(dp(p_intf, 6));
+    ui.inputsText->setMinimumHeight(dp(p_intf, 100)); ui.optionsText->setMinimumHeight(dp(p_intf, 100));
+    ui.broadcasts->setMinimumHeight(dp(p_intf, 120)); ui.broadcasts->verticalHeader()->setDefaultSectionSize(dp(p_intf, 36));
+    // Keep the name readable on small screens. All fields remain in the editor.
+    ui.broadcasts->setColumnHidden(2, width() < dp(p_intf, 580));
+    ui.broadcasts->setColumnHidden(3, width() < dp(p_intf, 720));
+    ui.broadcasts->setColumnHidden(4, width() < dp(p_intf, 720));
+    const auto available = screen() ? screen()->availableGeometry().size() : QSize(1280, 720);
+    setMinimumSize(QSize(dp(p_intf, 440), dp(p_intf, 460)).boundedTo(available));
+    ui.form->setRowWrapPolicy(width() < dp(p_intf, 650) ? QFormLayout::WrapAllRows : QFormLayout::WrapLongRows);
 }
-
-/****************
- * VLMSchedule
- ****************/
-VLMSchedule::VLMSchedule( VLMWrapper *vlm, const QString& name_,
-                          const QString& input, const QString& inputOptions,
-                          const QString& output, QDateTime _schetime,
-                          QDateTime _schedate, int _scherepeatnumber,
-                          int _repeatDays, bool enabled, VLMDialog *parent )
-            : VLMAWidget( vlm, name_, input, inputOptions, output, enabled,
-                          parent, QVLM_Schedule )
+void VLMDialog::resizeEvent(QResizeEvent *event) { QVLCFrame::resizeEvent(event); if (ready) updateMetrics(); }
+void VLMDialog::toggleVisible() { refresh(); QVLCFrame::toggleVisible(); }
+void VLMDialog::keyPressEvent(QKeyEvent *event)
 {
-    nameLabel->setText( qtr("Schedule: ") + name );
-    schetime = _schetime;
-    schedate = _schedate;
-    rNumber = _scherepeatnumber;
-    rDays = _repeatDays;
-    type = QVLM_Schedule;
-    update();
+    if (event->key() == Qt::Key_Escape) { close(); event->accept(); }
+    else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) { if (auto *button = qobject_cast<QPushButton*>(focusWidget())) button->click(); event->accept(); }
+    else QVLCFrame::keyPressEvent(event);
 }
-
-void VLMSchedule::update()
+bool VLMDialog::eventFilter(QObject *watched, QEvent *event)
 {
-    vlm->EditSchedule( name, input, inputOptions, output, schetime, schedate,
-                       rNumber, rDays, b_enabled);
-}
-
-/*******************
- * VLMWrapper
- *******************/
-
-VLMWrapper::VLMWrapper( vlm_t *_p_vlm )
-{
-    p_vlm = _p_vlm;
-}
-
-VLMWrapper::~VLMWrapper()
-{
-    vlm_Delete( p_vlm );
-}
-
-int VLMWrapper::GetMedias( vlm_media_t **& array )
-{
-    int count;
-
-    vlm_Control( p_vlm, VLM_GET_MEDIAS, &array, &count );
-    return count;
-}
-
-void VLMWrapper::AddBroadcast( const QString& name, const QString& input,
-                               const QString& inputOptions, const QString& output,
-                               bool b_enabled, bool b_loop  )
-{
-    vlm_message_t *message;
-    QString command = "new \"" + name + "\" broadcast";
-    vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-    vlm_MessageDelete( message );
-    EditBroadcast( name, input, inputOptions, output, b_enabled, b_loop );
-}
-
-void VLMWrapper::EditBroadcast( const QString& name, const QString& input,
-                                const QString& inputOptions, const QString& output,
-                                bool b_enabled, bool b_loop  )
-{
-    vlm_message_t *message;
-    QString command;
-
-    command = "setup \"" + name + "\" inputdel all";
-    vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-    vlm_MessageDelete( message );
-
-    if( !input.isEmpty() )
-    {
-        command = "setup \"" + name + "\" input \"" + input + "\"";
-        vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-        vlm_MessageDelete( message );
-
-        QStringList options = inputOptions.split( " :", Qt::SkipEmptyParts );
-
-        for( int i = 0; i < options.count(); i++ )
-        {
-            command = "setup \"" + name + "\" option \"" + options[i].trimmed() + "\"";
-            vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-            vlm_MessageDelete( message );
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress) {
+        auto *key = static_cast<QKeyEvent*>(event);
+        const bool find = key->matches(QKeySequence::Find);
+        const bool clear = watched == ui.search && key->key() == Qt::Key_Escape && !ui.search->text().isEmpty();
+        auto *button = qobject_cast<QPushButton*>(watched);
+        const bool activate = button && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter);
+        if (find || clear || activate) {
+            if (event->type() == QEvent::KeyPress) {
+                if (activate) button->click();
+                else if (find) { ui.tabs->setCurrentIndex(0); ui.search->setFocus(); ui.search->selectAll(); }
+                else ui.search->clear();
+            }
+            key->accept(); return true;
         }
     }
-
-    if( !output.isEmpty() )
-    {
-        command = "setup \"" + name + "\" output \"" + output + "\"";
-        vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-        vlm_MessageDelete( message );
-    }
-    if( b_enabled )
-    {
-        command = "setup \"" + name + "\" enabled";
-        vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-        vlm_MessageDelete( message );
-    }
-    if( b_loop )
-    {
-        command = "setup \"" + name + "\" loop";
-        vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-        vlm_MessageDelete( message );
-    }
+    return QVLCFrame::eventFilter(watched, event);
 }
-
-void VLMWrapper::EnableItem( const QString& name, bool b_enable )
-{
-    vlm_message_t *message;
-    QString command = "setup \"" + name + ( b_enable ? " enable" : " disable" );
-    vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-    vlm_MessageDelete( message );
-}
-
-void VLMWrapper::ControlBroadcast( const QString& name, int BroadcastStatus,
-                                   unsigned int seek )
-{
-    vlm_message_t *message;
-
-    QString command = "control \"" + name + "\"";
-    switch( BroadcastStatus )
-    {
-    case ControlBroadcastPlay:
-        command += " play";
-        break;
-    case ControlBroadcastPause:
-        command += " pause";
-        break;
-    case ControlBroadcastStop:
-        command += " stop";
-        break;
-    case ControlBroadcastSeek:
-        command += " seek " + QString::number( seek );
-        break;
-    }
-    vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-    vlm_MessageDelete( message );
-}
-
-void VLMWrapper::AddSchedule( const QString& name, const QString& input,
-                              const QString& inputOptions, const QString& output,
-                              QDateTime _schetime, QDateTime _schedate,
-                              int _scherepeatnumber, int _repeatDays,
-                              bool b_enabled, const QString& mux )
-{
-    vlm_message_t *message;
-    QString command = "new \"" + name + "\" schedule";
-    vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-    vlm_MessageDelete( message );
-    EditSchedule(  name, input, inputOptions, output, _schetime, _schedate,
-            _scherepeatnumber, _repeatDays, b_enabled, mux );
-}
-
-void VLMWrapper::EditSchedule( const QString& name, const QString& input,
-                               const QString& inputOptions, const QString& output,
-                               QDateTime _schetime, QDateTime _schedate,
-                               int _scherepeatnumber, int _repeatDays,
-                               bool b_enabled, const QString& mux )
-{
-    vlm_message_t *message;
-    QString command;
-
-    if( !input.isEmpty() )
-    {
-        command = "setup \"" + name + "\" input \"" + input + "\"";
-        vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-        vlm_MessageDelete( message );
-
-        QStringList options = inputOptions.split( " :", Qt::SkipEmptyParts );
-        for( int i = 0; i < options.count(); i++ )
-        {
-            command = "setup \"" + name + "\" option \"" + options[i].trimmed() + "\"";
-            vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-            vlm_MessageDelete( message );
-        }
-    }
-
-    if( !output.isEmpty() )
-    {
-        command = "setup \"" + name + "\" output \"" + output + "\"";
-        vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-        vlm_MessageDelete( message );
-    }
-
-    if( b_enabled )
-    {
-        command = "setup \"" + name + "\" enabled";
-        vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-        vlm_MessageDelete( message );
-    }
-
-    if( !mux.isEmpty() )
-    {
-        command = "setup \"" + name + "\" mux \"" + mux + "\"";
-        vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-        vlm_MessageDelete( message );
-    }
-
-    command = "setup \"" + name + "\" date \"" +
-        _schedate.toString( "yyyy/MM/dd" )+ "-" +
-        _schetime.toString( "hh:mm:ss" ) + "\"";
-    vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-    vlm_MessageDelete( message );
-
-    if( _scherepeatnumber > 0 )
-    {
-       command = "setup \"" + name + "\" repeat \"" + QString::number(_scherepeatnumber) + "\"";
-       vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-       vlm_MessageDelete( message );
-    }
-
-    if( _repeatDays > 0 )
-    {
-       command = "setup \"" + name + "\" period \"" + QString::number(_repeatDays) + "\"";
-       vlm_ExecuteCommand( p_vlm, qtu( command ), &message );
-       vlm_MessageDelete( message );
-    }
-}
-
-void VLMWrapper::SaveConfig( const QString& filename )
-{
-    /* FIXME: escaping */
-    QString command = "save \"" + filename + "\"";
-    vlm_message_t *message;
-
-    vlm_ExecuteCommand( p_vlm , qtu( command ), &message );
-    vlm_MessageDelete( message );
-}
-
-bool VLMWrapper::LoadConfig( const QString& filename )
-{
-    /* FIXME: escaping */
-    QString command = "load \"" + filename + "\"";
-    vlm_message_t *message;
-    int status = vlm_ExecuteCommand( p_vlm, qtu( command ) , &message );
-    vlm_MessageDelete( message );
-    return status == 0;
-}
-
-void VLMDialog::toggleVisible()
-{
-    qDeleteAll( vlmItems );
-    vlmItems.clear();
-
-    ui.vlmListItem->clear();
-    mediasPopulator();
-    QVLCFrame::toggleVisible();
-}
-
-
 #endif

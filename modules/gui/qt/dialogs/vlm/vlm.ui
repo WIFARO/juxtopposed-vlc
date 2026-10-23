@@ -1,265 +1,341 @@
-<ui version="4.0" >
+<ui version="4.0">
  <class>Vlm</class>
- <widget class="QWidget" name="Vlm" >
-  <property name="windowModality" >
-   <enum>Qt::NonModal</enum>
+ <widget class="QWidget" name="Vlm">
+  <property name="windowTitle">
+   <string>VLM broadcast manager</string>
   </property>
-  <property name="geometry" >
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>738</width>
-    <height>693</height>
-   </rect>
-  </property>
-  <property name="sizePolicy" >
-   <sizepolicy vsizetype="Preferred" hsizetype="Preferred" >
-    <horstretch>0</horstretch>
-    <verstretch>0</verstretch>
-   </sizepolicy>
-  </property>
-  <property name="windowTitle" >
-   <string>VLM configurator</string>
-  </property>
-  <layout class="QGridLayout" >
-   <item rowspan="5" row="0" column="0" colspan="3" >
-    <widget class="QGroupBox" name="mediaConfBox" >
-     <property name="sizePolicy" >
-      <sizepolicy vsizetype="MinimumExpanding" hsizetype="Preferred" >
-       <horstretch>1</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <item>
+    <widget class="QLabel" name="heading">
+     <property name="text">
+      <string>VLM broadcast manager</string>
      </property>
-     <property name="title" >
-      <string>Media Manager Edition</string>
-     </property>
-     <layout class="QGridLayout" >
-      <item row="0" column="0" colspan="3" >
-       <widget class="QComboBox" name="mediaType" >
-        <property name="sizePolicy" >
-         <sizepolicy vsizetype="Fixed" hsizetype="MinimumExpanding" >
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="0" colspan="3" >
-       <widget class="Line" name="line" >
-        <property name="orientation" >
-         <enum>Qt::Horizontal</enum>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="0" >
-       <widget class="QLabel" name="nameLabel" >
-        <property name="text" >
-         <string>Name:</string>
-        </property>
-        <property name="buddy" >
-         <cstring>nameLedit</cstring>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1" >
-       <widget class="QLineEdit" name="nameLedit" />
-      </item>
-      <item row="2" column="2" >
-       <widget class="QCheckBox" name="enableCheck" >
-        <property name="text" >
-         <string>Enable</string>
-        </property>
-        <property name="checked" >
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="0" >
-       <widget class="QLabel" name="inputLabel" >
-        <property name="text" >
-         <string>Input:</string>
-        </property>
-        <property name="buddy" >
-         <cstring>inputLedit</cstring>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="1" >
-       <widget class="QLineEdit" name="inputLedit" />
-      </item>
-      <item row="3" column="2" >
-       <widget class="QPushButton" name="inputButton" >
-        <property name="text" >
-         <string>Select Input</string>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="0" >
-       <widget class="QLabel" name="outputLabel" >
-        <property name="text" >
-         <string>Output:</string>
-        </property>
-        <property name="buddy" >
-         <cstring>outputLedit</cstring>
-        </property>
-       </widget>
-      </item>
-      <item row="4" column="1" >
-       <widget class="QLineEdit" name="outputLedit" />
-      </item>
-      <item row="4" column="2" >
-       <widget class="QPushButton" name="outputButton" >
-        <property name="text" >
-         <string>Select Output</string>
-        </property>
-       </widget>
-      </item>
-      <item row="5" column="0" colspan="3" >
-       <widget class="QGroupBox" name="schedBox" >
-        <property name="title" >
-         <string>Time Control</string>
-        </property>
-       </widget>
-      </item>
-      <item row="6" column="0" colspan="2" >
-       <widget class="QCheckBox" name="loopBCast" >
-        <property name="text" >
-         <string>Loop</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item row="0" column="3" >
-    <spacer>
-     <property name="orientation" >
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeType" >
-      <enum>QSizePolicy::Fixed</enum>
-     </property>
-     <property name="sizeHint" stdset="0" >
-      <size>
-       <width>20</width>
-       <height>20</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-   <item row="1" column="3" >
-    <widget class="QPushButton" name="addButton" >
-     <property name="text" >
-      <string>Add</string>
+     <property name="wordWrap">
+      <bool>true</bool>
      </property>
     </widget>
    </item>
-   <item row="2" column="3" >
-    <widget class="QPushButton" name="clearButton" >
-     <property name="text" >
-      <string>Clear</string>
+   <item>
+    <widget class="QLabel" name="help">
+     <property name="text">
+      <string>Create broadcasts for local playback or streaming.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
      </property>
     </widget>
    </item>
-   <item row="3" column="3" >
-    <widget class="QPushButton" name="saveButton" >
-     <property name="text" >
-      <string>Save</string>
+   <item>
+    <widget class="QTabWidget" name="tabs">
+     <widget class="QWidget" name="listPage">
+      <attribute name="title">
+       <string>Broadcasts</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="listLayout">
+       <item>
+        <widget class="QScrollArea" name="listScroll">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="listBody">
+          <layout class="QVBoxLayout" name="listBodyLayout">
+           <item>
+            <widget class="QLineEdit" name="search">
+             <property name="clearButtonEnabled">
+              <bool>true</bool>
+             </property>
+             <property name="placeholderText">
+              <string>Search broadcasts</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTableWidget" name="broadcasts">
+             <property name="editTriggers">
+              <set>QAbstractItemView::NoEditTriggers</set>
+             </property>
+             <property name="selectionMode">
+              <enum>QAbstractItemView::SingleSelection</enum>
+             </property>
+             <property name="selectionBehavior">
+              <enum>QAbstractItemView::SelectRows</enum>
+             </property>
+             <property name="alternatingRowColors">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="listInfo">
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <layout class="QGridLayout" name="listActions">
+         <item row="0" column="0">
+          <widget class="QPushButton" name="playButton">
+           <property name="text">
+            <string>Play</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QPushButton" name="pauseButton">
+           <property name="text">
+            <string>Pause</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QPushButton" name="stopButton">
+           <property name="text">
+            <string>Stop</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QPushButton" name="newButton">
+           <property name="text">
+            <string>New</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QPushButton" name="editButton">
+           <property name="text">
+            <string>Edit</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QPushButton" name="removeButton">
+           <property name="text">
+            <string>Remove</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="editorPage">
+      <attribute name="title">
+       <string>New broadcast</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="editorLayout">
+       <item>
+        <widget class="QScrollArea" name="editorScroll">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="editorBody">
+          <layout class="QFormLayout" name="form">
+           <property name="fieldGrowthPolicy">
+            <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+           </property>
+           <property name="rowWrapPolicy">
+            <enum>QFormLayout::WrapLongRows</enum>
+           </property>
+           <item row="0" column="0">
+            <widget class="QLabel" name="nameLabel">
+             <property name="text">
+              <string>Name</string>
+             </property>
+             <property name="buddy">
+              <cstring>nameLedit</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="nameLedit" />
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="inputLabel">
+             <property name="text">
+              <string>Inputs</string>
+             </property>
+             <property name="buddy">
+              <cstring>inputsText</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QWidget" name="inputField">
+             <layout class="QVBoxLayout" name="inputLayout">
+              <item>
+               <widget class="QPlainTextEdit" name="inputsText">
+                <property name="placeholderText">
+                 <string>One file path or URL per line</string>
+                </property>
+                <property name="lineWrapMode">
+                 <enum>QPlainTextEdit::NoWrap</enum>
+                </property>
+               </widget>
+              </item>
+              <item alignment="Qt::AlignRight">
+               <widget class="QPushButton" name="inputButton">
+                <property name="text">
+                 <string>Add inputs...</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="outputLabel">
+             <property name="text">
+              <string>Output</string>
+             </property>
+             <property name="buddy">
+              <cstring>outputLedit</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QWidget" name="outputField">
+             <layout class="QVBoxLayout" name="outputLayout">
+              <item>
+               <widget class="QLineEdit" name="outputLedit" />
+              </item>
+              <item alignment="Qt::AlignRight">
+               <widget class="QPushButton" name="outputButton">
+                <property name="text">
+                 <string>Set output...</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QLabel" name="outputHelp">
+             <property name="text">
+              <string>Leave Output empty for local playback.</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QCheckBox" name="enableCheck">
+             <property name="text">
+              <string>Enabled</string>
+             </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QCheckBox" name="loopBCast">
+             <property name="text">
+              <string>Repeat inputs</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0" colspan="2">
+            <widget class="QGroupBox" name="advancedBox">
+             <property name="title">
+              <string>Input options</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
+             <layout class="QVBoxLayout" name="advancedLayout">
+              <item>
+               <widget class="QPlainTextEdit" name="optionsText">
+                <property name="placeholderText">
+                 <string>One VLC input option per line</string>
+                </property>
+                <property name="lineWrapMode">
+                 <enum>QPlainTextEdit::NoWrap</enum>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="editorActions">
+         <item>
+          <widget class="QLabel" name="draftInfo">
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="clearButton">
+           <property name="text">
+            <string>Cancel</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="saveButton">
+           <property name="text">
+            <string>Save</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="feedback">
+     <property name="textFormat">
+      <enum>Qt::PlainText</enum>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
      </property>
     </widget>
    </item>
-   <item row="4" column="3" >
-    <spacer>
-     <property name="orientation" >
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0" >
-      <size>
-       <width>80</width>
-       <height>81</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-   <item row="5" column="0" colspan="4" >
-    <widget class="QGroupBox" name="mediaBox" >
-     <property name="sizePolicy" >
-      <sizepolicy vsizetype="MinimumExpanding" hsizetype="MinimumExpanding" >
-       <horstretch>0</horstretch>
-       <verstretch>1</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="title" >
-      <string>Media Manager List</string>
-     </property>
-     <layout class="QGridLayout" >
-      <item row="0" column="0" >
-       <widget class="QListWidget" name="vlmListItem" >
-        <property name="sizePolicy" >
-         <sizepolicy vsizetype="Preferred" hsizetype="MinimumExpanding" >
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="maximumSize" >
-         <size>
-          <width>200</width>
-          <height>16777215</height>
-         </size>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1" >
-       <widget class="Line" name="line_2" >
-        <property name="orientation" >
-         <enum>Qt::Vertical</enum>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="2" >
-       <widget class="QScrollArea" name="vlmItemScroll" >
-        <property name="sizePolicy" >
-         <sizepolicy vsizetype="Preferred" hsizetype="MinimumExpanding" >
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize" >
-         <size>
-          <width>300</width>
-          <height>0</height>
-         </size>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item row="6" column="2" colspan="2" >
-    <widget class="QDialogButtonBox" name="buttonBox" >
-     <property name="standardButtons" >
-      <set>QDialogButtonBox::NoButton</set>
-     </property>
-    </widget>
+   <item>
+    <layout class="QGridLayout" name="footer">
+     <item row="0" column="0">
+      <widget class="QPushButton" name="importButton">
+       <property name="text">
+        <string>Import...</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QPushButton" name="exportButton">
+       <property name="text">
+        <string>Export...</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="2">
+      <widget class="QPushButton" name="closeButton">
+       <property name="text">
+        <string>Close</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>
- <tabstops>
-  <tabstop>mediaType</tabstop>
-  <tabstop>nameLedit</tabstop>
-  <tabstop>enableCheck</tabstop>
-  <tabstop>inputLedit</tabstop>
-  <tabstop>inputButton</tabstop>
-  <tabstop>outputLedit</tabstop>
-  <tabstop>outputButton</tabstop>
-  <tabstop>addButton</tabstop>
-  <tabstop>clearButton</tabstop>
-  <tabstop>saveButton</tabstop>
-  <tabstop>loopBCast</tabstop>
-  <tabstop>vlmListItem</tabstop>
-  <tabstop>vlmItemScroll</tabstop>
-  <tabstop>buttonBox</tabstop>
- </tabstops>
- <resources/>
- <connections/>
+ <resources />
+ <connections />
 </ui>

@@ -24,182 +24,55 @@
 #ifndef QVLC_VLM_DIALOG_H_
 #define QVLC_VLM_DIALOG_H_ 1
 
-#ifdef HAVE_CONFIG_H
-# include "config.h"
-#endif
-
-#include <vlc_vlm.h>
-
-/* Auto-generated from .ui files */
-#include "ui_vlm.h"
-
 #include "widgets/native/qvlcframe.hpp"
-#include <QDateTime>
-
-enum{
-    QVLM_Broadcast,
-    QVLM_Schedule,
-};
-
-enum{
-    ControlBroadcastPlay,
-    ControlBroadcastPause,
-    ControlBroadcastStop,
-    ControlBroadcastSeek
-};
-
-class QComboBox;
-class QVBoxLayout;
-class QLabel;
-class QGridLayout;
-class QToolButton;
-class QGroupBox;
-class QDateTimeEdit;
-class QSpinBox;
-class VLMAWidget;
-class VLMWrapper;
-
+#include "ui_vlm.h"
+#include <vlc_vlm.h>
+#include <QHash>
+#include <memory>
+#include <vector>
 
 class VLMDialog : public QVLCFrame
 {
     Q_OBJECT
-
 public:
-    VLMDialog( qt_intf_t * );
-    virtual ~VLMDialog();
-
+    explicit VLMDialog(qt_intf_t*);
+    ~VLMDialog() override;
     void toggleVisible();
-
-
+protected:
+    void keyPressEvent(QKeyEvent*) override;
+    bool eventFilter(QObject*, QEvent*) override;
+    void resizeEvent(QResizeEvent*) override;
 private:
-    VLMWrapper *vlm;
-
+    using Media = std::unique_ptr<vlm_media_t, decltype(&vlm_media_Delete)>;
     Ui::Vlm ui;
-
-    QString inputOptions;
-
-    QList<VLMAWidget *> vlmItems;
-    int currentIndex;
-
-    QVBoxLayout *vlmItemLayout;
-    QWidget *vlmItemWidget;
-
-    QComboBox *mediatype;
-    QDateTimeEdit *time, *date, *repeatTime;
-    QSpinBox *scherepeatnumber, *repeatDays;
-    bool isNameGenuine( const QString& );
-    void mediasPopulator();
-public slots:
-    void removeVLMItem( VLMAWidget * );
-    void startModifyVLMItem( VLMAWidget * );
+    vlm_t *vlm = nullptr;
+    std::vector<Media> media;
+    QHash<qint64, QHash<QString, int>> states;
+    qint64 editingId = -1;
+    bool dirty = false, loadingEditor = false, refreshQueued = false, ready = false;
+    static int vlmEvent(vlc_object_t*, const char*, vlc_value_t, vlc_value_t, void*);
+    bool refresh(qint64 selectId = -1);
+    void queueRefresh();
+    void updateText();
+    void updateMetrics();
+    void filterRows();
+    void updateActions();
+    QString validationError() const;
+    void feedback(const QString&);
+    vlm_media_t *selected() const;
+    vlm_media_t *find(qint64) const;
+    void edit(vlm_media_t*);
+    void control(int);
+    bool execute(const QString&);
 private slots:
     void addVLMItem();
-    void clearWidgets();
+    void startModifyVLMItem();
     void saveModifications();
-    void showScheduleWidget( int );
-    void selectVLMItem( int );
+    void clearWidgets();
+    void removeVLMItem();
     void selectInput();
     void selectOutput();
     bool exportVLMConf();
     bool importVLMConf();
 };
-
-class VLMWrapper
-{
-public:
-    VLMWrapper( vlm_t * );
-    virtual ~VLMWrapper();
-
-    int GetMedias( vlm_media_t **& );
-
-    void AddBroadcast( const QString&, const QString&,
-                       const QString&, const QString&,
-                       bool b_enabled = true, bool b_loop = false );
-    void EditBroadcast( const QString&, const QString&,
-                        const QString&, const QString&,
-                        bool b_enabled = true, bool b_loop = false );
-    void EditSchedule( const QString&, const QString&,
-                       const QString&, const QString&,
-                       QDateTime _schetime, QDateTime _schedate,
-                       int _scherepeatnumber, int _repeatDays,
-                       bool b_enabled = true, const QString& mux = "" );
-    void AddSchedule( const QString&, const QString&,
-                      const QString&, const QString&,
-                      QDateTime _schetime, QDateTime _schedate,
-                      int _scherepeatnumber, int _repeatDays,
-                      bool b_enabled = true, const QString& mux = "" );
-
-    void ControlBroadcast( const QString&, int, unsigned int seek = 0 );
-    void EnableItem( const QString&, bool );
-
-    void SaveConfig( const QString& );
-    bool LoadConfig( const QString& );
-
-private:
-    vlm_t *p_vlm;
-};
-
-class VLMAWidget : public QGroupBox
-{
-    Q_OBJECT
-    friend class VLMDialog;
-public:
-    VLMAWidget( VLMWrapper *, const QString& name, const QString& input,
-                const QString& inputOptions, const QString& output,
-                bool _enable, VLMDialog *parent, int _type = QVLM_Broadcast );
-    virtual ~VLMAWidget() = default;
-    virtual void update() = 0;
-protected:
-    QLabel *nameLabel;
-    QString name;
-    QString input;
-    QString inputOptions;
-    QString output;
-    bool b_enabled;
-    int type;
-    VLMDialog *parent;
-    VLMWrapper *vlm;
-    QGridLayout *objLayout;
-private slots:
-    virtual void modify();
-    virtual void del();
-    virtual void toggleEnabled( bool );
-};
-
-class VLMBroadcast : public VLMAWidget
-{
-    Q_OBJECT
-    friend class VLMDialog;
-public:
-    VLMBroadcast( VLMWrapper *, const QString& name, const QString& input,
-                  const QString& inputOptions, const QString& output,
-                  bool _enable, bool _loop, VLMDialog *parent );
-    void update() override;
-private:
-    bool b_looped;
-    bool b_playing;
-    QToolButton *loopButton, *playButton;
-private slots:
-    void stop();
-    void togglePlayPause();
-    void toggleLoop();
-};
-
-class VLMSchedule : public VLMAWidget
-{
-    Q_OBJECT
-    friend class VLMDialog;
-public:
-    VLMSchedule( VLMWrapper *, const QString& name, const QString& input,
-                 const QString& inputOptions, const QString& output,
-                 QDateTime schetime, QDateTime schedate, int repeatnumber,
-                 int repeatdays, bool enabled, VLMDialog *parent );
-    void update();
-private:
-    QDateTime schetime;
-    QDateTime schedate;
-    int rNumber;
-    int rDays;
-};
-
 #endif
