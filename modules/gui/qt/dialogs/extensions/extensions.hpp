@@ -32,6 +32,9 @@
 #include <QDialog>
 class QObject;
 class QGridLayout;
+class QVBoxLayout;
+class QScrollArea;
+class QLabel;
 class QSignalMapper;
 class QCloseEvent;
 class QKeyEvent;
@@ -73,10 +76,17 @@ class ExtensionDialog : public QDialog
     Q_OBJECT
 private:
     qt_intf_t *p_intf;
-    extension_t *p_extension;
     extension_dialog_t *p_dialog;
     bool has_lock; ///< Indicates whether Qt thread owns the lock
     QGridLayout *layout;
+    QVBoxLayout *rootLayout;
+    QScrollArea *scroll;
+    QLabel *heading;
+    bool initialSizeSet = false;
+    void updateMetrics();
+    void populateDropdown(extension_widget_t*);
+    void populateList(extension_widget_t*);
+    void syncSelection(extension_widget_t*);
     QHash<QObject*, extension_widget_t*> m_widgetMapping;
 
     QWidget *CreateWidget( extension_widget_t *p_widget );

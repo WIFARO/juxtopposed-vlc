@@ -22,11 +22,27 @@
 
 #include "extensions.hpp"
 #include "extensions_manager.hpp" // for isUnloading()
+#include "maininterface/mainctx.hpp"
+#include "util/redesign_widget_theme.hpp"
+#include "util/interface_translator.hpp"
+#include "util/color_scheme_model.hpp"
+#include "widgets/native/qvlcframe.hpp"
 
 #include <vlc_dialog.h>
 #include <vlc_extensions.h>
 
 #include <QGridLayout>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QSignalBlocker>
+#include <QStyleHints>
+#include <QTextBlock>
+#include <QTextFragment>
+#include <QTextCursor>
+#include <QApplication>
+#include <QScreen>
 #include <QPushButton>
 #include <QSignalMapper>
 #include <QLabel>
@@ -41,6 +57,29 @@
 #include "widgets/native/customwidgets.hpp"
 
 #include <algorithm>
+
+namespace {
+void colorExtensionLinks(QTextBrowser *browser)
+{
+    QList<QPair<int, int>> anchors;
+    for (auto block = browser->document()->begin(); block.isValid(); block = block.next())
+        for (auto it = block.begin(); !it.atEnd(); ++it)
+        {
+            const auto fragment = it.fragment();
+            if (fragment.isValid() && fragment.charFormat().isAnchor())
+                anchors.append({fragment.position(), fragment.length()});
+        }
+    for (const auto &anchor : anchors)
+    {
+        QTextCursor cursor(browser->document());
+        cursor.setPosition(anchor.first);
+        cursor.setPosition(anchor.first + anchor.second, QTextCursor::KeepAnchor);
+        QTextCharFormat format;
+        format.setForeground(browser->palette().color(QPalette::Link));
+        cursor.mergeCharFormat(format);
+    }
+}
+}
 
 static void DialogCallback( extension_dialog_t *p_ext_dialog,
                             void *p_data );
@@ -158,8 +197,52 @@ ExtensionDialog::ExtensionDialog( qt_intf_t *_p_intf,
                         | Qt::WindowCloseButtonHint );
     this->setWindowTitle( qfu( p_dialog->psz_title ) );
 
-    layout = new QGridLayout( this );
+    setObjectName(QStringLiteral("redesignExtension"));
+    setWindowRole("vlc-extension");
+    QVLCDialog::setWindowTransientParent(this, nullptr, p_intf);
+    rootLayout = new QVBoxLayout(this);
+    heading = new QLabel(qfu(p_dialog->psz_title), this);
+    heading->setTextFormat(Qt::PlainText);
+    heading->setWordWrap(true);
+    heading->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    heading->setProperty("redesignHeading", true);
+    rootLayout->addWidget(heading);
+    scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    auto *body = new QWidget(scroll);
+    layout = new QGridLayout(body);
+    scroll->setWidget(body);
+    rootLayout->addWidget(scroll, 1);
+    auto *footer = new QHBoxLayout;
+    footer->addStretch();
+    auto *closeButton = new QPushButton(this);
+    closeButton->setObjectName(QStringLiteral("extensionClose"));
+    closeButton->setAutoDefault(false);
+    footer->addWidget(closeButton);
+    rootLayout->addLayout(footer);
+    connect(closeButton, &QPushButton::clicked, this, &ExtensionDialog::close);
+    const auto text = [closeButton] { closeButton->setText(qtr("&Close")); };
+    text();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, text);
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &ExtensionDialog::updateMetrics);
+    updateMetrics();
     p_dialog->p_sys_intf = this;
+}
+
+void ExtensionDialog::updateMetrics()
+{
+    const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.)); };
+    const int margin = dp(24);
+    rootLayout->setContentsMargins(margin, margin, margin, margin);
+    rootLayout->setSpacing(dp(12));
+    layout->setContentsMargins(dp(8), dp(8), dp(8), dp(8));
+    layout->setHorizontalSpacing(dp(12));
+    layout->setVerticalSpacing(dp(8));
+    for (auto *list : findChildren<QListWidget*>()) list->setMinimumHeight(dp(100));
+    for (auto *browser : findChildren<QTextBrowser*>()) browser->setMinimumHeight(dp(100));
+    const auto available = screen() ? screen()->availableGeometry().size() : QSize(1280, 720);
+    setMinimumSize(QSize(dp(320), dp(280)).boundedTo(available));
 }
 
 ExtensionDialog::~ExtensionDialog()
@@ -191,6 +274,8 @@ QWidget* ExtensionDialog::CreateWidget( extension_widget_t *p_widget )
         case EXTENSION_WIDGET_BUTTON:
         {
             auto button = new QPushButton( qfu( p_widget->psz_text ), this );
+            button->setAutoDefault(false);
+            button->setDefault(false);
             setWidgetMapping(button, p_widget);
             connect( button, &QPushButton::clicked,
                     this, &ExtensionDialog::TriggerClick );
@@ -214,6 +299,22 @@ QWidget* ExtensionDialog::CreateWidget( extension_widget_t *p_widget )
             auto textArea = new QTextBrowser( this );
             textArea->setOpenExternalLinks( true );
             textArea->setHtml( qfu( p_widget->psz_text ) );
+            textArea->setProperty("extensionHtml", qfu(p_widget->psz_text));
+            textArea->setTabChangesFocus(true);
+            const auto links = [this, textArea] {
+                auto colors = textArea->palette();
+                colors.setColor(QPalette::Link, palette().color(QPalette::Link));
+                colors.setColor(QPalette::LinkVisited, palette().color(QPalette::LinkVisited));
+                textArea->setPalette(colors);
+                colorExtensionLinks(textArea);
+            };
+            links();
+            if (auto *ctx = p_intf->p_mi)
+            {
+                connect(ctx, &MainCtx::redesignAccentChanged, textArea, links);
+                connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, textArea, links);
+                connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, textArea, links);
+            }
             p_widget->p_sys_intf = textArea;
             return textArea;
         }
@@ -257,19 +358,8 @@ QWidget* ExtensionDialog::CreateWidget( extension_widget_t *p_widget )
         {
             auto comboBox = new QComboBox( this );
             comboBox->setEditable( false );
-            for( auto p_value = p_widget->p_values;
-                 p_value != NULL;
-                 p_value = p_value->p_next )
-            {
-                comboBox->addItem( qfu( p_value->psz_text ), p_value->i_id );
-            }
-            /* Set current item */
-            if( p_widget->psz_text )
-            {
-                int idx = comboBox->findText( qfu( p_widget->psz_text ) );
-                if( idx >= 0 )
-                    comboBox->setCurrentIndex( idx );
-            }
+            p_widget->p_sys_intf = comboBox;
+            populateDropdown(p_widget);
             setWidgetMapping(comboBox, p_widget);
             connect( comboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
                      this, &ExtensionDialog::SyncSelection );
@@ -279,15 +369,8 @@ QWidget* ExtensionDialog::CreateWidget( extension_widget_t *p_widget )
         {
             auto list = new QListWidget( this );
             list->setSelectionMode( QAbstractItemView::ExtendedSelection );
-            for( auto p_value = p_widget->p_values;
-                 p_value != NULL;
-                 p_value = p_value->p_next )
-            {
-                QListWidgetItem *item =
-                    new QListWidgetItem( qfu( p_value->psz_text ) );
-                item->setData( Qt::UserRole, p_value->i_id );
-                list->addItem( item );
-            }
+            p_widget->p_sys_intf = list;
+            populateList(p_widget);
             setWidgetMapping(list, p_widget);
             connect( list, &QListWidget::itemSelectionChanged,
                      this, &ExtensionDialog::SyncSelection );
@@ -390,11 +473,14 @@ void ExtensionDialog::SyncInput()
  **/
 void ExtensionDialog::SyncSelection()
 {
+    auto *widget = getWidgetMapping(sender());
+    assert(widget);
+    syncSelection(widget);
+}
+
+void ExtensionDialog::syncSelection(extension_widget_t *p_widget)
+{
     struct extension_widget_t::extension_widget_value_t *p_value;
-
-    extension_widget_t *p_widget = getWidgetMapping(sender());
-    assert(p_widget);
-
     bool lockedHere = false;
     if( !has_lock )
     {
@@ -456,13 +542,53 @@ void ExtensionDialog::SyncSelection()
     }
 }
 
+void ExtensionDialog::populateDropdown(extension_widget_t *widget)
+{
+    auto *combo = static_cast<QComboBox*>(widget->p_sys_intf);
+    const QSignalBlocker blocker(combo);
+    const QString requested = qfu(widget->psz_text);
+    const QString previous = combo->currentText();
+    combo->clear();
+    int selected = -1;
+    for (auto *value = widget->p_values; value; value = value->p_next)
+    {
+        combo->addItem(qfu(value->psz_text), value->i_id);
+        if (value->b_selected) selected = combo->count() - 1;
+    }
+    if (selected < 0 || requested != previous)
+    {
+        const int requestedIndex = combo->findText(requested);
+        if (requestedIndex >= 0) selected = requestedIndex;
+    }
+    combo->setCurrentIndex(selected >= 0 ? selected : (combo->count() ? 0 : -1));
+    syncSelection(widget);
+}
+
+void ExtensionDialog::populateList(extension_widget_t *widget)
+{
+    auto *list = static_cast<QListWidget*>(widget->p_sys_intf);
+    const QSignalBlocker blocker(list);
+    const int position = list->verticalScrollBar()->value();
+    list->clear();
+    for (auto *value = widget->p_values; value; value = value->p_next)
+    {
+        auto *item = new QListWidgetItem(qfu(value->psz_text), list);
+        item->setData(Qt::UserRole, value->i_id);
+        item->setSelected(value->b_selected);
+    }
+    list->verticalScrollBar()->setValue(position);
+}
+
 void ExtensionDialog::UpdateWidgets()
 {
     assert( p_dialog );
     vlc_mutex_assert(&p_dialog->lock);
 
     if( strcmp( qtu( windowTitle() ), p_dialog->psz_title ) != 0 )
+    {
         setWindowTitle( qfu( p_dialog->psz_title ) );
+        heading->setText(qfu(p_dialog->psz_title));
+    }
 
     extension_widget_t *p_widget;
     ARRAY_FOREACH( p_widget, p_dialog->widgets )
@@ -471,6 +597,17 @@ void ExtensionDialog::UpdateWidgets()
         QWidget *widget;
         int row = p_widget->i_row - 1;
         int col = p_widget->i_column - 1;
+        if (p_widget->p_sys_intf && (row < 0 || col < 0))
+        {
+            const int index = layout->indexOf(static_cast<QWidget*>(p_widget->p_sys_intf));
+            if (index >= 0)
+            {
+                int oldRow, oldColumn, oldRowSpan, oldColumnSpan;
+                layout->getItemPosition(index, &oldRow, &oldColumn, &oldRowSpan, &oldColumnSpan);
+                if (row < 0) row = oldRow;
+                if (col < 0) col = oldColumn;
+            }
+        }
         if( row < 0 )
         {
             row = layout->rowCount();
@@ -494,7 +631,6 @@ void ExtensionDialog::UpdateWidgets()
             if( ( p_widget->i_width > 0 ) && ( p_widget->i_height > 0 ) )
                 widget->resize( p_widget->i_width, p_widget->i_height );
             p_widget->p_sys_intf = widget;
-            this->resize( sizeHint() );
             /* If an update was required, cancel it as we just created the widget */
             p_widget->b_update = false;
         }
@@ -513,7 +649,6 @@ void ExtensionDialog::UpdateWidgets()
             if( ( p_widget->i_width > 0 ) && ( p_widget->i_height > 0 ) )
                 widget->resize( p_widget->i_width, p_widget->i_height );
             p_widget->p_sys_intf = widget;
-            this->resize( sizeHint() );
 
             /* Do not update again */
             p_widget->b_update = false;
@@ -522,9 +657,25 @@ void ExtensionDialog::UpdateWidgets()
         {
             DestroyWidget( p_widget );
             p_widget->p_sys_intf = NULL;
-            this->resize( sizeHint() );
         }
     }
+    updateMetrics();
+    if (!initialSizeSet)
+    {
+        const auto scale = p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.;
+        const auto available = screen() ? screen()->availableGeometry().size() : QSize(1280, 720);
+        for (auto *widget : findChildren<QWidget*>()) widget->ensurePolished();
+        const auto content = layout->sizeHint();
+        const double width = p_dialog->i_width > 0 ? p_dialog->i_width * scale
+            : qBound(480. * scale, content.width() + 64. * scale, 800. * scale);
+        const double height = p_dialog->i_height > 0 ? p_dialog->i_height * scale
+            : qBound(280. * scale, content.height() + heading->sizeHint().height() + 104. * scale, 680. * scale);
+        const QSize preferred(qRound(qMin(width, double(available.width()))),
+                              qRound(qMin(height, double(available.height()))));
+        resize(preferred.boundedTo(available));
+        initialSizeSet = true;
+    }
+
 }
 
 QWidget* ExtensionDialog::UpdateWidget( extension_widget_t *p_widget )
@@ -541,12 +692,8 @@ QWidget* ExtensionDialog::UpdateWidget( extension_widget_t *p_widget )
         }
         case EXTENSION_WIDGET_BUTTON:
         {
-            // FIXME: looks like removeMappings does not work
-            auto button = static_cast< QPushButton* >( p_widget->p_sys_intf );
-            button->setText( qfu( p_widget->psz_text ) );
-            setWidgetMapping(button, p_widget);
-            connect( button, &QPushButton::clicked,
-                     this, &ExtensionDialog::TriggerClick );
+            auto button = static_cast<QPushButton*>(p_widget->p_sys_intf);
+            button->setText(qfu(p_widget->psz_text));
             return button;
         }
         case EXTENSION_WIDGET_IMAGE:
@@ -558,19 +705,27 @@ QWidget* ExtensionDialog::UpdateWidget( extension_widget_t *p_widget )
         case EXTENSION_WIDGET_HTML:
         {
             auto textArea = static_cast< QTextBrowser* >( p_widget->p_sys_intf );
-            textArea->setHtml( qfu( p_widget->psz_text ) );
+            const QString text = qfu(p_widget->psz_text);
+            if (textArea->property("extensionHtml").toString() != text)
+            {
+                const int position = textArea->verticalScrollBar()->value();
+                textArea->setHtml(text);
+                textArea->setProperty("extensionHtml", text);
+                textArea->verticalScrollBar()->setValue(position);
+                colorExtensionLinks(textArea);
+            }
             return textArea;
         }
         case EXTENSION_WIDGET_TEXT_FIELD:
         {
             auto textInput = static_cast< QLineEdit* >( p_widget->p_sys_intf );
-            textInput->setText( qfu( p_widget->psz_text ) );
+            if (textInput->text() != qfu(p_widget->psz_text)) textInput->setText(qfu(p_widget->psz_text));
             return textInput;
         }
         case EXTENSION_WIDGET_PASSWORD:
         {
             auto textInput = static_cast< QLineEdit* >( p_widget->p_sys_intf );
-            textInput->setText( qfu( p_widget->psz_text ) );
+            if (textInput->text() != qfu(p_widget->psz_text)) textInput->setText(qfu(p_widget->psz_text));
             return textInput;
         }
         case EXTENSION_WIDGET_CHECK_BOX:
@@ -583,35 +738,13 @@ QWidget* ExtensionDialog::UpdateWidget( extension_widget_t *p_widget )
         case EXTENSION_WIDGET_DROPDOWN:
         {
             auto comboBox = static_cast< QComboBox* >( p_widget->p_sys_intf );
-            // method widget:clear()
-            if ( p_widget->p_values == NULL )
-            {
-                comboBox->clear();
-                return comboBox;
-            }
-            // method widget:addvalue()
-            for( auto p_value = p_widget->p_values;
-                 p_value != NULL;
-                 p_value = p_value->p_next )
-            {
-                if ( comboBox->findText( qfu( p_value->psz_text ) ) < 0 )
-                    comboBox->addItem( qfu( p_value->psz_text ), p_value->i_id );
-            }
+            populateDropdown(p_widget);
             return comboBox;
         }
         case EXTENSION_WIDGET_LIST:
         {
             auto list = static_cast< QListWidget* >( p_widget->p_sys_intf );
-            list->clear();
-            for( auto p_value = p_widget->p_values;
-                 p_value != NULL;
-                 p_value = p_value->p_next )
-            {
-                QListWidgetItem *item =
-                        new QListWidgetItem( qfu( p_value->psz_text ) );
-                item->setData( Qt::UserRole, p_value->i_id );
-                list->addItem( item );
-            }
+            populateList(p_widget);
             return list;
         }
         case EXTENSION_WIDGET_SPIN_ICON:
@@ -676,6 +809,11 @@ void ExtensionDialog::keyPressEvent( QKeyEvent *event )
     {
     case Qt::Key_Escape:
         close();
+        return;
+    case Qt::Key_Return:
+    case Qt::Key_Enter:
+        if (auto *button = qobject_cast<QPushButton*>(focusWidget())) button->click();
+        event->accept();
         return;
     default:
         QDialog::keyPressEvent( event );

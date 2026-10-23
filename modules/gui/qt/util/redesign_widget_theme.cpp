@@ -90,12 +90,13 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QLabel[redesignValue=\"true\"] { color: %5; }"
             "QWidget#redesignMediaInfo QTabBar::tab { padding: %14px %15px; }"
             "QTreeWidget#codecInformationTree::item { padding: %16px; }"
-            "QWidget#codecInformation QLineEdit, QWidget#extraMetadata QLineEdit, QWidget#redesignPodcasts QLineEdit, QWidget#redesignConvert QLineEdit, QWidget#redesignStream QLineEdit, QWidget#redesignMessages QLineEdit, QWidget#redesignHelp QLineEdit, QWidget#redesignProfileEditor QLineEdit, QWidget#redesignOpenMedia QLineEdit, QWidget#redesignCaptureOptions QLineEdit, QWidget#redesignPlugins QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
+            "QWidget#codecInformation QLineEdit, QWidget#extraMetadata QLineEdit, QWidget#redesignPodcasts QLineEdit, QWidget#redesignConvert QLineEdit, QWidget#redesignStream QLineEdit, QWidget#redesignMessages QLineEdit, QWidget#redesignHelp QLineEdit, QWidget#redesignProfileEditor QLineEdit, QWidget#redesignOpenMedia QLineEdit, QWidget#redesignCaptureOptions QLineEdit, QWidget#redesignPlugins QLineEdit, QWidget#redesignExtension QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
             "QWidget#redesignMediaInfo QLineEdit, QWidget#redesignMediaInfo QTextEdit, QWidget#redesignMediaInfo QPushButton { border-radius: %16px; }"
             "QWidget#redesignMediaInfo QLineEdit:read-only { background: %3; color: %2; }"
-            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton, QWidget#redesignProgramGuide QPushButton, QWidget#redesignPodcasts QPushButton, QWidget#redesignConvert QPushButton, QWidget#redesignStream QPushButton, QWidget#redesignBookmarks QPushButton, QWidget#redesignMessages QPushButton, QWidget#redesignHelp QPushButton, QWidget#aboutWidget QPushButton, QWidget#redesignProfileEditor QPushButton, QWidget#redesignOpenMedia QPushButton, QWidget#redesignCaptureOptions QPushButton, QWidget#redesignPlugins QPushButton, QWidget#redesignPluginInfo QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
+            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton, QWidget#redesignProgramGuide QPushButton, QWidget#redesignPodcasts QPushButton, QWidget#redesignConvert QPushButton, QWidget#redesignStream QPushButton, QWidget#redesignBookmarks QPushButton, QWidget#redesignMessages QPushButton, QWidget#redesignHelp QPushButton, QWidget#aboutWidget QPushButton, QWidget#redesignProfileEditor QPushButton, QWidget#redesignOpenMedia QPushButton, QWidget#redesignCaptureOptions QPushButton, QWidget#redesignPlugins QPushButton, QWidget#redesignPluginInfo QPushButton, QWidget#redesignExtension QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
             "QWidget#redesignPlugins QProgressBar { background: %4; border: none; }"
             "QWidget#redesignPlugins QProgressBar::chunk { background: %7; }"
+            "QWidget#redesignExtension QCheckBox::indicator { width: %1px; height: %1px; }"
             "QWidget#redesignPlugins QCheckBox::indicator { width: %1px; height: %1px; }"
             "QWidget#redesignProfileEditor QCheckBox::indicator, QWidget#redesignProfileEditor QGroupBox::indicator, QWidget#redesignProfileEditor QRadioButton::indicator { width: %1px; height: %1px; }"
             "QWidget#redesignOpenMedia QCheckBox::indicator, QWidget#redesignOpenMedia QRadioButton::indicator, QWidget#redesignCaptureOptions QCheckBox::indicator { width: %1px; height: %1px; }"
@@ -166,6 +167,8 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }")
             .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover)
             .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)).arg(dp(16)).arg((dp(14) + 1) / 2));
+        // Reapply explicit palette roles after the stylesheet repolishes the window.
+        widget->setPalette(colors);
         // Wizard headers and rulers paint with their palette rather than QSS.
         if (widget->objectName() == QStringLiteral("redesignStream"))
             for (auto *child : widget->findChildren<QWidget *>())
