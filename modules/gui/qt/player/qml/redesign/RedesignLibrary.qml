@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls.Basic as C
 import VLC.MainInterface
 import VLC.MediaLibrary
+import VLC.Network
 import VLC.Player
 import VLC.Dialogs
 
