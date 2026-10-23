@@ -104,7 +104,7 @@ FocusScope {
     }
     Connections {
         target: Player
-        function onInputChanged() { view.refreshSeekPreview(); gotoTime.reject() }
+        function onInputChanged() { view.refreshSeekPreview(); view.cancelTimeEdit(); gotoTime.reject() }
     }
     Connections {
         target: DialogsProvider
@@ -377,6 +377,7 @@ FocusScope {
         onPrevious: MainPlaylistController.prevOrReset()
         onNext: MainPlaylistController.next()
         onSeekRequested: value => Player.jumpToPos(value)
+        onSeekToSecondsRequested: seconds => Player.jumpToSeconds(seconds)
         onSeekDragStarted: Player.beginSeekDrag()
         onSeekDragFinished: (value, commit) => Player.finishSeekDrag(value, commit)
         onVolumeRequested: value => { Player.muted = false; Player.volume = value }
@@ -437,7 +438,7 @@ FocusScope {
                 focus: visible
                 cursorShape: view.videoCursorVisible ? Qt.ArrowCursor : Qt.BlankCursor
                 onMouseMoved: view.revealCursor()
-                onMousePressed: view.revealCursor()
+                onMousePressed: { view.cancelTimeEdit(); view.revealCursor() }
                 onMouseReleased: view.revealCursor()
             }
         }

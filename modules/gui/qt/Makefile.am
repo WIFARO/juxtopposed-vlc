@@ -1286,6 +1286,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignStartupVolume.qml \
 	player/qml/redesign/RedesignConfirmationDialog.qml \
 	player/qml/redesign/RedesignGotoTimeDialog.qml \
+	player/qml/redesign/RedesignTime.qml \
 	player/qml/redesign/RedesignNetworkDialog.qml \
 	player/qml/redesign/RedesignPlaylistDialog.qml \
 	player/qml/redesign/RedesignPlaylistProperties.qml \

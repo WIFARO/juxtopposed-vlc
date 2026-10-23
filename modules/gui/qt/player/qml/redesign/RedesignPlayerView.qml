@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls.Basic as C
 
 // Presentation shared by the VLC integration and the standalone QML checks.
 FocusScope {
     id: root
+    readonly property RedesignTime timeParser: RedesignTime {}
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
@@ -118,7 +120,7 @@ FocusScope {
         for (let item = seek; item && item !== root; item = item.parent) y += item.y
         return y
     }
-    readonly property bool controlsLocked: chromeLayout.editing || customMenuOpen || queueOpen || libraryOpen || settingsPage.length > 0 || resumeAvailable || !!trackPopup && trackPopup.visible
+    readonly property bool controlsLocked: elapsedTime.editing || chromeLayout.editing || customMenuOpen || queueOpen || libraryOpen || settingsPage.length > 0 || resumeAvailable || !!trackPopup && trackPopup.visible
     readonly property alias topVisible: header.visible
     readonly property alias bottomVisible: toolbar.visible
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
@@ -127,6 +129,8 @@ FocusScope {
     signal previous()
     signal next()
     signal seekRequested(real value)
+    signal seekToSecondsRequested(int seconds)
+    function cancelTimeEdit() { elapsedTime.cancel() }
     signal seekDragStarted()
     signal seekDragFinished(real value, bool commit)
     signal volumeRequested(real value)
@@ -179,6 +183,16 @@ FocusScope {
         enabled: !root.hasVideo
         acceptedButtons: Qt.RightButton
         onClicked: mouse => root.contextMenuRequested(mapToGlobal(mouse.x, mouse.y))
+    }
+
+    // Observe outside presses without taking the click from its normal control.
+    TapHandler {
+        enabled: elapsedTime.editing
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onPressedChanged: {
+            if (pressed && !timeEditor.contains(timeEditor.mapFromItem(root, point.position)))
+                elapsedTime.cancel()
+        }
     }
 
     function revealControls() { revealTimer.restart() }
@@ -808,13 +822,98 @@ FocusScope {
                 Layout.fillWidth: true
                 spacing: theme.dp(10)
                 Text {
+                    id: elapsedTime
                     objectName: "elapsedTimeLabel"
                     visible: root.width > theme.dp(650)
                     Layout.preferredWidth: Math.max(theme.dp(chrome.hasTimeline("above") ? 74 : chrome.audioRight ? 84 : 82), implicitWidth)
                     leftPadding: chrome.hasTimeline("above") ? 0 : theme.dp(8)
                     horizontalAlignment: Text.AlignHCenter
                     text: root.timeText
-                    color: theme.foreground; font.pixelSize: theme.dp(root.timeLabelFontSize)
+                    textFormat: Text.PlainText
+                    color: editing ? "transparent" : theme.foreground
+                    font.pixelSize: theme.dp(root.timeLabelFontSize)
+                    readonly property bool canEdit: root.started && root.seekable && !root.presentationOnly
+                    readonly property bool editing: timeEditor.visible
+                    readonly property int parsedSeconds: timeParser.parseTime(timeEditor.text)
+                    readonly property bool valid: canEdit && parsedSeconds >= 0
+                        && (!(root.durationSeconds > 0) || parsedSeconds <= root.durationSeconds)
+                    readonly property string helpText: parsedSeconds >= 0 && root.durationSeconds > 0 && parsedSeconds > root.durationSeconds
+                        ? qsTr("Time must be between %1 and %2.").arg(timeParser.formatTime(0)).arg(timeParser.formatTime(root.durationSeconds))
+                        : qsTr("Use seconds, mm:ss, or hh:mm:ss.")
+                    activeFocusOnTab: canEdit
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("Go to time")
+                    Accessible.description: root.timeText
+                    Accessible.onPressAction: begin()
+                    onCanEditChanged: if (!canEdit) cancel()
+                    onVisibleChanged: if (!visible) cancel()
+                    function begin() {
+                        if (!canEdit || editing) return
+                        timeEditor.text = root.timeText
+                        timeEditor.visible = true
+                        timeEditor.forceActiveFocus()
+                        timeEditor.selectAll()
+                    }
+                    function cancel() {
+                        timeEditor.visible = false
+                        timeEditor.deselect()
+                        timeEditor.focus = false
+                        focus = false
+                    }
+                    function submit() {
+                        if (!editing || !valid) return
+                        const seconds = parsedSeconds
+                        cancel()
+                        root.seekToSecondsRequested(seconds)
+                    }
+                    Keys.onReturnPressed: begin()
+                    Keys.onEnterPressed: begin()
+                    Keys.onSpacePressed: begin()
+                    Rectangle {
+                        anchors.fill: parent; anchors.margins: -theme.dp(2)
+                        visible: elapsedTime.activeFocus && !elapsedTime.editing
+                        color: "transparent"; radius: theme.dp(4)
+                        border.color: theme.accent; border.width: theme.dp(1)
+                    }
+                    MouseArea {
+                        anchors.fill: parent; anchors.topMargin: -theme.dp(5); anchors.bottomMargin: -theme.dp(5)
+                        enabled: elapsedTime.canEdit && !elapsedTime.editing
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: elapsedTime.begin()
+                    }
+                    C.TextField {
+                        id: timeEditor
+                        objectName: "elapsedTimeEditor"
+                        visible: false
+                        width: parent.width; height: Math.max(parent.height, theme.dp(28))
+                        anchors.verticalCenter: parent.verticalCenter
+                        leftPadding: parent.leftPadding; rightPadding: 0
+                        topPadding: 0; bottomPadding: 0
+                        horizontalAlignment: TextInput.AlignHCenter
+                        font: elapsedTime.font
+                        color: theme.playerHeading
+                        selectionColor: theme.accent; selectedTextColor: theme.field
+                        selectByMouse: true
+                        inputMethodHints: Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
+                        Accessible.name: qsTr("Time")
+                        Accessible.description: elapsedTime.helpText
+                        background: Rectangle {
+                            color: theme.field; radius: theme.dp(4)
+                            border.width: theme.dp(1)
+                            border.color: timeEditor.text.trim().length && !elapsedTime.valid ? theme.danger : theme.accent
+                        }
+                        Keys.onReturnPressed: elapsedTime.submit()
+                        Keys.onEnterPressed: elapsedTime.submit()
+                        Keys.onEscapePressed: elapsedTime.cancel()
+                        onActiveFocusChanged: if (visible && !activeFocus) elapsedTime.cancel()
+                        RedesignToolTip {
+                            theme: root.theme
+                            text: elapsedTime.helpText
+                            contentTextFormat: Text.PlainText
+                            visible: timeEditor.visible && timeEditor.activeFocus && timeEditor.text.trim().length && !elapsedTime.valid
+                            delay: 400
+                        }
+                    }
                 }
                 RedesignPlayerSeekBar {
                     focusPolicy: root.presentationOnly ? Qt.NoFocus : Qt.StrongFocus
