@@ -82,7 +82,7 @@ TestCase {
         const control = slider("subtitleDelaySetting")
         tryCompare(control, "mirrored", data.mirrored)
         wait(30)
-        const image = grabImage(testCase)
+        const image = testImages.grabWindow(testCase)
         const samples = [
             {position: 0.15, filled: false},
             {position: 0.4, filled: data.delay < 0},
@@ -91,8 +91,8 @@ TestCase {
         ]
         for (const sample of samples) {
             const position = data.mirrored ? 1 - sample.position : sample.position
-            const point = control.mapToItem(testCase, position * control.width, control.height / 2)
-            const x = Math.round(point.x), y = Math.floor(point.y)
+            const point = image.point(control, position * control.width, control.height / 2)
+            const x = point.x, y = point.y
             const expected = Qt.color(sample.filled ? "#371f06" : "#090909")
             verify(Math.abs(image.red(x, y) - Math.round(expected.r * 255)) <= 1, "Delay fill red at " + sample.position + ": got " + image.red(x, y) + ", image " + image.width + "x" + image.height)
             verify(Math.abs(image.green(x, y) - Math.round(expected.g * 255)) <= 1, "Delay fill green at " + sample.position)

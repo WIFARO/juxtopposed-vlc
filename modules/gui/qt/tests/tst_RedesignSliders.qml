@@ -70,11 +70,11 @@ TestCase {
         mouseMove(testCase, 790, 610)
     }
     function checkPixel(item, horizontal, fraction, color) {
-        const point = item.mapToItem(testCase,
+        const image = testImages.grabWindow(testCase)
+        const point = image.point(item,
             item.width * (horizontal ? fraction : 0.5),
             item.height * (horizontal ? 0.5 : fraction))
-        const image = grabImage(testCase)
-        const x = Math.round(point.x), y = Math.round(point.y)
+        const x = point.x, y = point.y
         const expected = Qt.color(color)
         verify(Math.abs(image.red(x, y) - Math.round(expected.r * 255)) <= 1
             && Math.abs(image.green(x, y) - Math.round(expected.g * 255)) <= 1

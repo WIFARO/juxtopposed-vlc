@@ -17,18 +17,56 @@
 *****************************************************************************/
 
 #include <QtQuickTest>
+#include <QQmlContext>
+#include <QtMath>
 #include "qml_test.hpp"
 
-// not much right now, type registration & initialisation may be required later on
-// https://doc.qt.io/qt-5/qtquicktest-index.html#executing-c-before-qml-tests
+TestWindowImage::TestWindowImage(QQuickWindow *window)
+    : m_image(window->grabWindow()), m_window(window), m_logicalSize(window->size())
+{
+}
+
+QPoint TestWindowImage::point(QQuickItem *item, qreal x, qreal y) const
+{
+    if (!item || !m_window || item->window() != m_window || m_logicalSize.isEmpty())
+        return {-1, -1};
+    const QPointF scene = item->mapToScene(QPointF(x, y));
+    // Use actual image dimensions; grabWindow's DPR metadata is not reliable
+    // on every backend. Select the physical pixel containing the scene point.
+    return {qFloor(scene.x() * m_image.width() / m_logicalSize.width()),
+            qFloor(scene.y() * m_image.height() / m_logicalSize.height())};
+}
+
+int TestWindowImage::red(int x, int y) const
+{
+    return m_image.valid(x, y) ? m_image.pixelColor(x, y).red() : -1;
+}
+
+int TestWindowImage::green(int x, int y) const
+{
+    return m_image.valid(x, y) ? m_image.pixelColor(x, y).green() : -1;
+}
+
+int TestWindowImage::blue(int x, int y) const
+{
+    return m_image.valid(x, y) ? m_image.pixelColor(x, y).blue() : -1;
+}
+
+QObject *TestImages::grabWindow(QQuickItem *item) const
+{
+    if (!item || !item->window())
+        return nullptr;
+    auto *image = new TestWindowImage(item->window());
+    QQmlEngine::setObjectOwnership(image, QQmlEngine::JavaScriptOwnership);
+    return image;
+}
 
 void Setup::qmlEngineAvailable(QQmlEngine *engine)
 {
 #if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
     engine->addImportPath(":/qt/qml");
-#else
-    (void)engine;
 #endif
+    engine->rootContext()->setContextProperty(QStringLiteral("testImages"), new TestImages(engine));
 }
 
 int main(int argc, char **argv)

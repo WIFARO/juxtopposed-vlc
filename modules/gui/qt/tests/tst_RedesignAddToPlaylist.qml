@@ -156,11 +156,11 @@ TestCase {
         for (const objectName of ["addToPlaylistSearch", "addToPlaylistName"])
             fuzzyCompare(findChild(dialog, objectName).height, 37 * data.scale, .1)
         const add = findChild(dialog, "addToPlaylistSave")
-        const p = add.background.mapToItem(testCase, 10 * data.scale, 16 * data.scale)
-        const image = grabImage(testCase), color = Qt.color(data.fill)
-        compare(image.red(Math.round(p.x), Math.round(p.y)), Math.round(color.r * 255))
-        compare(image.green(Math.round(p.x), Math.round(p.y)), Math.round(color.g * 255))
-        compare(image.blue(Math.round(p.x), Math.round(p.y)), Math.round(color.b * 255))
+        const image = testImages.grabWindow(testCase), color = Qt.color(data.fill)
+        const p = image.point(add.background, 10 * data.scale, 16 * data.scale)
+        compare(image.red(p.x, p.y), Math.round(color.r * 255))
+        compare(image.green(p.x, p.y), Math.round(color.g * 255))
+        compare(image.blue(p.x, p.y), Math.round(color.b * 255))
         compare(add.foreground, Qt.color(data.accent))
     }
 }

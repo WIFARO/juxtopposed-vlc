@@ -2516,6 +2516,8 @@ endif
 QML_LOG_COMPILER = $(builddir)/qml_test -input
 
 if HAVE_QT_QUICK_TEST
+EXTRA_DIST += tests/tst_RedesignCapture.qml
+TESTS += tests/tst_RedesignCapture.qml
 qml_test_SOURCES = tests/qml_test.cpp tests/qml_test.hpp
 nodist_qml_test_SOURCES = tests/qml_test.moc.cpp
 CLEANFILES += $(nodist_qml_test_SOURCES)

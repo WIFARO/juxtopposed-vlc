@@ -1128,6 +1128,7 @@ qml_tests = {
     'tst_RedesignMediaFavorite': files('tests/tst_RedesignMediaFavorite.qml'),
     'tst_RedesignCustomizationControls': files('tests/tst_RedesignCustomizationControls.qml'),
     'tst_RedesignCustomizationEditor': files('tests/tst_RedesignCustomizationEditor.qml'),
+    'tst_RedesignCapture': files('tests/tst_RedesignCapture.qml'),
     'tst_RedesignAddToPlaylist': files('tests/tst_RedesignAddToPlaylist.qml'),
     'tst_RedesignPlayerLayout': files('tests/tst_RedesignPlayerLayout.qml'),
     'tst_RedesignPlayerChrome': files('tests/tst_RedesignPlayerChrome.qml'),

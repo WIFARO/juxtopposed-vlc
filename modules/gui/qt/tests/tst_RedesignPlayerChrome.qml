@@ -93,13 +93,14 @@ TestCase {
         fuzzyCompare(toolbar.color.a, data.alpha, 0.0001)
         compare(header.opacity, 1); compare(toolbar.opacity, 1); compare(item("playButton").opacity, 1)
         wait(30)
-        const image = grabImage(player)
+        const image = testImages.grabWindow(player)
         const video = Qt.color("#2d2b29"), chrome = player.theme.background
         const expected = ["r", "g", "b"].map(channel => Math.round(255 * (video[channel] * (1 - data.alpha) + chrome[channel] * data.alpha)))
         for (const y of [2, player.height - 2]) {
-            verify(Math.abs(image.red(400, y) - expected[0]) <= 2)
-            verify(Math.abs(image.green(400, y) - expected[1]) <= 2)
-            verify(Math.abs(image.blue(400, y) - expected[2]) <= 2)
+            const p = image.point(player, 400, y)
+            verify(Math.abs(image.red(p.x, p.y) - expected[0]) <= 2)
+            verify(Math.abs(image.green(p.x, p.y) - expected[1]) <= 2)
+            verify(Math.abs(image.blue(p.x, p.y) - expected[2]) <= 2)
         }
         player.fullscreen = false
         compare(header.color.a, 1); compare(toolbar.color.a, 1)

@@ -94,7 +94,7 @@ TestCase {
             + '<rect x="0.5" y="0.5" width="27" height="27" fill="none" stroke="' + outline.stroke + '" stroke-dasharray="4 4"/></g></svg>'
         scene.Window.window.update()
         verify(waitForRendering(scene))
-        const actual = grabImage(scene)
+        const actual = testImages.grabWindow(scene)
         let reference = null
         try {
             outline.visible = false
@@ -104,11 +104,11 @@ TestCase {
             tryCompare(reference, "status", Image.Ready)
             scene.Window.window.update()
             verify(waitForRendering(scene))
-            const expected = grabImage(scene)
-            const ratio = actual.width / scene.width
-            const left = Math.floor(origin.x * ratio), top = Math.floor(origin.y * ratio)
-            const right = Math.ceil((origin.x + outline.width) * ratio)
-            const bottom = Math.ceil((origin.y + outline.height) * ratio)
+            const expected = testImages.grabWindow(scene)
+            const first = actual.point(scene, origin.x, origin.y)
+            const last = actual.point(scene, origin.x + outline.width, origin.y + outline.height)
+            const left = first.x, top = first.y
+            const right = last.x + 1, bottom = last.y + 1
             for (let y = top; y < bottom; ++y) for (let x = left; x < right; ++x) {
                 verify(Math.abs(actual.red(x, y) - expected.red(x, y)) <= 1
                     && Math.abs(actual.green(x, y) - expected.green(x, y)) <= 1

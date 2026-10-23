@@ -57,12 +57,13 @@ TestCase {
             fuzzyCompare(body.color.a, enabled ? 0.90 : 1, 0.001)
             fuzzyCompare(rail.color.a, data.light && enabled ? 0.75 : 1, 0.001)
             waitForRendering(player)
-            const image = grabImage(testCase)
+            const image = testImages.grabWindow(testCase)
+            const bodyPoint = image.point(testCase, 300, 600), railPoint = image.point(testCase, 25, 600)
             const bodyValue = data.light ? (enabled ? 233 : 231) : (enabled ? 38 : 14)
             const railValue = data.light ? (enabled ? 224 : 213) : 25
             for (const channel of ["red", "green", "blue"]) {
-                fuzzyCompare(image[channel](300, 600), bodyValue, 1)
-                fuzzyCompare(image[channel](25, 600), railValue, 1)
+                fuzzyCompare(image[channel](bodyPoint.x, bodyPoint.y), bodyValue, 1)
+                fuzzyCompare(image[channel](railPoint.x, railPoint.y), railValue, 1)
             }
             compare(video.mapToItem(player, 0, 0), geometry)
             compare(Qt.size(video.width, video.height), size)
@@ -73,12 +74,13 @@ TestCase {
             compare(library.color.a, 1)
             compare(rail.color.a, 1)
             waitForRendering(player)
-            const image = grabImage(testCase)
+            const image = testImages.grabWindow(testCase)
+            const bodyPoint = image.point(testCase, 300, 600), railPoint = image.point(testCase, 25, 600)
             const bodyValue = data.light ? 195 : 14
             const railValue = data.light ? 172 : 25
             for (const channel of ["red", "green", "blue"]) {
-                fuzzyCompare(image[channel](300, 600), bodyValue, 1)
-                fuzzyCompare(image[channel](25, 600), railValue, 1)
+                fuzzyCompare(image[channel](bodyPoint.x, bodyPoint.y), bodyValue, 1)
+                fuzzyCompare(image[channel](railPoint.x, railPoint.y), railValue, 1)
             }
         }
     }

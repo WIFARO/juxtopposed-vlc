@@ -20,6 +20,41 @@
 
 #include <QObject>
 #include <QQmlEngine>
+#include <QImage>
+#include <QPointer>
+#include <QQuickItem>
+#include <QQuickWindow>
+
+// Keep the presented window's physical pixels. Qt Quick Test's grabImage()
+// crops with local item coordinates and can lose the DPR on the software path.
+class TestWindowImage : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int width READ width CONSTANT)
+    Q_PROPERTY(int height READ height CONSTANT)
+
+public:
+    explicit TestWindowImage(QQuickWindow *window);
+    int width() const { return m_image.width(); }
+    int height() const { return m_image.height(); }
+    Q_INVOKABLE QPoint point(QQuickItem *item, qreal x, qreal y) const;
+    Q_INVOKABLE int red(int x, int y) const;
+    Q_INVOKABLE int green(int x, int y) const;
+    Q_INVOKABLE int blue(int x, int y) const;
+
+private:
+    QImage m_image;
+    QPointer<QQuickWindow> m_window;
+    QSize m_logicalSize;
+};
+
+class TestImages : public QObject
+{
+    Q_OBJECT
+public:
+    using QObject::QObject;
+    Q_INVOKABLE QObject *grabWindow(QQuickItem *item) const;
+};
 
 class Setup : public QObject
 {

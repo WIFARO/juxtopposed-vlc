@@ -207,6 +207,15 @@ Item {
         property color stroke: root.theme.playerLabel
         readonly property real unit: root.theme.dp(1)
         readonly property real pixelRatio: Screen.devicePixelRatio
+        readonly property int rasterGrid: {
+            // sourceSize is rounded to whole logical pixels before Qt applies
+            // the display scale. Use a logical grid with whole physical pixels.
+            for (let step = 1; step <= 64; ++step) {
+                const pixels = step * pixelRatio
+                if (Math.abs(pixels - Math.round(pixels)) < 0.000001) return step
+            }
+            return 1
+        }
         readonly property point sceneOrigin: {
             // Observe every translation that can move the overlay on the pixel grid.
             for (let ancestor = outline; ancestor; ancestor = ancestor.parent) {
@@ -218,12 +227,14 @@ Item {
         // fractional position instead of resizing a rounded image back onto it.
         RedesignSvg {
             id: outlinePaint
+            // This frame already matches the display grid. SVG intrinsic sizes
+            // are rounded to integers; fitting that aspect ratio would shift
+            // fractional frames before they reach their authored position.
+            fillMode: Image.Stretch
             x: Math.floor(outline.sceneOrigin.x * outline.pixelRatio) / outline.pixelRatio - outline.sceneOrigin.x
             y: Math.floor(outline.sceneOrigin.y * outline.pixelRatio) / outline.pixelRatio - outline.sceneOrigin.y
-            width: Math.ceil((outline.sceneOrigin.x + outline.width) * outline.pixelRatio) / outline.pixelRatio
-                - outline.sceneOrigin.x - x
-            height: Math.ceil((outline.sceneOrigin.y + outline.height) * outline.pixelRatio) / outline.pixelRatio
-                - outline.sceneOrigin.y - y
+            width: Math.ceil((outline.width - x) / outline.rasterGrid) * outline.rasterGrid
+            height: Math.ceil((outline.height - y) / outline.rasterGrid) * outline.rasterGrid
             // Keep the dash phase continuous through the corners, as in the design.
             svg: outline.width > outline.unit && outline.height > outline.unit
                 ? '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height

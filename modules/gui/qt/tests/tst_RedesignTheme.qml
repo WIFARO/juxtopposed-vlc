@@ -58,9 +58,9 @@ TestCase {
     }
     function checkPixel(item, x, y, color) {
         wait(20)
-        const point = item.mapToItem(testCase, x, y)
-        x = Math.round(point.x); y = Math.round(point.y)
-        const image = grabImage(testCase)
+        const image = testImages.grabWindow(testCase)
+        const point = image.point(item, x, y)
+        x = point.x; y = point.y
         const expected = Qt.color(color)
         verify(Math.abs(image.red(x, y) - Math.round(expected.r * 255)) <= 1,
                "Red channel: expected " + color + ", got " + image.red(x, y))

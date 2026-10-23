@@ -87,10 +87,10 @@ TestCase {
         const control = slider()
         tryCompare(findChild(control, "volumeConeFill"), "status", Image.Ready)
         verify(waitForRendering(control))
-        const image = grabImage(testCase)
-        const origin = control.mapToItem(testCase, 0, 0)
-        verify(image.green(origin.x + 10, origin.y + 14) > 100, "The filled cone must be visible")
-        verify(image.red(origin.x + 80, origin.y + 14) < 20, "The unfilled cone must stay dark")
+        const image = testImages.grabWindow(testCase)
+        const filled = image.point(control, 10, 14), empty = image.point(control, 80, 14)
+        verify(image.green(filled.x, filled.y) > 100, "The filled cone must be visible")
+        verify(image.red(empty.x, empty.y) < 20, "The unfilled cone must stay dark")
     }
     function test_updatesKeepTheLoadedArtworkAndShowActualVolume() {
         const control = slider()

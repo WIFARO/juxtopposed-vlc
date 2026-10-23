@@ -138,10 +138,10 @@ TestCase {
     function test_zeroDelayHasNoActiveFill() {
         const control = findChild(item("audioDelaySetting"), "settingSlider")
         wait(20)
-        const image = grabImage(testCase)
+        const image = testImages.grabWindow(testCase)
         for (const position of [0.25, 0.75]) {
-            const point = control.mapToItem(testCase, position * control.width, control.height / 2)
-            const x = Math.round(point.x), y = Math.floor(point.y)
+            const point = image.point(control, position * control.width, control.height / 2)
+            const x = point.x, y = point.y
             compare(image.red(x, y), 9)
             compare(image.green(x, y), 9)
             compare(image.blue(x, y), 9)
