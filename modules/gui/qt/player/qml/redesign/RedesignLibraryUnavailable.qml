@@ -3,6 +3,7 @@ import QtQuick
 
 RedesignLibraryView {
     id: root
+    category: 0
     readonly property var categoryTitles: [qsTr("Home"), qsTr("Videos"), qsTr("Music"), qsTr("Network"), qsTr("Playlists"), qsTr("Recent files")]
     heading: categoryTitles[category]
     breadcrumbs: [{label: heading, kind: "category"}]

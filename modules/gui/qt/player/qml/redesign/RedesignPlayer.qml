@@ -523,8 +523,8 @@ FocusScope {
                     onLoaded: rootPlayer.applyLibraryCategory()
                 }
                 readonly property var contentItem: item || unavailableLibrary.item
-                property string heading: contentItem ? contentItem.heading : qsTr("Videos")
-                property string locationTitle: contentItem && contentItem.breadcrumbs.length ? contentItem.breadcrumbs[contentItem.breadcrumbs.length - 1].label : qsTr("Videos")
+                property string heading: contentItem ? contentItem.heading : qsTr("Home")
+                property string locationTitle: contentItem && contentItem.breadcrumbs.length ? contentItem.breadcrumbs[contentItem.breadcrumbs.length - 1].label : qsTr("Home")
             }
         }
         queueContent: Component {
