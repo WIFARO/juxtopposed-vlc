@@ -238,7 +238,7 @@ void MetaPanel::update( const SharedInputItem& p_item )
     }
 
     /* Don't update if you are in edit mode */
-    if( b_inEditMode ) return;
+    if( isInputLocked() ) return;
     p_input = p_item;
     setEnabled( true );
 
@@ -313,6 +313,7 @@ void MetaPanel::update( const SharedInputItem& p_item )
  **/
 bool MetaPanel::saveMeta()
 {
+    if (lookupInProgress) return false;
     const auto input = p_input.get();
 
     if( input == NULL ) {
@@ -328,6 +329,12 @@ bool MetaPanel::saveMeta()
         return false;
     }
     const auto applyEdits = [this]( input_item_t *item ) {
+        if (pendingTags)
+        {
+            vlc_mutex_locker lock(&item->lock);
+            if (!item->p_meta) item->p_meta = vlc_meta_New();
+            if (item->p_meta) vlc_meta_Merge(item->p_meta, pendingTags->p_meta);
+        }
         input_item_SetTitle( item, qtu( title_text->text() ) );
         input_item_SetArtist( item, qtu( artist_text->text() ) );
         input_item_SetAlbum( item, qtu( collection_text->text() ) );
@@ -350,6 +357,7 @@ bool MetaPanel::saveMeta()
         return false;
     }
     applyEdits( input );
+    pendingTags.reset();
     art_cover->setItem( p_input );
     /* Refresh the player controller caches for the currently playing item so
      * the Qt UI sees the new artwork and metadata without reopening. */
@@ -371,6 +379,8 @@ void MetaPanel::enterEditMode()
 
 void MetaPanel::discardEdits()
 {
+    if (fingerprintDialog) fingerprintDialog->reject();
+    pendingTags.reset();
     if( !b_inEditMode )
         return;
     b_inEditMode = false;
@@ -390,6 +400,7 @@ void MetaPanel::setEditMode( bool b_editing )
  */
 void MetaPanel::clear()
 {
+    pendingTags.reset();
     p_input.reset();
     setEnabled( false );
     title_text->clear();
@@ -419,16 +430,47 @@ void MetaPanel::clear()
 
 void MetaPanel::fingerprint()
 {
-    FingerprintDialog *dialog = new FingerprintDialog( this, p_intf, p_input.get() );
-    connect( dialog, &FingerprintDialog::metaApplied, this, &MetaPanel::fingerprintUpdate );
-    dialog->setAttribute( Qt::WA_DeleteOnClose, true );
+    if (!p_input) return;
+    if (fingerprintDialog)
+    {
+        fingerprintDialog->raise();
+        fingerprintDialog->activateWindow();
+        return;
+    }
+    lookupInProgress = true;
+    emit lookupInProgressChanged(true);
+    auto *dialog = new FingerprintDialog(this, p_intf, p_input.get());
+    fingerprintDialog = dialog;
+    connect(dialog, &FingerprintDialog::tagsSelected, this, [this, source = p_input](const SharedInputItem &tags) {
+        if (source == p_input) fingerprintUpdate(tags);
+    });
+    connect(dialog, &QDialog::finished, this, [this] {
+        fingerprintDialog.clear();
+        lookupInProgress = false;
+        emit lookupInProgressChanged(false);
+    });
+    dialog->setAttribute(Qt::WA_DeleteOnClose, true);
     dialog->show();
 }
 
-void MetaPanel::fingerprintUpdate( const SharedInputItem& p_item )
+void MetaPanel::fingerprintUpdate( const SharedInputItem& tags )
 {
-    update( p_item );
-    setEditMode( true );
+    if (!tags) return;
+    pendingTags = tags;
+    const QPair<vlc_meta_type_t, QLineEdit *> fields[] = {
+        {vlc_meta_Title, title_text}, {vlc_meta_Artist, artist_text},
+        {vlc_meta_Album, collection_text}, {vlc_meta_Date, date_text},
+        {vlc_meta_Genre, genre_text}, {vlc_meta_TrackNumber, seqnum_text},
+        {vlc_meta_TrackTotal, seqtot_text}, {vlc_meta_Language, language_text},
+        {vlc_meta_Publisher, publisher_text}, {vlc_meta_Copyright, copyright_text},
+        {vlc_meta_EncodedBy, encodedby_text}
+    };
+    // Only replace fields supplied by the match. Other unsaved edits stay.
+    for (const auto &field : fields)
+        if (const auto *value = vlc_meta_Get(tags->p_meta, field.first)) field.second->setText(qfu(value));
+    if (const auto *value = vlc_meta_Get(tags->p_meta, vlc_meta_Description))
+        description_text->setPlainText(qfu(value));
+    setEditMode(true);
 }
 
 /**

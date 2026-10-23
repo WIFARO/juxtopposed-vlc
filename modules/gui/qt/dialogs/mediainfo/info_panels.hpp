@@ -36,6 +36,7 @@
 #include <QWidget>
 #include <QVector>
 #include <QPair>
+#include <QPointer>
 
 class QGridLayout;
 class QResizeEvent;
@@ -48,6 +49,7 @@ class QTextEdit;
 class QLabel;
 class VLCStatsView;
 class QPushButton;
+class FingerprintDialog;
 
 class MetaPanel: public QWidget
 {
@@ -57,6 +59,7 @@ public:
     bool saveMeta();
 
     bool isInEditMode();
+    bool isInputLocked() const { return b_inEditMode || lookupInProgress; }
     void setEditMode( bool );
     void discardEdits();
 
@@ -64,6 +67,9 @@ private:
     SharedInputItem p_input;
     qt_intf_t *p_intf;
     bool b_inEditMode = false;
+    bool lookupInProgress = false;
+    QPointer<FingerprintDialog> fingerprintDialog;
+    SharedInputItem pendingTags;
     QGridLayout *metaLayout;
     QVector<QPair<QWidget *, QWidget *>> fieldRows;
     QWidget *commentsBlock;
@@ -106,6 +112,7 @@ private slots:
 signals:
     void uriSet( const QString& );
     void editModeChanged( bool );
+    void lookupInProgressChanged( bool );
 };
 
 class ExtraMetaPanel: public QWidget

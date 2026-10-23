@@ -63,6 +63,7 @@ static inline void fingerprint_request_Delete( fingerprint_request_t *p_f )
     free( p_f->results.psz_fingerprint );
     for( size_t i = 0; i < vlc_array_count( & p_f->results.metas_array ); i++ )
         vlc_meta_Delete( (vlc_meta_t *) vlc_array_item_at_index( & p_f->results.metas_array, i ) );
+    vlc_array_clear( &p_f->results.metas_array );
     free( p_f );
 }
 

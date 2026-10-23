@@ -41,7 +41,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
         const auto accent = ctx->redesignAccent().name();
         const auto dp = [ctx](int value) { return qRound(value * ctx->getIntfScaleFactor()); };
         // Stylesheet heights exclude padding and the two one-pixel borders.
-        const int mediaInfoButtonContentHeight = std::max(0, dp(32) - 2 * dp(6) - 2);
+        const int compactButtonContentHeight = std::max(0, dp(32) - 2 * dp(6) - 2);
         QPalette colors = widget->palette();
         colors.setColor(QPalette::Window, QColor(background));
         colors.setColor(QPalette::WindowText, QColor(foreground));
@@ -87,7 +87,11 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QWidget#redesignMediaInfo QTabBar::tab { padding: %14px %15px; }"
             "QWidget#redesignMediaInfo QLineEdit, QWidget#redesignMediaInfo QTextEdit, QWidget#redesignMediaInfo QPushButton { border-radius: %16px; }"
             "QWidget#redesignMediaInfo QLineEdit:read-only { background: %3; color: %2; }"
-            "QWidget#redesignMediaInfo QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; }"
+            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
+            "QWidget#redesignFingerprint QListWidget::item { padding: %14px; border-radius: %16px; }"
+            "QWidget#redesignFingerprint QListWidget::item:selected { background: %7; color: #161616; }"
+            "QWidget#redesignFingerprint QProgressBar { background: %4; border: none; border-radius: %18px; }"
+            "QWidget#redesignFingerprint QProgressBar::chunk { background: %7; border-radius: %18px; }"
             "QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QAbstractSpinBox, QAbstractItemView { background: %4; alternate-background-color: %3; color: %5; border: 1px solid %6; border-radius: 4px; padding: 5px; selection-background-color: %7; selection-color: #161616; }"
             "QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QAbstractSpinBox:focus { border-color: %7; }"
             "QAbstractSpinBox { min-height: %9px; }"
@@ -133,7 +137,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }"
             "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }")
             .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover)
-            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(mediaInfoButtonContentHeight));
+            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)));
     };
     applyTheme();
     if (ctx) {

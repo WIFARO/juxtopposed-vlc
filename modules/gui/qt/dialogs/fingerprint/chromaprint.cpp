@@ -46,14 +46,9 @@ fingerprint_request_t * Chromaprint::fetchResults()
     return p_fingerprinter->pf_getresults( p_fingerprinter );
 }
 
-void Chromaprint::apply( fingerprint_request_t *p_r, size_t i_id )
-{
-    p_fingerprinter->pf_apply( p_r, i_id );
-}
-
 bool Chromaprint::enqueue( input_item_t *p_item )
 {
-    if ( ! p_fingerprinter ) return false;
+    if ( !p_fingerprinter || !p_item ) return false;
     fingerprint_request_t *p_r = fingerprint_request_New( p_item );
     if ( ! p_r ) return false;
     vlc_tick_t t = input_item_GetDuration( p_item );
@@ -77,5 +72,8 @@ bool Chromaprint::isSupported( QString uri )
 Chromaprint::~Chromaprint()
 {
     if ( p_fingerprinter )
-        fingerprinter_Destroy( p_fingerprinter );
+    {
+        var_DelCallback(p_fingerprinter, "results-available", results_available, this);
+        fingerprinter_Destroy(p_fingerprinter);
+    }
 }

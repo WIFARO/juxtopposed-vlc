@@ -122,16 +122,20 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
     connect( closeButton, &QPushButton::clicked, this, &MediaInfoDialog::close );
     connect( saveMetaButton, &QPushButton::clicked, this, &MediaInfoDialog::saveMeta );
     connect( MP, &MetaPanel::uriSet, this, &MediaInfoDialog::updateURI );
-    connect( MP, &MetaPanel::editModeChanged, this, [this](bool editing) {
-        if (editing && displayedInput)
+    const auto updateEditingContext = [this](bool) {
+        const bool wasLocked = inputContextLocked;
+        inputContextLocked = MP->isInputLocked();
+        if (inputContextLocked && !wasLocked && displayedInput)
         {
             IP->update(displayedInput.get());
             EMP->update(displayedInput.get());
         }
-        else if (!editing)
+        else if (!inputContextLocked)
             refreshCurrentInput();
         updateButtons();
-    } );
+    };
+    connect(MP, &MetaPanel::editModeChanged, this, updateEditingContext);
+    connect(MP, &MetaPanel::lookupInProgressChanged, this, updateEditingContext);
 
     /* If using the General Mode */
     if( isMainInputInfo )
@@ -142,19 +146,19 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
          * For the currently playing element
          **/
         connect( THEMIM, &PlayerController::infoChanged, this, [this](input_item_t *item) {
-            if (!MP->isInEditMode() && item == displayedInput.get()) IP->update(item);
+            if (!MP->isInputLocked() && item == displayedInput.get()) IP->update(item);
         } );
         connect( THEMIM, &PlayerController::inputChanged, this, [this] {
             refreshCurrentInput();
             updateButtons();
         } );
         connect( THEMIM, &PlayerController::currentMetaChanged, this, [this](input_item_t *item) {
-            if (MP->isInEditMode() || item != displayedInput.get()) return;
+            if (MP->isInputLocked() || item != displayedInput.get()) return;
             MP->update(displayedInput);
             EMP->update(item);
         } );
         connect( THEMIM, &PlayerController::statisticsUpdated, this, [this](const input_stats_t &stats) {
-            if (!MP->isInEditMode() && THEMIM->getInput() == displayedInput.get()) ISP->update(stats);
+            if (!MP->isInputLocked() && THEMIM->getInput() == displayedInput.get()) ISP->update(stats);
         } );
 
         p_item = SharedInputItem{ THEMIM->getInput() };
@@ -240,7 +244,7 @@ void MediaInfoDialog::saveMeta()
 
 void MediaInfoDialog::updateAllTabs( const SharedInputItem& p_item )
 {
-    if (!p_item || MP->isInEditMode()) return;
+    if (!p_item || MP->isInputLocked()) return;
     displayedInput = p_item;
     IP->update( p_item.get() );
     MP->update( p_item );
@@ -251,7 +255,7 @@ void MediaInfoDialog::updateAllTabs( const SharedInputItem& p_item )
 
 void MediaInfoDialog::clearAllTabs()
 {
-    if (MP->isInEditMode()) return;
+    if (MP->isInputLocked()) return;
     displayedInput.reset();
     IP->clear();
     MP->clear();
@@ -276,7 +280,7 @@ void MediaInfoDialog::hideEvent( QHideEvent *event )
 
 void MediaInfoDialog::refreshCurrentInput()
 {
-    if (!isMainInputInfo || MP->isInEditMode()) return;
+    if (!isMainInputInfo || MP->isInputLocked()) return;
     const SharedInputItem input { THEMIM->getInput() };
     if (input) updateAllTabs(input);
     else clearAllTabs();

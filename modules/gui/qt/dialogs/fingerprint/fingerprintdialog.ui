@@ -2,135 +2,35 @@
 <ui version="4.0">
  <class>FingerprintDialog</class>
  <widget class="QDialog" name="FingerprintDialog">
-  <property name="windowModality">
-   <enum>Qt::WindowModal</enum>
-  </property>
-  <property name="geometry">
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>499</width>
-    <height>257</height>
-   </rect>
-  </property>
-  <property name="windowTitle">
-   <string>Audio Fingerprinting</string>
-  </property>
-  <layout class="QVBoxLayout" name="verticalLayout_3">
-   <item>
-    <widget class="QStackedWidget" name="stackedWidget">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
-       <horstretch>0</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="currentIndex">
-      <number>0</number>
-     </property>
-     <widget class="QWidget" name="results">
-      <layout class="QVBoxLayout" name="verticalLayout_2">
-       <item>
-        <widget class="QLabel" name="label_3">
-         <property name="text">
-          <string>Select a matching identity</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QListWidget" name="recordsList"/>
-       </item>
-       <item>
-        <widget class="QDialogButtonBox" name="buttonsBox">
-         <property name="standardButtons">
-          <set>QDialogButtonBox::NoButton</set>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="error">
-      <layout class="QVBoxLayout" name="verticalLayout_4">
-       <item>
-        <widget class="QLabel" name="label_2">
-         <property name="text">
-          <string>No fingerprint has been found</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QDialogButtonBox" name="buttonBox">
-         <property name="standardButtons">
-          <set>QDialogButtonBox::NoButton</set>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="wait">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <layout class="QVBoxLayout" name="verticalLayout">
-       <item>
-        <spacer name="verticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item>
-        <widget class="QProgressBar" name="progressBar">
-         <property name="minimum">
-          <number>0</number>
-         </property>
-         <property name="maximum">
-          <number>0</number>
-         </property>
-         <property name="value">
-          <number>-1</number>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="label">
-         <property name="text">
-          <string>Fingerprinting track...</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer_2">
-         <property name="orientation">
-          <enum>Qt::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-      </layout>
-     </widget>
-    </widget>
-   </item>
+  <property name="windowModality"><enum>Qt::WindowModal</enum></property>
+  <property name="geometry"><rect><x>0</x><y>0</y><width>560</width><height>420</height></rect></property>
+  <property name="windowTitle"><string>Find tags</string></property>
+  <layout class="QVBoxLayout" name="dialogLayout">
+   <item><widget class="QLabel" name="heading"><property name="text"><string>Find tags</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><widget class="QLabel" name="fileName"><property name="textFormat"><enum>Qt::PlainText</enum></property><property name="wordWrap"><bool>true</bool></property><property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property></widget></item>
+   <item><widget class="QStackedWidget" name="stackedWidget">
+    <widget class="QWidget" name="results"><layout class="QVBoxLayout" name="resultsLayout">
+     <item><widget class="QLabel" name="resultsLabel"><property name="text"><string>Select a match.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+     <item><widget class="QListWidget" name="recordsList"><property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property><property name="wordWrap"><bool>true</bool></property><property name="uniformItemSizes"><bool>false</bool></property><property name="selectionMode"><enum>QAbstractItemView::SingleSelection</enum></property></widget></item>
+     <item><widget class="QLabel" name="saveNote"><property name="text"><string>Select Save in Media information to save the tags.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+    </layout></widget>
+    <widget class="QWidget" name="error"><layout class="QVBoxLayout" name="errorLayout">
+     <item><spacer name="errorTop"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+     <item><widget class="QLabel" name="errorLabel"><property name="text"><string>No matching tags were found.</string></property><property name="wordWrap"><bool>true</bool></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+     <item><spacer name="errorBottom"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    </layout></widget>
+    <widget class="QWidget" name="wait"><layout class="QVBoxLayout" name="waitLayout">
+     <item><spacer name="waitTop"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+     <item><widget class="QProgressBar" name="progressBar"><property name="minimum"><number>0</number></property><property name="maximum"><number>0</number></property><property name="textVisible"><bool>false</bool></property></widget></item>
+     <item><widget class="QLabel" name="waitLabel"><property name="text"><string>Finding tags…</string></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+     <item><spacer name="waitBottom"><property name="orientation"><enum>Qt::Vertical</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    </layout></widget>
+   </widget></item>
+   <item><layout class="QHBoxLayout" name="actionsLayout">
+    <item><widget class="QPushButton" name="detailsButton"><property name="text"><string>View details</string></property></widget></item>
+    <item><spacer name="actionsSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    <item><widget class="QDialogButtonBox" name="buttonBox"><property name="standardButtons"><set>QDialogButtonBox::NoButton</set></property></widget></item>
+   </layout></item>
   </layout>
  </widget>
  <resources/>

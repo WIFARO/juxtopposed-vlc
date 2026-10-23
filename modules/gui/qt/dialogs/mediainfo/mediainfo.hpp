@@ -61,6 +61,7 @@ private:
     void cancel() override { close(); }
     bool isMainInputInfo;
     SharedInputItem displayedInput;
+    bool inputContextLocked = false;
     void refreshCurrentInput();
 
     QTabWidget *infoTabW;

@@ -34,6 +34,7 @@
 
 #include <vlc_player.h>
 #include <vlc_fingerprinter.h>
+#include <vlc_interrupt.h>
 #include "webservices/acoustid.h"
 #include "../stream_out/chromaprint_data.h"
 
@@ -49,6 +50,7 @@ struct fingerprinter_sys_t
     chromaprint_fingerprint_t chroma_fingerprint;
 
     atomic_bool abort;
+    vlc_interrupt_t *interrupt;
 
     struct
     {
@@ -266,6 +268,10 @@ static int Open(vlc_object_t *p_this)
     vlc_array_init( &p_sys->results.queue );
     vlc_mutex_init( &p_sys->results.lock );
 
+    p_sys->interrupt = vlc_interrupt_create();
+    if (!p_sys->interrupt)
+        goto error;
+
     p_fingerprinter->pf_enqueue = EnqueueRequest;
     p_fingerprinter->pf_getresults = GetResult;
     p_fingerprinter->pf_apply = ApplyResult;
@@ -301,6 +307,8 @@ static void Close(vlc_object_t *p_this)
     vlc_cond_signal( &p_sys->processing.cond );
     vlc_cond_signal( &p_sys->incoming_cond );
     vlc_player_Unlock( p_sys->player );
+    // Cancel pending lookup I/O before joining from the interface thread.
+    vlc_interrupt_kill(p_sys->interrupt);
     vlc_join( p_sys->thread, NULL );
 
     CleanSys( p_sys );
@@ -309,6 +317,7 @@ static void Close(vlc_object_t *p_this)
 
 static void CleanSys( fingerprinter_sys_t *p_sys )
 {
+    if (p_sys->interrupt) vlc_interrupt_destroy(p_sys->interrupt);
     for ( size_t i = 0; i < vlc_array_count( &p_sys->incoming.queue ); i++ )
         fingerprint_request_Delete( vlc_array_item_at_index( &p_sys->incoming.queue, i ) );
     vlc_array_clear( &p_sys->incoming.queue );
@@ -325,6 +334,7 @@ static void CleanSys( fingerprinter_sys_t *p_sys )
     vlc_player_RemoveListener(p_sys->player, p_sys->listener_id);
     vlc_player_Unlock(p_sys->player);
     vlc_player_Delete(p_sys->player);
+    free(p_sys->chroma_fingerprint.psz_fingerprint);
 }
 
 static void fill_metas_with_results( fingerprint_request_t *p_r, acoustid_fingerprint_t *p_f )
@@ -396,8 +406,13 @@ static void *Run( void *opaque )
 
                 acoustid_config_t cfg = { .p_obj = VLC_OBJECT(p_fingerprinter),
                                           .psz_server = NULL, .psz_apikey = NULL };
-                acoustid_lookup_fingerprint( &cfg, &acoustid_print );
-                fill_metas_with_results( p_data, &acoustid_print );
+                if (!p_sys->abort)
+                {
+                    vlc_interrupt_t *previous = vlc_interrupt_set(p_sys->interrupt);
+                    acoustid_lookup_fingerprint(&cfg, &acoustid_print);
+                    vlc_interrupt_set(previous);
+                    fill_metas_with_results(p_data, &acoustid_print);
+                }
 
                 for( unsigned j = 0; j < acoustid_print.results.count; j++ )
                      acoustid_result_release( &acoustid_print.results.p_results[j] );

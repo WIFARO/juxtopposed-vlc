@@ -38,6 +38,7 @@ class FingerprintDialog;
 }
 
 class Chromaprint;
+class QPushButton;
 
 class FingerprintDialog : public QDialog
 {
@@ -52,13 +53,25 @@ private:
     Ui::FingerprintDialog *ui;
     Chromaprint *t;
     fingerprint_request_t *p_r;
+    SharedInputItem sourceItem;
+    qt_intf_t *intf;
+    unsigned searchGeneration = 0;
+    QPushButton *useButton;
+    QPushButton *cancelButton;
+    QPushButton *retryButton;
+    QPushButton *detailsButton;
+    const char *errorMessage = N_("No matching tags were found.");
+    void showError(const char *message);
+    void updateActions();
+    void translate();
 
 private slots:
+    void startSearch();
     void handleResults();
     void applyIdentity();
 
 signals:
-    void metaApplied( const SharedInputItem& );
+    void tagsSelected( const SharedInputItem& );
 };
 
 #endif // FINGERPRINTDIALOG_HPP
