@@ -1336,16 +1336,19 @@ static int Start(audio_output_t *aout, audio_sample_format_t *restrict fmt)
 static void Stop(audio_output_t *aout)
 {
     aout_sys_t *sys = aout->sys;
+    struct aout_stream_owner *owner = sys->stream;
+
+    assert(owner != NULL);
 
     EnterMTA();
     vlc_mutex_lock(&sys->lock);
-    assert(sys->stream != NULL);
-    aout_stream_owner_Stop(sys->stream);
-    aout_stream_owner_Delete(sys->stream);
+    aout_stream_owner_Stop(owner);
     sys->stream = NULL;
     vlc_mutex_unlock(&sys->lock);
     LeaveMTA();
+
     SetEvent(sys->work_event);
+    aout_stream_owner_Delete(owner);
 }
 
 static void Close(vlc_object_t *);
