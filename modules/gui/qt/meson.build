@@ -1514,8 +1514,9 @@ if qt6_dep.found()
     qt6pre_files = qt6.preprocess(ui_files: ui_sources,
         method: qt_dependency_method,
         moc_headers: moc_headers,
-        moc_extra_arguments: qt_extra_flags,
-        include_directories: qt_include_dir,
+        # MOC must see the same configured feature guards as the C++ compiler.
+        moc_extra_arguments: ['-DHAVE_CONFIG_H=1', qt_extra_flags],
+        include_directories: [qt_include_dir, vlc_include_dirs],
         dependencies: qt6_dep,
         rcc_extra_arguments: qt_rcc_extra_arguments)
 
