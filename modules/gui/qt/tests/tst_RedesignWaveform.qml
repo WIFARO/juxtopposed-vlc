@@ -101,7 +101,7 @@ TestCase {
     }
     function test_seekTimeFollowsPointerAndHandle(data) {
         seek.waveformEnabled = data.waveform
-        const tip = findChild(seek, "redesignToolTip")
+        const tip = findChild(seek, "seekTimeToolTip")
         mouseMove(seek, seek.width * .2, seek.height / 2)
         tryCompare(tip, "opened", true)
         fuzzyCompare(tip.x + tip.width / 2, seek.width * .2, 1)
@@ -121,7 +121,7 @@ TestCase {
     function test_hoverTimeUsesTheMirroredSeekPosition() {
         seek.LayoutMirroring.enabled = true
         mouseMove(seek, seek.width * .2, seek.height / 2)
-        const tip = findChild(seek, "redesignToolTip")
+        const tip = findChild(seek, "seekTimeToolTip")
         tryCompare(tip, "opened", true)
         verify(Math.abs(Number(tip.text) - .8) < .02)
         fuzzyCompare(tip.x + tip.width / 2, seek.width * .2, 1)

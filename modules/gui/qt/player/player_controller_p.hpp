@@ -66,6 +66,7 @@ public:
     void UpdateTrackSelection(vlc_es_id_t *trackid, bool selected);
     void UpdateSpuOrder(vlc_es_id_t *es_id, enum vlc_vout_order spu_order);
     int interpolateTime(vlc_tick_t system_now);
+    void startPositionTimer();
     bool isCurrentItemSynced();
     void resetAudioWaveform();
     void refreshAudioWaveform();
@@ -205,6 +206,7 @@ public:
     vlc_player_timer_id* m_player_timer_smpte = nullptr;
     struct vlc_player_timer_point m_player_time;
     bool seeking = false;
+    unsigned m_precisePositionRequests = 0;
     QTimer m_position_timer;
     QTimer m_time_timer;
 

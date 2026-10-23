@@ -7,11 +7,13 @@
 #include <QByteArray>
 #include <QVector>
 #include <QVariantMap>
+#include <QString>
 
 struct SubtitleTimelineCue
 {
     vlc_tick_t start;
     vlc_tick_t stop;
+    QString text;
 };
 
 struct SubtitleTimelineSource

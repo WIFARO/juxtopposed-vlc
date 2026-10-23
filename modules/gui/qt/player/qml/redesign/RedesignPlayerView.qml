@@ -94,6 +94,7 @@ FocusScope {
     property real seekPreviewImagePosition: -1
     signal seekPreviewRequested(real position)
     signal seekPreviewEnded()
+    signal precisePositionUpdatesRequested(bool requested)
     function refreshSeekPreview() { if (libraryExpanded) miniPlayer.refreshPreview(); else seek.refreshPreview() }
     property Component titleBarDragContent
     property Component videoContent
@@ -942,6 +943,7 @@ FocusScope {
                     durationSeconds: root.durationSeconds
                     subtitleDelayMS: root.subtitleDelayMS
                     onSubtitleDelayRequested: milliseconds => root.subtitleDelayRequested(milliseconds)
+                    onPrecisePositionUpdatesRequested: requested => root.precisePositionUpdatesRequested(requested)
                     onPreviewRequested: position => root.seekPreviewRequested(position)
                     onPreviewEnded: root.seekPreviewEnded()
                 }

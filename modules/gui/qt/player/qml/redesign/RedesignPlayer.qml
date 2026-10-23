@@ -316,6 +316,10 @@ FocusScope {
         audioWaveformEnabled: Player.audioWaveformEnabled || Player.audioWaveformAutomatic
         subtitleTimelineCues: Player.subtitleTimelineCues
         subtitleTimelineState: Player.subtitleTimelineState
+        onPrecisePositionUpdatesRequested: requested => {
+            if (requested) Player.requestAddPrecisePositionTimer()
+            else Player.requestRemovePrecisePositionTimer()
+        }
         subtitleDelayMS: Player.subtitleDelayMS
         durationSeconds: started ? Player.lengthSeconds : 0
         onSubtitleDelayRequested: milliseconds => playerPreferences.stage("redesign-subtitle-delay", milliseconds)

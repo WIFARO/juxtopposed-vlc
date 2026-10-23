@@ -11,7 +11,7 @@
  * never become visible captions when embedded formatting is disabled. */
 static inline char *AssPlainText(const char *text)
 {
-    char *plain = malloc(strlen(text) + 1);
+    char *plain = (char *)malloc(strlen(text) + 1);
     if (plain == NULL)
         return NULL;
     char *out = plain;

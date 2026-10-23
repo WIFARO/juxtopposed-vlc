@@ -304,6 +304,10 @@ public slots:
     void toggleRecord();
     void toggleVisualization();
 
+    // Playback position clock
+    void requestAddPrecisePositionTimer();
+    void requestRemovePrecisePositionTimer();
+
     // SMPTE Timer
     void requestAddSMPTETimer();
     void requestRemoveSMPTETimer();

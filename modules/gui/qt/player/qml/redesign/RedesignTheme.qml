@@ -38,6 +38,7 @@ QtObject {
     readonly property color progress: originalAccent ? lightTheme ? "#d8ba9a" : "#371f06" : tintAccent(field, accentFillOpacity)
     readonly property color sliderTick: lightTheme ? Qt.darker(field, 1.12) : originalAccent ? "#1a1611" : tintAccent(field, 0.1)
     readonly property color subtitleCue: lightTheme ? "#a3a3a3" : "#202020"
+    readonly property color subtitleCueText: lightTheme ? "#161616" : bright
     readonly property color subtitleCueProgress: originalAccent ? lightTheme ? "#a27b53" : "#4e3823" : tintAccent(subtitleCue, accentFillOpacity)
     readonly property color danger: "#d33718"
     readonly property color dangerBackground: lightTheme ? "#f8e2d9" : "#1a1111"

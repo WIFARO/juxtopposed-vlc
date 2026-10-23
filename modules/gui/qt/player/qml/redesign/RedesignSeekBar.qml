@@ -51,6 +51,29 @@ T.Slider {
     readonly property bool timelineActive: timelineEnabled && timelineState === "ready" && durationSeconds > 0 && timelineCues.length > 0
     property real timelineZoom: 1
     property real timelineCenter: 0.5
+    readonly property bool needsPrecisePositionUpdates: timelineActive && timelineZoom > 1 && visible && enabled
+    property bool precisePositionRequested: false
+    signal precisePositionUpdatesRequested(bool requested)
+    function updatePrecisionRequest() {
+        if (precisePositionRequested === needsPrecisePositionUpdates) return
+        precisePositionRequested = needsPrecisePositionUpdates
+        precisePositionUpdatesRequested(precisePositionRequested)
+    }
+    onNeedsPrecisePositionUpdatesChanged: updatePrecisionRequest()
+    Component.onCompleted: updatePrecisionRequest()
+    function cueText(cue) { return typeof cue.text === "string" ? cue.text.trim() : "" }
+    function combineCueText(left, right) {
+        if (!left || left === right) return right
+        if (!right) return left
+        // A box can cover overlapping captions. Retain their dialogue rather
+        // than presenting an arbitrary first line as the whole group.
+        const combined = left + " · " + right
+        if (combined.length <= 2048) return combined
+        let prefix = combined.slice(0, 2047)
+        const last = prefix.charCodeAt(prefix.length - 1)
+        if (last >= 0xd800 && last <= 0xdbff) prefix = prefix.slice(0, -1)
+        return prefix + "…"
+    }
     readonly property real timelineSpan: 1 / timelineZoom
     readonly property real rangeStart: timelineActive ? Math.max(0, Math.min(1 - timelineSpan, timelineCenter - timelineSpan / 2)) : 0
     property int cueGeneration: 0
@@ -61,8 +84,10 @@ T.Slider {
         for (const cue of timelineCues) {
             if (!Number.isFinite(cue.start) || !Number.isFinite(cue.stop) || cue.stop <= cue.start) continue
             const last = merged.length ? merged[merged.length - 1] : null
-            if (last && cue.start <= last.stop) last.stop = Math.max(last.stop, cue.stop)
-            else merged.push({start: cue.start, stop: cue.stop})
+            if (last && cue.start < last.stop) {
+                last.stop = Math.max(last.stop, cue.stop)
+                last.text = combineCueText(last.text, cueText(cue))
+            } else merged.push({start: cue.start, stop: cue.stop, text: cueText(cue)})
         }
         return merged
     }
@@ -84,8 +109,13 @@ T.Slider {
             const left = Math.max(0, (cue.start - firstTime) * factor)
             const right = Math.min(cueTrack.width, Math.max(left + 1, (cue.stop - firstTime) * factor))
             const prior = blocks.length ? blocks[blocks.length - 1] : null
-            if (prior && left <= prior.stop + 1) prior.stop = Math.max(prior.stop, right)
-            else blocks.push({start: left, stop: right})
+            if (prior && left < prior.stop + 1
+                && (prior.stop - prior.start < 2 || right - left < 2)) {
+                prior.stop = Math.max(prior.stop, right)
+                // Separate cues that only collide at pixel resolution have no
+                // single label. Zooming in resolves their individual boxes.
+                prior.text = ""
+            } else blocks.push({start: left, stop: right, text: cue.text})
         }
         return blocks
     }
@@ -104,7 +134,11 @@ T.Slider {
         if (timelineActive && timelineZoom > 1 && !pressed && !cueDrag.pressed
             && (playbackPosition < from || playbackPosition > to)) timelineCenter = playbackPosition
     }
-    readonly property bool previewActive: enabled && visible && previewEnabled && !cueDragging && (hovered || pressed || visualFocus)
+    readonly property bool pointerOnTimelineTrack: pointer.point.position.x >= leftPadding
+        && pointer.point.position.x <= width - rightPadding
+    readonly property bool trackHovered: hovered && (!timelineActive || pointerOnTimelineTrack)
+    readonly property bool previewActive: enabled && visible && previewEnabled && !cueDragging
+        && (trackHovered || pressed || visualFocus)
     readonly property real hoverPosition: Math.max(0, Math.min(1,
         (pointer.point.position.x - leftPadding - handle.width / 2) / Math.max(1, availableWidth - handle.width)))
     readonly property real previewPosition: pressed || visualFocus && !hovered ? value
@@ -127,7 +161,10 @@ T.Slider {
         if (previewActive) previewDelay.restart()
         else { previewDelay.stop(); previewEnded() }
     }
-    Component.onDestruction: previewEnded()
+    Component.onDestruction: {
+        if (precisePositionRequested) { precisePositionRequested = false; precisePositionUpdatesRequested(false) }
+        previewEnded()
+    }
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     implicitHeight: theme.dp(28)
     implicitWidth: theme.dp(200)
@@ -199,6 +236,20 @@ T.Slider {
                     width: Math.max(0, Math.min(parent.width, root.visualPosition * cueTrack.width - parent.x))
                     height: parent.height; radius: parent.radius
                     color: root.theme.subtitleCueProgress
+                }
+                Text {
+                    objectName: "subtitleCueText"
+                    anchors.fill: parent
+                    anchors.leftMargin: root.theme.dp(4); anchors.rightMargin: root.theme.dp(4)
+                    visible: root.timelineZoom > 1 && width >= root.theme.dp(40) && text.length > 0
+                    text: parent.modelData.text
+                    textFormat: Text.PlainText
+                    color: root.theme.subtitleCueText
+                    font.pixelSize: root.theme.dp(11)
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    clip: true
                 }
             }
         }
@@ -338,11 +389,12 @@ T.Slider {
         }
     }
     RedesignToolTip {
+        objectName: "seekTimeToolTip"
         theme: root.theme
         text: root.cueDragging ? qsTr("Subtitle delay: %1 s").arg((root.displayedDelayMS / 1000).toFixed(3)) : root.timeForPosition(root.previewPosition)
         x: root.previewOffset - width / 2
         y: -height - root.theme.dp(6)
-        visible: root.enabled && (root.hovered || root.pressed || root.visualFocus || root.cueDragging) && !root.previewReady
+        visible: root.enabled && (root.trackHovered || root.pressed || root.visualFocus || root.cueDragging) && !root.previewReady
         delay: 0
     }
 }

@@ -4,6 +4,7 @@
 #endif
 
 #include "subtitle_timeline_scanner.hpp"
+#include "../../../codec/libass_plaintext.h"
 #include <vlc_block.h>
 #include <vlc_codec.h>
 #include <vlc_configuration.h>
@@ -58,6 +59,9 @@ struct Output : es_out_t
     std::vector<std::unique_ptr<Track>> tracks;
     QVector<SubtitleTimelineCue> cues;
     qsizetype pending = -1;
+    qsizetype textCharactersRemaining = 4 * 1024 * 1024;
+    vlc_tick_t assTextPTS = VLC_TICK_INVALID;
+    QString assText;
     std::mutex mutex;
     QVector<subpicture_t *> pictures;
     video_format_t videoFormat;
@@ -90,6 +94,40 @@ struct Output : es_out_t
         }
     }
 
+    void rememberAssText(const block_t *packet) {
+        assText.clear();
+        assTextPTS = VLC_TICK_INVALID;
+        if (packet->i_flags & BLOCK_FLAG_CORRUPTED
+            || packet->i_pts < VLC_TICK_0 || packet->i_buffer > 64 * 1024) return;
+        // The SSA decoder receives Matroska-style chunks: ReadOrder, Layer,
+        // Style, Name, MarginL, MarginR, MarginV, Effect, then dialogue text.
+        const QByteArray chunk(reinterpret_cast<const char *>(packet->p_buffer), packet->i_buffer);
+        qsizetype offset = 0;
+        for (int i = 0; i < 8; ++i) {
+            offset = chunk.indexOf(',', offset);
+            if (offset < 0) return;
+            ++offset;
+        }
+        char *plain = AssPlainText(chunk.constData() + offset);
+        if (!plain) return;
+        assText = QString::fromUtf8(plain).left(std::min<qsizetype>(2048, textCharactersRemaining)).simplified();
+        free(plain);
+        if (!assText.isEmpty() && assText.back().isHighSurrogate()) assText.chop(1);
+        assTextPTS = packet->i_pts - VLC_TICK_0;
+        // A decoder can add another event at the same timestamp without
+        // queuing a second picture. Keep its dialogue in that scene's label.
+        if (!cues.isEmpty() && cues.back().start == assTextPTS && !assText.isEmpty()) {
+            auto &caption = cues.back().text;
+            if (caption == assText) { assText.clear(); return; }
+            const qsizetype prior = caption.size();
+            const auto limit = std::min<qsizetype>(2048, prior + textCharactersRemaining);
+            caption = (caption.isEmpty() ? assText : caption + QStringLiteral(" · ") + assText).left(limit);
+            if (!caption.isEmpty() && caption.back().isHighSurrogate()) caption.chop(1);
+            textCharactersRemaining -= caption.size() - prior;
+            assText.clear();
+        }
+    }
+
     void collect(subpicture_t *picture) {
         std::lock_guard<std::mutex> lock(mutex);
         if (picture->i_start >= VLC_TICK_0) {
@@ -106,16 +144,28 @@ struct Output : es_out_t
                 ? picture->i_start + (picture->i_stop - picture->i_start) / 2 : picture->i_start;
             subpicture_Update(picture, &videoFormat, &displayFormat, 640, 360, sample);
             bool content = false;
+            QString caption;
+            const qsizetype textLimit = std::min<qsizetype>(2048, textCharactersRemaining);
             subpicture_region_t *region;
             vlc_spu_regions_foreach(region, &picture->regions) {
                 if (region->p_picture) content = true;
-                for (const text_segment_t *text = region->p_text; text; text = text->p_next)
-                    if (text->psz_text && !QString::fromUtf8(text->psz_text).trimmed().isEmpty()) content = true;
+                if (!caption.isEmpty() && caption.size() < textLimit) caption += QLatin1Char(' ');
+                for (const text_segment_t *text = region->p_text; text; text = text->p_next) {
+                    if (!text->psz_text) continue;
+                    const QString part = QString::fromUtf8(text->psz_text);
+                    if (!part.trimmed().isEmpty()) content = true;
+                    if (caption.size() < textLimit) caption += part.left(textLimit - caption.size());
+                }
             }
+            caption = caption.simplified();
+            if (caption.isEmpty() && assTextPTS == start) caption = assText.left(textLimit);
+            // Never retain an incomplete UTF-16 character at the text bound.
+            if (!caption.isEmpty() && caption.back().isHighSurrogate()) caption.chop(1);
             if (content) {
                 const vlc_tick_t stop = picture->i_stop > picture->i_start ? picture->i_stop - VLC_TICK_0 : VLC_TICK_INVALID;
                 if (cues.size() < source.maximumCues) {
-                    cues.append({start, stop});
+                    textCharactersRemaining -= caption.size();
+                    cues.append({start, stop, std::move(caption)});
                     if (picture->b_ephemer || stop == VLC_TICK_INVALID) pending = cues.size() - 1;
                 } else limitReached = true;
             }
@@ -190,6 +240,7 @@ Output::Output(vlc_object_t *parent, const SubtitleTimelineSource& source)
                 block_Release(packet);
                 return VLC_EGENERIC;
             }
+            if (track->format.i_codec == VLC_CODEC_SSA) output->rememberAssText(packet);
             int status = track->decoder->decoder.pf_decode(&track->decoder->decoder, packet);
             output->processPictures();
             if (status == VLCDEC_RELOAD) {

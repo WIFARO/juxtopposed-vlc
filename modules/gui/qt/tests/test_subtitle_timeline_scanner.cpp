@@ -12,6 +12,7 @@
 #include <vlc/vlc.h>
 #include <vlc_common.h>
 #include <vlc_modules.h>
+#include <vlc_configuration.h>
 #include "../../../../lib/libvlc_internal.h"
 #include "../player/subtitle_timeline_scanner.hpp"
 
@@ -65,6 +66,9 @@ private slots:
         check(result.cues[0], 1, 2.5);
         check(result.cues[1], 2, 4);
         check(result.cues[2], 7, 8.25);
+        QCOMPARE(result.cues[0].text, QStringLiteral("First"));
+        QCOMPARE(result.cues[1].text, QStringLiteral("Overlap"));
+        QCOMPARE(result.cues[2].text, QStringLiteral("Later"));
     }
     void readsEmbeddedSubRipThroughAvformat() {
         module_t **demuxers = nullptr;
@@ -102,6 +106,54 @@ private slots:
         QCOMPARE(result.status, SubtitleTimelineScan::Complete);
         QCOMPARE(result.cues.size(), 1);
         check(result.cues[0], .5, 1.5);
+        QCOMPARE(result.cues[0].text, QString::fromUtf8("Été 日本語"));
+    }
+    void collectsFormattedMultilineTextAsPlainDialogue() {
+        QFile file(m_dir.filePath(QStringLiteral("styled.srt")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write("1\n00:00:01,000 --> 00:00:03,000\n<b>Café</b> 日本語\nSecond line &amp; more\n\n") > 0);
+        file.close();
+        const auto result = scan(source(QStringLiteral("styled.srt")));
+        QCOMPARE(result.status, SubtitleTimelineScan::Complete);
+        QCOMPARE(result.cues.size(), 1);
+        QCOMPARE(result.cues[0].text, QString::fromUtf8("Café 日本語 Second line &amp; more"));
+    }
+    void collectsAssTextWithoutChangingPlayerAppearance() {
+        if (!module_exists("libass")) QSKIP("ASS decoder unavailable");
+        QFile file(m_dir.filePath(QStringLiteral("styled.ass")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QVERIFY(file.write("[Script Info]\nScriptType: v4.00+\nPlayResX: 640\nPlayResY: 360\n"
+            "[V4+ Styles]\nFormat: Name, Fontname, Fontsize\nStyle: Default,Arial,24\n"
+            "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\i1}ASS{\\i0}\\NSecond line\n"
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,{\\i1}ASS{\\i0}\\NSecond line\n"
+            "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Other speaker\n"
+            "Dialogue: 0,0:00:04.00,0:00:06.00,Default,,0,0,0,,{\\p1}m 0 0 l 40 0 40 40 0 40{\\p0}\n") > 0);
+        file.close();
+        const auto embedded = config_GetInt("sub-text-use-embedded-style");
+        const auto result = scan(source(QStringLiteral("styled.ass")));
+        QCOMPARE(config_GetInt("sub-text-use-embedded-style"), embedded);
+        QCOMPARE(result.status, SubtitleTimelineScan::Complete);
+        QCOMPARE(result.cues.size(), 2);
+        QCOMPARE(result.cues[0].text, QStringLiteral("ASS Second line · Other speaker"));
+        QVERIFY(result.cues[1].text.isEmpty());
+        check(result.cues[1], 4, 6);
+    }
+    void boundsLongTextWithoutBreakingUnicode() {
+        QFile file(m_dir.filePath(QStringLiteral("long.srt")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        const auto text = QStringLiteral("x") + QString::fromUtf8("😀").repeated(2000);
+        const auto data = (QStringLiteral("1\n00:00:01,000 --> 00:00:03,000\n") + text + QStringLiteral("\n\n")).toUtf8();
+        QCOMPARE(file.write(data), data.size());
+        file.close();
+        const auto result = scan(source(QStringLiteral("long.srt")));
+        QCOMPARE(result.status, SubtitleTimelineScan::Complete);
+        QCOMPARE(result.cues.size(), 1);
+        const auto caption = result.cues[0].text;
+        QVERIFY(caption.size() <= 2048);
+        QVERIFY(caption.startsWith(QString::fromUtf8("x😀")));
+        QVERIFY(!caption.back().isHighSurrogate());
+        QVERIFY(!caption.contains(QChar::ReplacementCharacter));
     }
     void appliesNativeSubtitleRate() {
         auto request = source(); request.subtitleRate = .5f;
