@@ -299,7 +299,7 @@ QVariant RedesignFolderModel::data(const QModelIndex& index, int role) const
     case Progress: {
         if (file.isDir()) {
             if (role == Title || role == Qt::DisplayRole) return file.fileName();
-            return role == Progress ? QVariant(0.0) : QVariant(QString {});
+            if (role != Thumbnail) return role == Progress ? QVariant(0.0) : QVariant(QString {});
         }
         const auto url = QUrl::fromLocalFile(file.absoluteFilePath());
         if (!m_artworkRequested.contains(url)) {

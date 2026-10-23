@@ -31,6 +31,14 @@ Item {
     RedesignIcon { anchors.centerIn: parent; width: root.theme.dp(root.iconSize); height: width; name: root.iconName; color: root.theme.foreground; visible: !root.hasArtwork }
     Image { id: artworkImage; objectName: "libraryArtworkImage"; anchors.fill: parent; source: root.source; fillMode: Image.PreserveAspectCrop; asynchronous: true; visible: root.hasArtwork }
     Rectangle {
+        anchors.right: parent.right; anchors.bottom: parent.bottom
+        anchors.margins: root.theme.dp(6)
+        width: root.theme.dp(20); height: width; radius: root.theme.dp(4)
+        color: "#b0000000"
+        visible: root.hasArtwork && root.iconName === "folder" && root.width >= root.theme.dp(48)
+        RedesignIcon { anchors.centerIn: parent; width: root.theme.dp(14); height: width; name: "folder"; color: "white" }
+    }
+    Rectangle {
         anchors.left: parent.left; anchors.bottom: parent.bottom
         z: root.roundProgress ? 0 : 1
         width: parent.width * Math.max(0, Math.min(1, root.progress))

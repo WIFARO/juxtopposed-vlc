@@ -264,6 +264,7 @@ public slots:
     QStringList selectLibraryFiles(const QUrl& initial = QUrl());
     QStringList selectPlaylistFiles();
     QUrl selectPlaylistCover();
+    Q_INVOKABLE QUrl selectMediaArtwork();
     QStringList mediaNameFilters(bool audio) const;
     void PLOpenDir();
     void PLAppendDir();

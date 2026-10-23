@@ -1,4 +1,4 @@
-# Media identification and remote subtitles
+# Media identification, artwork, and remote subtitles
 
 The Qt interface uses a provider-independent identity model to understand media
 names before searching OpenSubtitles. The same model is also used when assigning
@@ -100,3 +100,64 @@ parser backends, including a specialized anime parser, can return the same
 identity model. Evaluate additions against the fixture corpus and measure wrong
 automatic assignments separately from missed suggestions. TMDB resolution and
 absolute-to-season episode mapping remain possible future consumers/extensions.
+
+## Artwork discovery and library previews
+
+The redesigned library uses the shared identity model for artwork as well as
+track assignment. Identities now include music tracks, albums, artists,
+podcasts, podcast episodes and audiobooks. Artist, album artist, album,
+track/disc numbers, podcast series, feed URL, episode GUID and supported
+MusicBrainz identifiers retain their own fields. Audio filenames do not use
+video release cleanup. Ambiguous audio identities are not inferred from a title
+alone. Podcast GUIDs require supporting feed or series evidence. Existing
+library metadata and already available native tags feed the same helpers;
+identification does not start an online metadata search.
+
+`artwork_discovery.hpp` handles filesystem conventions and image ownership.
+It distinguishes primary covers/posters, landscape thumbnails, backdrops,
+banners, logos, disc images and clear art. Image suffixes are removed before
+identity comparison. Exact sibling ownership is preferred over a broader,
+confirmed identity match. Conflicting remakes/episodes and equally plausible
+owners are rejected. Release group, resolution, frame rate and subtitle hashes
+are not artwork identity requirements.
+
+Individual media use this order:
+
+1. A persistent user-selected image.
+2. Recognised local/sibling artwork.
+3. Embedded artwork or an existing media thumbnail.
+4. A video frame sampled at 15 percent, when applicable.
+5. The audio/video icon.
+
+Folders use a user-selected image, then their recognised local artwork, then
+up to four distinct child artworks, then the folder icon. Conventional primary
+names include `poster`, `folder`, `cover`, `default`, `movie`, `show`, `album`,
+`artist`, and `jacket`. `thumb` and `landscape` are primary fallbacks. Named
+siblings such as `Movie (2021)-poster.jpg` and `Show.S01E03-thumb.png` belong to
+the matching media. Backdrops and logos are never substituted for primary art.
+Generic folder art is not assigned to every unrelated video; audio album
+covers may also be inherited from above an explicitly named Disc/CD folder.
+
+Folder discovery is breadth first, ordered by name and independent of the view's
+sort order. It examines at most 512 entries per directory, 2,048 entries overall,
+32 directories, two levels below the chosen folder, and 32 preview candidates.
+Symbolic links are not traversed. A child folder with valid selected/local art
+represents that subtree. Missing or unreadable images are skipped, matching
+movie/episode identities collapse alternate encodes, and decoded image
+fingerprints prevent repeated covers filling a collage. Layouts use one image,
+two columns, a full-height image beside two smaller ones, or four quadrants.
+
+“Choose artwork…” copies a validated image into application storage, leaving
+media folders untouched. “Use automatic artwork” removes that override.
+`artwork_store.hpp` saves overrides independently of cached generated frames,
+so newly discovered local artwork can supersede an old frame. Selected source
+files can subsequently be moved or deleted. Discovery, image decoding and
+composition run asynchronously; refreshes reject stale results. Watched
+artwork and directory changes invalidate previews, including folder cards,
+recent items, playlist media and saved sidebar shortcuts. The resolver also
+emits source and matching explanations for consumers. Existing remote
+thumbnails are retained; artwork discovery does not introduce remote searches.
+
+Regression coverage lives in `test_artwork_discovery.cpp`, the shared identity
+corpus, native library/resolver tests, folder-model tests and the library QML
+suite.

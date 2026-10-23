@@ -213,6 +213,8 @@ Item {
             {action: "subtitle-tracks", label: qsTr("Edit Subtitle Tracks"), icon: "subtitles-two-tone", accent: true},
             {action: "audio-tracks", label: qsTr("Edit Audio Tracks"), icon: "audio-two-tone", accent: true},
             {action: "resync", label: qsTr("Resync"), icon: "refresh-two-tone", accent: true},
+            {action: "choose-artwork", label: qsTr("Choose artwork…"), icon: "image"},
+            {action: "reset-artwork", label: qsTr("Use automatic artwork"), icon: "refresh-two-tone"},
             {action: "folder-info", label: qsTr("Info"), icon: "info-two-tone", accent: true}
         ] : ([1,2].includes(root.category) && !root.playlistOpen ? [
             {action: "add-files", label: qsTr("Add File"), icon: "add"},
@@ -232,7 +234,7 @@ Item {
             else if (action === "add-folder") root.folderRequested()
             else if (action === "edit-playlist") root.playlistEditRequested()
             else if (action === "pin") root.pinLocationRequested()
-            else if (["add-playlist", "properties", "resync", "folder-info", "subtitle-tracks", "audio-tracks"].includes(action)) root.itemActionRequested(root.locationPinTarget, action)
+            else if (["add-playlist", "properties", "resync", "folder-info", "subtitle-tracks", "audio-tracks", "choose-artwork", "reset-artwork"].includes(action)) root.itemActionRequested(root.locationPinTarget, action)
             else if (action === "compact") root.fullLibraryRequested()
             else root.preferencesRequested()
         }
@@ -456,6 +458,7 @@ Item {
             }
         }
         RedesignHomeView {
+            artworkForItem: root.artworkForItem
             objectName: "libraryHomeView"
             visible: root.homeSectionsVisible
             Layout.topMargin: theme.dp(root.expanded ? 25 : 10)

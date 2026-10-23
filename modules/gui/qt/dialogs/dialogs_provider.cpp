@@ -925,6 +925,11 @@ QStringList DialogsProvider::selectLibraryFiles(const QUrl& initial)
 
 QUrl DialogsProvider::selectPlaylistCover()
 {
+    return selectMediaArtwork();
+}
+
+QUrl DialogsProvider::selectMediaArtwork()
+{
     const QPointer<MainCtx> context = p_intf->p_mi;
     if (!context) return {};
     const bool shortcuts = context->getUseGlobalShortcuts();
@@ -932,7 +937,7 @@ QUrl DialogsProvider::selectPlaylistCover()
     const auto restoreShortcuts = qScopeGuard([context, shortcuts] {
         if (context) context->setUseGlobalShortcuts(shortcuts);
     });
-    QFileDialog dialog(nullptr, qtr("Select playlist thumbnail"));
+    QFileDialog dialog(nullptr, qtr("Select artwork"));
     dialog.setFileMode(QFileDialog::ExistingFile);
     dialog.setNameFilter(qtr("Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;All files (*)"));
     auto directory = context->getDialogFilePath();

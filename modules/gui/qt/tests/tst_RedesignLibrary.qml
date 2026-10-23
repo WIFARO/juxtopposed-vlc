@@ -394,7 +394,7 @@ TestCase {
     function test_folderMoreMenuForwardsResyncAndInfoTarget() {
         library.locationPinTarget={kind:"folder",key:"file:///Movies%20%26%20Shows",name:"Movies & Shows"}
         const button=findChild(library,"libraryMoreButton"), menu=findChild(library,"libraryMoreMenu")
-        for(const action of ["resync","folder-info"]) {
+        for(const action of ["resync","folder-info","choose-artwork","reset-artwork"]) {
             mouseClick(button);tryCompare(menu,"opened",true)
             const entry=findChild(menu,"libraryAction_"+action);verify(waitForRendering(entry));mouseClick(entry)
             compare(itemActionSpy.signalArguments[itemActionSpy.count-1][0].key,"file:///Movies%20%26%20Shows")
@@ -405,8 +405,8 @@ TestCase {
         library.locationPinTarget={kind:"folder",key:"file:///Movies",name:"Movies"}
         const button=findChild(library,"libraryMoreButton"),menu=findChild(library,"libraryMoreMenu")
         mouseClick(button);tryCompare(menu,"opened",true)
-        compare(menu.count,6);compare(menu.width,265)
-        compare(menu.entries.map(entry => entry.action).join(","),"add-files,add-folder,subtitle-tracks,audio-tracks,resync,folder-info")
+        compare(menu.count,8);compare(menu.width,265)
+        compare(menu.entries.map(entry => entry.action).join(","),"add-files,add-folder,subtitle-tracks,audio-tracks,resync,choose-artwork,reset-artwork,folder-info")
         const fileEntry=findChild(menu,"libraryAction_add-files");verify(waitForRendering(fileEntry))
         mouseClick(fileEntry);compare(filesSpy.count,1);compare(folderSpy.count,0);compare(addSpy.count,0)
         mouseClick(button);tryCompare(menu,"opened",true)
@@ -430,7 +430,7 @@ TestCase {
         fullLibrarySpy.clear()
         const menu=findChild(library,"libraryMoreMenu")
         mouseClick(findChild(library,"libraryMoreButton"));tryCompare(menu,"opened",true)
-        compare(menu.entries.map(entry=>entry.action).join(","),"add-files,add-folder,subtitle-tracks,audio-tracks,resync,folder-info,compact")
+        compare(menu.entries.map(entry=>entry.action).join(","),"add-files,add-folder,subtitle-tracks,audio-tracks,resync,choose-artwork,reset-artwork,folder-info,compact")
         const compact=findChild(menu,"libraryAction_compact")
         verify(waitForRendering(compact));mouseClick(compact)
         compare(fullLibrarySpy.count,1);tryCompare(menu,"visible",false)

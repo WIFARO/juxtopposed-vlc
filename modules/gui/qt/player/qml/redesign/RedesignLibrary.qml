@@ -77,7 +77,10 @@ RedesignLibraryView {
         if (["network-entry", "linked-channel"].includes(target.kind)) return {target: target, entries: [
             {action: target.branch ? "open" : "play", label: target.branch ? qsTr("Open") : qsTr("Play"), icon: target.branch ? "folder" : "play-outline"},
             {action: "queue", label: qsTr("Add to queue"), icon: "queue"}
-        ].concat(target.branch && target.playable ? [{action: "play", label: qsTr("Play"), icon: "play-outline"}] : [])}
+        ].concat(target.branch && target.playable ? [{action: "play", label: qsTr("Play"), icon: "play-outline"}] : [])
+            .concat(/^(file|https?):/i.test(target.key) ? [
+                {action: "choose-artwork", label: qsTr("Choose artwork…"), icon: "image"},
+                {action: "reset-artwork", label: qsTr("Use automatic artwork"), icon: "refresh-two-tone"}] : [])}
         if (selectedPlaylist && !section) { target.playlistRow = index; target.playlistKey = playlistKey }
         if (target.kind === "playlist") {
             return new Promise(resolve => MediaLib.playlistState(MediaLib.deserializeMlItemIdFromString(target.key), state => {
@@ -98,6 +101,8 @@ RedesignLibraryView {
             {action: "subtitle-tracks", label: qsTr("Edit Subtitle Tracks"), icon: "subtitles", accent: true},
             {action: "audio-tracks", label: qsTr("Edit Audio Tracks"), icon: "audio", accent: true},
             {action: "resync", label: qsTr("Resync"), icon: "refresh-two-tone", accent: true},
+            {action: "choose-artwork", label: qsTr("Choose artwork…"), icon: "image"},
+            {action: "reset-artwork", label: qsTr("Use automatic artwork"), icon: "refresh-two-tone"},
             {action: "folder-info", label: qsTr("Info"), icon: "info-two-tone", accent: true}
         ]}
         const navigate = ["folder", "section", "home", "network-source"].includes(target.kind)
@@ -113,7 +118,15 @@ RedesignLibraryView {
             ] : [])}
     }
     onItemActionRequested: (target, action) => {
-        if (target.kind === "linked-channel") {
+        if (action === "choose-artwork" || action === "reset-artwork") {
+            const url = Qt.resolvedUrl(target.url || target.key)
+            if (action === "reset-artwork") folderArtwork.setSelectedArtwork(url, "")
+            else {
+                const image = DialogsProvider.selectMediaArtwork()
+                if (image.toString().length) folderArtwork.setSelectedArtwork(url, image)
+            }
+
+        } else if (target.kind === "linked-channel") {
             const index = linkedPlaylist.indexForKey(target.channelKey)
             if (index >= 0) linkedPlaylist.play(index, action === "queue")
         } else if (target.kind === "network-entry") {
@@ -128,7 +141,8 @@ RedesignLibraryView {
             MediaLib.resyncFolder(Qt.resolvedUrl(target.key), result => {
                 if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
             })
-            if (folderLoader.item) { folderArtwork.clear(); folderLoader.item.refresh() }
+            folderArtwork.clear(); root.resolvedArtwork = ({})
+            if (folderLoader.item) folderLoader.item.refresh()
         } else if (action === "favorite" && target.kind === "playlist") {
             MediaLib.setPlaylistFavorite(MediaLib.deserializeMlItemIdFromString(target.key), !target.favorite, result => {
                 if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
@@ -246,8 +260,18 @@ RedesignLibraryView {
     unnamedItemTitle: category === 2 && !currentFolder && !selectedCollection && musicSection !== "Songs" ? collectionFallbackTitle : ""
     showAddRow: category > 0 && category < 5 && !(category === 3 && network.linked) && (category !== 1 || !currentFolder || (folderLoader.item && folderLoader.item.directoryCount > 0))
     canEnqueue: !(category === 2 && musicSection === "" || category === 3 && network.atRoot)
-    artworkForItem: model => category === 2 && musicSection === "Genres" && !selectedCollection && !currentFolder
-        ? model.coverNonBlur || "" : model.thumbnail || model.small_cover || model.cover || ""
+    property var resolvedArtwork: ({})
+    function resolveArtwork(model) {
+        const fallback = category === 2 && musicSection === "Genres" && !selectedCollection && !currentFolder
+            ? model.coverNonBlur || "" : model.thumbnail || model.small_cover || model.cover || ""
+        const url = String(model.fileUrl || model.mrl || model.url || (model.fileIsDir ? model.key : "") || "")
+        if (!url || !/^(file|https?):/i.test(url)) return fallback
+        const key = url.startsWith("file:") ? folderPath.location(url) : url
+        if (Object.prototype.hasOwnProperty.call(resolvedArtwork, key)) return resolvedArtwork[key]
+        folderArtwork.request(url, model.isVideo !== false && category !== 2, fallback)
+        return fallback
+    }
+    artworkForItem: model => resolveArtwork(model)
     artworkIconForItem: model => category === 3 && !network.atRoot && network.branch(model) ? "folder"
         : model.fileIsDir || showingFolders ? "folder" : model.iconName || defaultItemIcon
     emptyText: homeSection ? homeSections.find(section => section.key === homeSection).emptyText : selectedPlaylist ? qsTr("This playlist is empty.") : category === 4 ? qsTr("Create a playlist to collect your favorite media.") : category === 3 ? network.podcast && !networkLocation.nodes.length ? qsTr("Add a podcast feed.") : network.atRoot || network.saved ? qsTr("Open a network stream to add it here.") : qsTr("This source has no media.") : qsTr("Add a folder to your library to see your media here.")
@@ -273,7 +297,9 @@ RedesignLibraryView {
             {action: "stream", label: qsTr("Stream"), icon: "stream", accent: true},
             {action: "convert", label: qsTr("Convert"), icon: "convert", accent: true},
             {action: "queue", label: qsTr("Add to Queue"), icon: "queue", accent: true},
-            {action: "add-playlist", label: qsTr("Add to Playlist"), icon: "playlist", accent: true}
+            {action: "add-playlist", label: qsTr("Add to Playlist"), icon: "playlist", accent: true},
+            {action: "choose-artwork", label: qsTr("Choose artwork…"), icon: "image"},
+            {action: "reset-artwork", label: qsTr("Use automatic artwork"), icon: "refresh-two-tone"}
         ].concat(target.kind === "file" ? [{action: "explorer", label: qsTr("Show in File Explorer"), icon: "folder-two-tone", accent: true}] : [])
             .concat([{action: "source", label: qsTr("Go to Source"), icon: "source", accent: true},
                 {action: "subtitle-tracks", label: qsTr("Add Subtitle Tracks"), icon: "subtitles-two-tone", accent: true},
@@ -286,7 +312,12 @@ RedesignLibraryView {
                 {action: "remove-entry", label: qsTr("Remove from playlist"), icon: "remove", enabled: !playlistBusy}
             ] : [])
     }
-    RedesignLibraryPins { id: pinStore; ctx: MainCtx }
+    function refreshPinArtwork() {
+        if (!folderArtwork || !pinStore) return
+        for (const pin of pinStore.entries)
+            if (["file", "folder"].includes(pin.kind)) folderArtwork.request(Qt.resolvedUrl(pin.key), pin.category !== 2)
+    }
+    RedesignLibraryPins { id: pinStore; ctx: MainCtx; onEntriesChanged: root.refreshPinArtwork() }
     function pinTarget(kind, key, name, category, icon, artwork, section) {
         return pinStore.normalize({kind: kind, key: key, name: name, category: category, icon: icon, artwork: artwork ? artwork.toString() : "", section: section})
     }
@@ -324,7 +355,7 @@ RedesignLibraryView {
             const url = folder.get(index, "fileUrl")
             if (!url) return null
             const isDirectory = folder.get(index, "fileIsDir")
-            return pinTarget(isDirectory ? "folder" : "file", folderPath.location(url), folder.get(index, "title") || folder.get(index, "fileName"), category, isDirectory ? "folder" : category === 2 ? "music" : "video", isDirectory ? "" : folder.get(index, "thumbnail"), "")
+            return pinTarget(isDirectory ? "folder" : "file", folderPath.location(url), folder.get(index, "title") || folder.get(index, "fileName"), category, isDirectory ? "folder" : category === 2 ? "music" : "video", folder.get(index, "thumbnail"), "")
         }
         if (category === 1 || showingSongFolders) {
             const item = folderEntries.get(index)
@@ -506,6 +537,7 @@ RedesignLibraryView {
             for (const item of items)
                 (kind === "folders" ? frequentFolders : frequentPlaylists).append({key: item.key, name: item.name,
                     category: kind === "folders" ? item.category === 2 ? 2 : 1 : 4,
+                    fileUrl: kind === "folders" ? item.key : "", fileIsDir: kind === "folders",
                     iconName: kind === "folders" ? "folder" : "playlist"})
         }
     }
@@ -552,6 +584,7 @@ RedesignLibraryView {
     MLFileArtwork {
         id: folderArtwork
         ctx: MainCtx
+        Component.onCompleted: root.refreshPinArtwork()
         onMediaProgressChanged: (url, progress) => {
             if (folderLoader.item) folderLoader.item.setProgress(url, progress)
         }
@@ -568,11 +601,22 @@ RedesignLibraryView {
             if (folderLoader.item) folderLoader.item.setMetadata(url, title, artist)
         }
         onArtworkChanged: (url, artwork) => {
+            const identity = url.toString().startsWith("file:") ? folderPath.location(url) : url.toString()
+            if (root.resolvedArtwork[identity] !== artwork)
+                root.resolvedArtwork = Object.assign({}, root.resolvedArtwork, {[identity]: artwork})
             if (folderLoader.item) folderLoader.item.setArtwork(url, artwork)
-            if (!artwork) return
             const key = folderPath.location(url)
-            const pin = pinStore.entries.find(entry => entry.kind === "file" && entry.key === key)
+            const pin = pinStore.entries.find(entry => ["file", "folder"].includes(entry.kind) && entry.key === key)
             if (pin && pin.artwork !== artwork) pinStore.add(Object.assign({}, pin, {artwork: artwork}))
+        }
+        onInvalidated: {
+            root.resolvedArtwork = ({})
+            if (folderLoader.item) folderLoader.item.refresh()
+            for (const pin of pinStore.entries)
+                if (["file", "folder"].includes(pin.kind)) request(Qt.resolvedUrl(pin.key), pin.category !== 2)
+        }
+        onSelectionFinished: (url, success) => {
+            if (!success) DialogsProvider.messageDialog(qsTr("VLC could not save this artwork. Choose a readable image and try again."), qsTr("Artwork"))
         }
     }
     Loader {

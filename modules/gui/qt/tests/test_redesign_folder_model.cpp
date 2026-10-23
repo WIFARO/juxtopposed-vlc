@@ -279,7 +279,7 @@ private slots:
         model.refresh();
         QCOMPARE(model.get(0, "progress").toDouble(), 0.0);
     }
-    void artworkIsLazyAndDirectoriesDoNotRequestIt() {
+    void artworkIsLazyForBothFilesAndDirectories() {
         QTemporaryDir directory;
         QDir dir(directory.path());
         QVERIFY(dir.mkdir("folder"));
@@ -293,12 +293,16 @@ private slots:
         QVERIFY(model.get(0, "thumbnail").toString().isEmpty());
         QVERIFY(model.get(1, "thumbnail").toString().isEmpty());
         QVERIFY(model.get(1, "thumbnail").toString().isEmpty());
-        QTRY_COMPARE(requested.count(), 1);
+        QTRY_COMPARE(requested.count(), 2);
         const auto url = model.get(1, "fileUrl").toUrl();
-        QCOMPARE(requested[0][0].toUrl(), url);
+        QCOMPARE(requested[1][0].toUrl(), url);
+        const auto folder = model.get(0, "fileUrl").toUrl();
+        QCOMPARE(requested[0][0].toUrl(), folder);
+        model.setArtwork(folder, QStringLiteral("file:///cached/folder.png"));
+        QCOMPARE(model.get(0, "thumbnail").toString(), QStringLiteral("file:///cached/folder.png"));
         model.setArtwork(url, QStringLiteral("file:///cached/movie.jpg"));
         QCOMPARE(model.get(1, "thumbnail").toString(), QStringLiteral("file:///cached/movie.jpg"));
-        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed.count(), 2);
         QCOMPARE(changed[0][2].value<QList<int>>(), QList<int>{RedesignFolderModel::Thumbnail});
     }
     void artworkFollowsFilesAcrossSortAndSearch() {

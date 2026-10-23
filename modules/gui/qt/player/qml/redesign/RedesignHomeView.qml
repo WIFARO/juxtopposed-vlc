@@ -4,6 +4,7 @@ import QtQuick.Controls.Basic as C
 
 Flickable {
     id: root
+    property var artworkForItem: model => model.thumbnail || model.small_cover || model.cover || ""
     property real scaleFactor: 1
     property color accentColor: "#d37918"
     property bool lightTheme: false
@@ -89,7 +90,7 @@ Flickable {
                                 readonly property real coverHeight: width * (section.modelData.key === "watching" ? 9 / 16 : 1)
                                 readonly property string title: model.title || model.name || ""
                                 readonly property string displayTitle: title + (!root.expanded && section.modelData.key === "listening" && model.main_artist ? " - " + model.main_artist : "")
-                                readonly property string artwork: model.thumbnail || model.small_cover || model.cover || ""
+                                readonly property string artwork: root.artworkForItem(model)
                                 RedesignButton {
                                     id: button
                                     objectName: "homeItem_" + section.modelData.key + "_" + entry.index
