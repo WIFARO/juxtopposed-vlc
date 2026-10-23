@@ -470,3 +470,12 @@ if libplacebo_dep.found() and vulkan_dep.found()
         'dependencies': [libplacebo_dep, m_lib],
     }
 endif
+
+vlc_tests += {
+    'name': 'test_modules_audio_filter_gain',
+    'sources': files('audio_filter/gain.c'),
+    'suite': ['modules', 'test_modules'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['gain', 'float_mixer', 'integer_mixer'],
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+}

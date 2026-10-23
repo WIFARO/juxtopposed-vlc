@@ -490,7 +490,7 @@
                   <item row="4" column="0">
                    <widget class="QLabel" name="label_4">
                     <property name="text">
-                     <string>Custom options</string>
+                     <string>x264 options</string>
                     </property>
                     <property name="buddy">
                      <cstring>valueholder_vcodec_custom</cstring>
@@ -847,26 +847,19 @@
                    <widget class="QComboBox" name="valueholder_acodec_samplerate" />
                   </item>
                   <item row="4" column="0">
-                   <widget class="QLabel" name="aGainLabel">
+                   <widget class="QCheckBox" name="valueholder_audio_gain">
                     <property name="text">
-                     <string>Volume</string>
-                    </property>
-                    <property name="buddy">
-                     <cstring>valueholder_acodec_gain</cstring>
+                     <string>Set output &amp;volume</string>
                     </property>
                    </widget>
                   </item>
                   <item row="4" column="1">
                    <widget class="QDoubleSpinBox" name="valueholder_acodec_gain">
                     <property name="toolTip">
-                     <string>Boost or reduce the audio volume of the output file.
-0 = No change. 100% = original volume. 200% = double volume.</string>
+                     <string>100% keeps the source volume. 0% mutes the output. Values above 100% can cause distortion.</string>
                     </property>
                     <property name="alignment">
                      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-                    </property>
-                    <property name="specialValueText">
-                     <string>No change</string>
                     </property>
                     <property name="suffix">
                      <string> %</string>
@@ -881,7 +874,7 @@
                      <double>10.000000</double>
                     </property>
                     <property name="value">
-                     <double>0.000000</double>
+                     <double>100.000000</double>
                     </property>
                    </widget>
                   </item>

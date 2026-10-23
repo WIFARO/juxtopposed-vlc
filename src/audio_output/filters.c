@@ -671,11 +671,24 @@ aout_filters_t *aout_FiltersNewWithClock(vlc_object_t *obj, vlc_clock_t *clock,
     char *str = var_InheritString (obj, "audio-filter");
     if (str != NULL)
     {
-        char *p = str, *name;
-        while ((name = strsep (&p, " :")) != NULL)
+        /* Keep legacy space separators; parse options before the next filter. */
+        const char *p = str;
+        while (*(p += strspn(p, " :\t")))
         {
-            AppendFilter(obj, "audio filter", name, filters,
-                         &input_format, &output_format, NULL);
+            const size_t len = strcspn(p, "{: \t");
+            char *name = strndup(p, len);
+            if (name == NULL)
+                break;
+            p += len;
+            p += strspn(p, " \t");
+            config_chain_t *filter_cfg = NULL;
+            if (*p == '{')
+                p = config_ChainParseOptions(&filter_cfg, p);
+            if (*name != '\0')
+                AppendFilter(obj, "audio filter", name, filters,
+                             &input_format, &output_format, filter_cfg);
+            config_ChainDestroy(filter_cfg);
+            free(name);
         }
         free (str);
     }

@@ -349,6 +349,7 @@ void VLCProfileSelector::updateOptions( int i )
 
         if ( !value.isEmpty() )
         {
+            const bool x264 = value == QStringLiteral("h264");
             transcode.option( "vcodec", value );
 
             HASHPICK( "vcodec", "bitrate" );
@@ -364,9 +365,8 @@ void VLCProfileSelector::updateOptions( int i )
                 transcode.option( "vfilter", valuesList.join( ":" ) );
             }
 
-            /*if ( codec is h264 )*/
+            if (x264)
             {
-                /* special handling */
                 QStringList codecoptions;
 
                 HASHPICK( "vcodec", "qp" );
@@ -427,19 +427,16 @@ void VLCProfileSelector::updateOptions( int i )
                 if ( !value.isEmpty() )
                     audioFilters << QUrl::fromPercentEncoding( value.toUtf8() ).split( ";" );
 
-                HASHPICK( "acodec", "gain" );
-                if ( !value.isEmpty() )
-                {
-                    double gainPct = value.toDouble();
-                    if ( gainPct > 0.0 )
-                    {
-                        /* normvol peak-level multiplier: 100% = 1.0 (no change),
-                         * 200% = 2.0 (double volume), 50% = 0.5 (half volume). */
-                        double gainMult = gainPct / 100.0;
-                        audioFilters.prepend(
-                            QString("normvol{max-level=%1}").arg( gainMult, 0, 'f', 2 ) );
-                    }
-                }
+                HASHPICK("audio", "gain");
+                const bool explicitVolume = !value.isEmpty();
+                HASHPICK("acodec", "gain");
+                bool validVolume;
+                const double gainPct = value.toDouble(&validVolume);
+                // Legacy zero means no change. The explicit control can mute.
+                if (validVolume && std::isfinite(gainPct) && gainPct >= 0
+                    && (explicitVolume || gainPct > 0) && gainPct != 100)
+                    audioFilters.prepend(QStringLiteral("gain{value=%1}")
+                        .arg(gainPct / 100.0, 0, 'g', 9));
 
                 if ( !audioFilters.isEmpty() )
                     transcode.option( "afilter", audioFilters.join( ":" ) );
@@ -571,6 +568,16 @@ VLCProfileEditor::VLCProfileEditor(const QString& original, const QString& value
     connect(ui.valueholder_video_codec, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &VLCProfileEditor::codecSelected);
     reset();
     fillProfile(value);
+    bool legacyVolume = false;
+    for (const auto& option : value.split(QLatin1Char(';')))
+        if (option.startsWith(QStringLiteral("acodec_gain=")))
+            legacyVolume = option.mid(QStringLiteral("acodec_gain=").size()).toDouble() > 0;
+    const bool volumeActive = ui.valueholder_audio_gain->isChecked() || legacyVolume;
+    ui.valueholder_audio_gain->setChecked(volumeActive);
+    if (!volumeActive) ui.valueholder_acodec_gain->setValue(100);
+    ui.valueholder_acodec_gain->setEnabled(volumeActive);
+    connect(ui.valueholder_audio_gain,&QCheckBox::toggled,
+            ui.valueholder_acodec_gain,&QWidget::setEnabled);
     muxSelected();
     codecSelected();
     for (auto *group : {ui.valueholder_video_enable, ui.valueholder_audio_enable, ui.valueholder_subtitles_enable})
@@ -627,6 +634,13 @@ void VLCProfileEditor::updateEditorText()
     ui.valueholder_video_enable->setToolTip(qtr("Turn off to remove the video track from the output."));
     ui.valueholder_audio_enable->setToolTip(qtr("Turn off to remove the audio track from the output."));
     ui.valueholder_subtitles_enable->setToolTip(qtr("Turn off to remove subtitles from the output."));
+    ui.valueholder_audio_gain->setToolTip(qtr("Leave this off to keep the source volume."));
+    ui.valueholder_acodec_gain->setAccessibleName(qtr("Output volume"));
+    ui.valueholder_acodec_gain->setToolTip(qtr("100% keeps the source volume. 0% mutes the output. Values above 100% can cause distortion."));
+    ui.valueholder_audio_copy->setToolTip(qtr("Keep the source audio codec. Turn this off to change the output volume or use audio filters."));
+    const auto x264Help = qtr("These settings use the x264 encoder. Select H.264 to use them.");
+    ui.valueholder_vcodec_custom->setToolTip(x264Help);
+    ui.valueholder_vcodec_qp->setToolTip(x264Help);
     for (auto *field : {ui.profileVideoFilterFind,ui.profileAudioFilterFind})
     {
         field->setPlaceholderText(qtr("Find a filter"));
@@ -983,7 +997,9 @@ void VLCProfileEditor::codecSelected()
     /* Enable quality preset */
     QString currentcodec = ui.valueholder_video_codec->
             itemData(ui.valueholder_video_codec->currentIndex() ).toString();
-    ui.valueholder_vcodec_qp->setEnabled( qpcodecsList.contains( currentcodec ) );
+    const bool x264 = qpcodecsList.contains(currentcodec);
+    ui.valueholder_vcodec_qp->setEnabled(x264);
+    ui.valueholder_vcodec_custom->setEnabled(x264);
 }
 
 void VLCProfileEditor::fillProfile( const QString& qs )
@@ -1158,13 +1174,16 @@ QString VLCProfileEditor::transcodeValue()
 {
     QList<QObject *> allwidgets = findChildren<QObject *>();
     QStringList configuration;
+    const bool encodingVideo = ui.valueholder_video_enable->isChecked()
+        && !ui.valueholder_video_copy->isChecked();
 
     foreach( const QObject *object, allwidgets )
     {
         if ( ! object->objectName().startsWith( CATPROP2NAME( "" ) ) )
             continue;
-        if ( object->inherits( "QWidget" ) &&
-             ! qobject_cast<const QWidget *>(object)->isEnabled() ) continue;
+        const bool savedX264Setting = object == ui.valueholder_vcodec_custom || object == ui.valueholder_vcodec_qp;
+        if (object->inherits("QWidget") && !qobject_cast<const QWidget*>(object)->isEnabled()
+            && !(savedX264Setting && encodingVideo)) continue;
 
         QString name = object->objectName();
         QStringList vals = object->objectName().split( "_" );

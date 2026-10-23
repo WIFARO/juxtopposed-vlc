@@ -29,6 +29,7 @@
 #endif
 
 #include <vlc_common.h>
+#include <vlc_configuration.h>
 #include <vlc_aout.h>
 #include <vlc_aout_volume.h>
 #include <vlc_filter.h>
@@ -92,8 +93,9 @@ static int Open( vlc_object_t *p_this )
         return VLC_EGENERIC;
     }
 
-    p_sys->f_gain = var_InheritFloat( vlc_object_parent(p_filter),
-                                      "gain-value" );
+    static const char *const options[] = { "value", NULL };
+    config_ChainParse(p_filter, "gain-", options, p_filter->p_cfg);
+    p_sys->f_gain = var_InheritFloat(p_filter, "gain-value");
     msg_Dbg( p_filter, "gain multiplier sets to %.2fx", p_sys->f_gain );
 
     p_filter->fmt_out.audio = p_filter->fmt_in.audio;

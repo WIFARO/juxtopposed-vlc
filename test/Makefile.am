@@ -113,6 +113,7 @@ check_PROGRAMS = \
 	test_modules_visualization_resize \
 	test_modules_video_filter_puzzle \
 	test_modules_video_filter_rotate \
+	test_modules_audio_filter_gain \
 	test_modules_packetizer_helpers \
 	test_modules_packetizer_hxxx \
 	test_modules_packetizer_h264 \
@@ -925,3 +926,6 @@ test_modules_video_output_libplacebo_backdrop_CPPFLAGS = $(AM_CPPFLAGS) $(LIBPLA
 test_modules_video_output_libplacebo_backdrop_LDADD = $(LIBPLACEBO_LIBS) $(LIBM)
 endif
 endif
+
+test_modules_audio_filter_gain_SOURCES = modules/audio_filter/gain.c
+test_modules_audio_filter_gain_LDADD = $(LIBVLCCORE) $(LIBVLC)
