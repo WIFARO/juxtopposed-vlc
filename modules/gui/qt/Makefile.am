@@ -340,6 +340,7 @@ libqt_plugin_la_SOURCES = \
 	util/audio_device_model.cpp  \
 	util/audio_device_model.hpp \
 	util/redesign_folder_model.cpp util/redesign_folder_model.hpp \
+	util/series_discovery.hpp \
 	util/workerthreadset.hpp util/workerthreadset.cpp \
 	util/base_model.hpp util/base_model_p.hpp util/base_model.cpp \
 	util/color_scheme_model.cpp util/color_scheme_model.hpp \
@@ -2058,6 +2059,17 @@ test_cover_generator_LDADD = $(QT_QTEST_COMMON_ldadd)
 test_cover_generator_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_cover_generator
 TESTS += test_cover_generator
+
+test_series_discovery_SOURCES = tests/test_series_discovery.cpp util/series_discovery.hpp
+nodist_test_series_discovery_SOURCES = tests/test_series_discovery.moc
+BUILT_SOURCES += tests/test_series_discovery.moc
+CLEANFILES += tests/test_series_discovery.moc
+test_series_discovery_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_series_discovery_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_series_discovery_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_series_discovery_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_series_discovery
+TESTS += test_series_discovery
 
 test_redesign_folder_model_SOURCES = tests/test_redesign_folder_model.cpp util/redesign_folder_model.cpp util/redesign_folder_model.hpp
 nodist_test_redesign_folder_model_SOURCES = tests/test_redesign_folder_model.moc util/redesign_folder_model.moc.cpp

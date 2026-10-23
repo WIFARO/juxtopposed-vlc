@@ -1647,6 +1647,14 @@ if qt6_dep.found()
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
         }
         vlc_tests += {
+            'name': 'test_qt_series_discovery',
+            'sources': files('tests/test_series_discovery.cpp'),
+            'moc_sources': files('tests/test_series_discovery.cpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+        }
+        vlc_tests += {
             'name': 'test_qt_subtitle_sources',
             'sources': files('tests/test_subtitle_sources.cpp', 'util/subtitle_source_service.cpp'),
             'moc_sources': files('tests/test_subtitle_sources.cpp'),
