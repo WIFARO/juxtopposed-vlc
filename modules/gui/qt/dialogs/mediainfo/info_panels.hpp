@@ -122,10 +122,17 @@ class ExtraMetaPanel: public QWidget
 public:
     ExtraMetaPanel( QWidget * );
 protected:
-    void showEvent( QShowEvent * ) override;
-    void resizeEvent( QResizeEvent * ) override;
+    bool eventFilter(QObject *, QEvent *) override;
 private:
+    void retranslate();
+    void filterMetadata();
+    void copyMetadata(bool selectionOnly = false);
     QTableWidget *extraMeta;
+    QLineEdit *filter;
+    QPushButton *copyButton;
+    QLabel *emptyMessage;
+    SharedInputItem currentItem;
+    QVector<QPair<QString, QString>> metadata;
 public slots:
     void update( input_item_t * );
     void clear();

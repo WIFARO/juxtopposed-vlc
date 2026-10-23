@@ -486,114 +486,233 @@ void MetaPanel::fingerprintUpdate( const SharedInputItem& tags )
 /**
  * Second Panel - Shows the extra metadata in a table, non editable.
  **/
-ExtraMetaPanel::ExtraMetaPanel( QWidget *parent ) : QWidget( parent )
+ExtraMetaPanel::ExtraMetaPanel(QWidget *parent) : QWidget(parent)
 {
-     QGridLayout *layout = new QGridLayout(this);
+    setObjectName(QStringLiteral("extraMetadata"));
+    auto *layout = new QVBoxLayout(this);
+    auto *tools = new QHBoxLayout;
+    filter = new QLineEdit(this);
+    filter->setObjectName(QStringLiteral("extraMetadataFilter"));
+    filter->setClearButtonEnabled(true);
+    filter->installEventFilter(this);
+    copyButton = new QPushButton(this);
+    copyButton->setObjectName(QStringLiteral("copyMetadataButton"));
+    copyButton->installEventFilter(this);
+    tools->addWidget(filter, 1);
+    tools->addWidget(copyButton);
+    layout->addLayout(tools);
 
-     extraMeta = new QTableWidget( this );
-     extraMeta->setAccessibleName( qtr("Metadata") );
-     extraMeta->verticalHeader()->hide();
-     extraMeta->setAlternatingRowColors( true );
-
-     extraMeta->setColumnCount( 2 );
-     extraMeta->setHorizontalHeaderLabels({ qtr( "Property" ),
-                                            qtr( "Value" ) });
-     extraMeta->horizontalHeader()->setStretchLastSection(true);
-     extraMeta->resizeRowsToContents();
-
-     extraMeta->setVerticalScrollMode( QAbstractItemView::ScrollPerPixel );
-     extraMeta->setHorizontalScrollMode( QAbstractItemView::ScrollPerPixel );
-
-     extraMeta->setSelectionBehavior( QAbstractItemView::SelectRows );
-
-     extraMeta->setEditTriggers( QAbstractItemView::NoEditTriggers );
-     extraMeta->setSelectionMode( QAbstractItemView::SingleSelection );
-
-     layout->addWidget( extraMeta, 0, 0 );
-     if (auto* translator = InterfaceTranslator::instance())
-         connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
-             extraMeta->setHorizontalHeaderLabels({qtr("Property"), qtr("Value")});
-             extraMeta->setAccessibleName(qtr("Metadata"));
-         });
+    extraMeta = new QTableWidget(this);
+    extraMeta->setObjectName(QStringLiteral("extraMetadataTable"));
+    extraMeta->setColumnCount(2);
+    extraMeta->verticalHeader()->hide();
+    extraMeta->setAlternatingRowColors(true);
+    extraMeta->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    extraMeta->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    extraMeta->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    extraMeta->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    extraMeta->setSelectionBehavior(QAbstractItemView::SelectRows);
+    extraMeta->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    extraMeta->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    extraMeta->setWordWrap(false);
+    extraMeta->setTextElideMode(Qt::ElideRight);
+    extraMeta->setSortingEnabled(true);
+    extraMeta->sortItems(0, Qt::AscendingOrder);
+    extraMeta->installEventFilter(this);
+    layout->addWidget(extraMeta, 1);
+    emptyMessage = new QLabel(extraMeta->viewport());
+    emptyMessage->setObjectName(QStringLiteral("extraMetadataEmpty"));
+    emptyMessage->setTextFormat(Qt::PlainText);
+    emptyMessage->setWordWrap(true);
+    emptyMessage->setAlignment(Qt::AlignCenter);
+    emptyMessage->setAttribute(Qt::WA_TransparentForMouseEvents);
+    extraMeta->viewport()->installEventFilter(this);
+    connect(filter, &QLineEdit::textChanged, this, &ExtraMetaPanel::filterMetadata);
+    connect(copyButton, &QPushButton::clicked, this, [this] { copyMetadata(); });
+    auto *find = new QShortcut(QKeySequence::Find, this);
+    find->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(find, &QShortcut::activated, this, [this] { filter->setFocus(); filter->selectAll(); });
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, &ExtraMetaPanel::retranslate);
+    retranslate();
 }
 
-void ExtraMetaPanel::showEvent( QShowEvent * event )
+void ExtraMetaPanel::retranslate()
 {
-    extraMeta->resizeRowsToContents();
-    QWidget::showEvent( event );
+    extraMeta->setAccessibleName(qtr("Metadata"));
+    extraMeta->setHorizontalHeaderLabels({qtr("Property"), qtr("Value")});
+    filter->setPlaceholderText(qtr("Search metadata"));
+    filter->setAccessibleName(qtr("Search metadata"));
+    copyButton->setText(qtr("Copy metadata"));
+    filterMetadata();
 }
 
-void ExtraMetaPanel::resizeEvent( QResizeEvent * event )
+void ExtraMetaPanel::update(input_item_t *item)
 {
-    extraMeta->resizeRowsToContents();
-    QWidget::resizeEvent( event );
-}
-
-/**
- * Update the Extra Metadata from p_meta->i_extras
- **/
-void ExtraMetaPanel::update( input_item_t *p_item )
-{
-    extraMeta->setRowCount(0);
-
-    if( !p_item )
-        return;
-
-    vlc_mutex_locker meta_lock( &p_item->lock );
-    vlc_meta_t *p_meta = p_item->p_meta;
-
-    if( !p_meta )
-        return;
-
-    struct AddRowHelper {
-        AddRowHelper( QTableWidget* target ) : target( target ) { }
-
-        void operator()( char const* psz_key, char const* psz_value )
-        {
-            int idx = target->rowCount();
-
-            target->insertRow( idx );
-
-            QTableWidgetItem *key = new QTableWidgetItem( qfu( psz_key ) );
-
-            key->setTextAlignment( Qt::AlignRight );
-            key->setFlags( key->flags() ^ Qt::ItemIsSelectable );
-
-            target->setItem( idx, 0, key );
-            target->setItem( idx, 1, new QTableWidgetItem( qfu( psz_value ) ) );
-        }
-
-        QTableWidget* target;
-
-    } add_row ( extraMeta );
-
-    if( char const* psz_disc = vlc_meta_Get( p_meta,  vlc_meta_DiscNumber ) )
-        add_row( VLC_META_DISCNUMBER, psz_disc );
-
-    if( char const* psz_url = vlc_meta_Get( p_meta, vlc_meta_URL ) )
-        add_row( VLC_META_URL, psz_url );
-
-    char ** ppsz_keys = vlc_meta_CopyExtraNames( p_meta );
-    if( ppsz_keys )
+    if (!item) { clear(); return; }
+    QVector<QPair<QString, QString>> values;
     {
-        for( int i = 0; ppsz_keys[i]; ++i )
+        vlc_mutex_locker locker(&item->lock);
+        if (const auto *meta = item->p_meta)
         {
-            add_row( ppsz_keys[i], vlc_meta_GetExtra( p_meta, ppsz_keys[i] ) );
-            free( ppsz_keys[i] );
+            const auto append = [&values](const char *key, const char *value) {
+                if (value) values.append({qfu(key), qfu(value)});
+            };
+            append(VLC_META_DISCNUMBER, vlc_meta_Get(meta, vlc_meta_DiscNumber));
+            append(VLC_META_URL, vlc_meta_Get(meta, vlc_meta_URL));
+            if (char **keys = vlc_meta_CopyExtraNames(meta))
+            {
+                for (int i = 0; keys[i]; ++i)
+                {
+                    append(keys[i], vlc_meta_GetExtra(meta, keys[i]));
+                    free(keys[i]);
+                }
+                free(keys);
+            }
         }
-
-        free( ppsz_keys );
     }
-
-    extraMeta->verticalHeader()->resizeSections( QHeaderView::ResizeToContents );
+    // Extra-name enumeration has no stable order. Compare a canonical snapshot
+    // so repeated input updates do not reset the user's selection or scroll.
+    std::sort(values.begin(), values.end());
+    const bool sameInput = currentItem.get() == item;
+    if (sameInput && values == metadata) return;
+    if (!sameInput) filter->clear();
+    currentItem = SharedInputItem(item);
+    metadata = std::move(values);
+    QSet<QString> selected;
+    QString current;
+    const int scroll = sameInput ? extraMeta->verticalScrollBar()->value() : 0;
+    if (sameInput)
+    {
+        for (const auto &index : extraMeta->selectionModel()->selectedRows())
+            selected.insert(extraMeta->item(index.row(), 0)->text());
+        if (extraMeta->currentRow() >= 0)
+            current = extraMeta->item(extraMeta->currentRow(), 0)->text();
+    }
+    extraMeta->setSortingEnabled(false);
+    extraMeta->setRowCount(0);
+    for (const auto &entry : metadata)
+    {
+        const int row = extraMeta->rowCount();
+        extraMeta->insertRow(row);
+        extraMeta->setItem(row, 0, new QTableWidgetItem(entry.first));
+        extraMeta->setItem(row, 1, new QTableWidgetItem(entry.second));
+        for (int column = 0; column < 2; ++column)
+        {
+            auto *cell = extraMeta->item(row, column);
+            cell->setToolTip(QStringLiteral("<qt>%1</qt>")
+                .arg(cell->text().toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br/>"))));
+        }
+        if (entry.first == current)
+            extraMeta->setCurrentCell(row, 0, QItemSelectionModel::NoUpdate);
+        if (selected.contains(entry.first))
+            extraMeta->selectionModel()->select(extraMeta->model()->index(row, 0),
+                                                QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    }
+    extraMeta->setSortingEnabled(true);
+    filterMetadata();
+    extraMeta->resizeRowsToContents();
+    extraMeta->doItemsLayout();
+    extraMeta->verticalScrollBar()->setValue(scroll);
 }
 
-/**
- * Clear the ExtraMetaData Tree
- **/
+void ExtraMetaPanel::filterMetadata()
+{
+    const QString query = filter->text().trimmed();
+    bool any = false;
+    for (int row = 0; row < extraMeta->rowCount(); ++row)
+    {
+        const bool match = query.isEmpty() || extraMeta->item(row, 0)->text().contains(query, Qt::CaseInsensitive)
+            || extraMeta->item(row, 1)->text().contains(query, Qt::CaseInsensitive);
+        extraMeta->setRowHidden(row, !match);
+        any |= match;
+    }
+    copyButton->setEnabled(any);
+    emptyMessage->setText(extraMeta->rowCount() ? qtr("No matches.") : qtr("No extra metadata is available."));
+    emptyMessage->setGeometry(extraMeta->viewport()->rect().adjusted(16, 16, -16, -16));
+    emptyMessage->setVisible(!any);
+}
+
+void ExtraMetaPanel::copyMetadata(bool selectionOnly)
+{
+    const auto selectedRows = extraMeta->selectionModel()->selectedRows();
+    const bool selected = selectionOnly && std::any_of(selectedRows.cbegin(), selectedRows.cend(), [this](const auto &index) {
+        return !extraMeta->isRowHidden(index.row());
+    });
+    QStringList lines;
+    for (int row = 0; row < extraMeta->rowCount(); ++row)
+        if (!extraMeta->isRowHidden(row) && (!selected || extraMeta->item(row, 0)->isSelected()))
+            lines << extraMeta->item(row, 0)->text() + QStringLiteral(": ") + extraMeta->item(row, 1)->text();
+    if (!lines.isEmpty()) QApplication::clipboard()->setText(lines.join(QLatin1Char('\n')));
+}
+
+bool ExtraMetaPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    if ((event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+        && (watched == extraMeta || watched == filter || watched == copyButton)
+        && static_cast<QKeyEvent *>(event)->matches(QKeySequence::Find))
+    {
+        if (event->type() == QEvent::KeyPress)
+        {
+            filter->setFocus();
+            filter->selectAll();
+        }
+        event->accept();
+        return true;
+    }
+    if (watched == extraMeta->viewport() && event->type() == QEvent::Resize)
+        emptyMessage->setGeometry(extraMeta->viewport()->rect().adjusted(16, 16, -16, -16));
+    if (watched == extraMeta && event->type() == QEvent::FontChange)
+    {
+        extraMeta->setColumnWidth(0, extraMeta->fontMetrics().horizontalAdvance(QStringLiteral("Metadata property"))
+                                   + 3 * extraMeta->fontMetrics().height());
+        extraMeta->resizeRowsToContents();
+    }
+    if (watched == filter && event->type() == QEvent::ShortcutOverride)
+    {
+        const auto *key = static_cast<QKeyEvent *>(event);
+        if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter
+            || (key->key() == Qt::Key_Escape && !filter->text().isEmpty()))
+        {
+            event->accept();
+            return true;
+        }
+    }
+    if (watched == extraMeta && event->type() == QEvent::ShortcutOverride
+        && static_cast<QKeyEvent *>(event)->matches(QKeySequence::Copy))
+    {
+        event->accept();
+        return true;
+    }
+    if (event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent *>(event);
+        if (watched == extraMeta && key->matches(QKeySequence::Copy))
+        {
+            copyMetadata(true);
+            return true;
+        }
+        if (watched == filter && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter))
+        {
+            extraMeta->setFocus();
+            return true;
+        }
+        if (watched == filter && key->key() == Qt::Key_Escape && !filter->text().isEmpty())
+        {
+            filter->clear();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
 void ExtraMetaPanel::clear()
 {
+    currentItem.reset();
+    metadata.clear();
     extraMeta->setRowCount(0);
+    filter->clear();
+    filterMetadata();
 }
 
 /**

@@ -89,7 +89,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QLabel[redesignValue=\"true\"] { color: %5; }"
             "QWidget#redesignMediaInfo QTabBar::tab { padding: %14px %15px; }"
             "QTreeWidget#codecInformationTree::item { padding: %16px; }"
-            "QWidget#codecInformation QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
+            "QWidget#codecInformation QLineEdit, QWidget#extraMetadata QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
             "QWidget#redesignMediaInfo QLineEdit, QWidget#redesignMediaInfo QTextEdit, QWidget#redesignMediaInfo QPushButton { border-radius: %16px; }"
             "QWidget#redesignMediaInfo QLineEdit:read-only { background: %3; color: %2; }"
             "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
