@@ -128,6 +128,8 @@ TestCase {
     }
     function init() {
         if (typeof failOnWarning === "function") failOnWarning(/Binding loop|non-NOTIFYable|Baseline anchor/)
+        library.singleClickActivate = false
+        library.pointerSelection = false
         library.videoBackdropContent = null
         testCase.width = 427
         testCase.Window.window.width = 427
@@ -654,7 +656,7 @@ TestCase {
         }
         library.activated.connect(open)
         try {
-            mouseClick(findChild(view.itemAtIndex(0), "libraryMediaItem0"))
+            mouseDoubleClickSequence(findChild(view.itemAtIndex(0), "libraryMediaItem0"))
             tryCompare(view, "count", 3)
             tryVerify(() => view.itemAtIndex(0) !== null)
             mouseMove(testCase, 426, 985)
@@ -845,7 +847,7 @@ TestCase {
         verify(waitForRendering(first))
         verify(!findChild(home, "homeItem_watching_3").visible)
         verify(!findChild(library, "libraryMediaView").visible)
-        mouseClick(first)
+        mouseDoubleClickSequence(first)
         compare(homeSpy.signalArguments[0][0], "watching")
         compare(homeSpy.signalArguments[0][1], 0)
         first.libraryView.enqueueRequested(first.mediaIndex)
@@ -1085,17 +1087,45 @@ TestCase {
         verify(!findChild(library, "libraryAddRow").visible)
         const second = findChild(library, "libraryMediaItem1")
         compare(second.mapToItem(library, 0, 0).x, 573)
-        mouseClick(second)
+        mouseDoubleClickSequence(second)
         compare(activateSpy.signalArguments[0][0], 1)
         library.grid = false
         wait(20)
         tryCompare(second, "height", 42)
         compare(second.mapToItem(library, 0, 0).x, 653)
-        mouseClick(second)
+        mouseDoubleClickSequence(second)
         compare(activateSpy.count, 2)
         compare(activateSpy.signalArguments[1][0], 1)
         library.expanded = false
         tryCompare(second, "width", findChild(library, "libraryMediaView").width)
+    }
+    function test_clickSelectsAndDoubleClickOpens() {
+        const button = findChild(library, "libraryMediaItem1")
+        mouseClick(button)
+        compare(activateSpy.count, 0)
+        verify(button.selected)
+        wait(500)
+        mouseDoubleClickSequence(button)
+        compare(activateSpy.count, 1)
+        library.singleClickActivate = true
+        wait(500)
+        mouseClick(button)
+        compare(activateSpy.count, 2)
+        button.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Return)
+        compare(activateSpy.count, 3)
+    }
+    function test_viewStateRestoresSelectionAndScroll() {
+        library.mediaModel = playlistItems
+        const view = findChild(library, "libraryMediaView")
+        tryCompare(view, "count", 3)
+        mouseClick(findChild(library, "libraryMediaItem1"))
+        const state = library.viewState()
+        view.currentIndex = 0
+        library.pointerSelection = false
+        library.restoreViewState(state)
+        compare(view.currentIndex, 1)
+        verify(findChild(library, "libraryMediaItem1").selected)
     }
     function test_defaultFullLibraryUsesGridAndCompactKeepsList() {
         compare(library.grid, false)
@@ -1142,7 +1172,7 @@ TestCase {
         library.mediaModel = playlistItems
         tryVerify(() => findChild(library, "libraryTitle0")?.text === "Unknown title")
         compare(findChild(library, "libraryTitle1").text, "Album")
-        mouseClick(findChild(library, "libraryMediaItem0"))
+        mouseDoubleClickSequence(findChild(library, "libraryMediaItem0"))
         compare(activateSpy.signalArguments[0][0], 0)
     }
     function test_musicCollectionAddImportsFilesInBothLayouts() {
@@ -1275,7 +1305,7 @@ TestCase {
         compare(artist.color, "#6b6b6b")
         const fourth = findChild(home, "homeItem_watching_3")
         verify(fourth.visible)
-        mouseClick(fourth)
+        mouseDoubleClickSequence(fourth)
         compare(homeSpy.signalArguments[0][1], 3)
         fourth.libraryView.enqueueRequested(fourth.mediaIndex)
         compare(homeQueueSpy.signalArguments[0][1], 3)

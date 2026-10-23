@@ -49,6 +49,17 @@ Item {
     property bool canEnqueue: true
     property string unnamedItemTitle: ""
     property string defaultItemIcon: category === 4 ? "queue" : category === 2 ? "music" : category === 3 ? "network" : "video"
+    property bool singleClickActivate: false
+    property bool pointerSelection: false
+    function viewState() { return {index: mediaView.currentIndex, y: mediaView.contentY, pointer: pointerSelection} }
+    function restoreViewState(state) {
+        if (!state) return
+        mediaView.forceLayout()
+        mediaView.currentIndex = Math.min(state.index, mediaView.count - 1)
+        mediaView.contentY = Math.max(0, Math.min(state.y, mediaView.contentHeight - mediaView.height))
+        pointerSelection = state.pointer
+    }
+    onMediaModelChanged: pointerSelection = false
     property var artworkForItem: model => model.thumbnail || model.small_cover || model.cover || ""
     property var artworkIconForItem: model => model.fileIsDir || root.showingFolders ? "folder" : model.iconName || root.defaultItemIcon
     property bool showingFolders: false
@@ -458,6 +469,7 @@ Item {
             }
         }
         RedesignHomeView {
+            singleClickActivate: root.singleClickActivate
             artworkForItem: root.artworkForItem
             objectName: "libraryHomeView"
             visible: root.homeSectionsVisible
@@ -555,9 +567,13 @@ Item {
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                     text: delegate.displayTitle
                     // Mouse focus left after navigation is not a keyboard selection.
-                    selected: mediaView.currentIndex === delegate.index && (root.playlistEditing || mediaButton.visualFocus)
+                    selected: mediaView.currentIndex === delegate.index && (root.pointerSelection || root.playlistEditing || mediaButton.visualFocus)
                     onActiveFocusChanged: if (activeFocus) mediaView.currentIndex = delegate.index
-                    onClicked: { mediaView.currentIndex = delegate.index; if (root.playlistEditing) forceActiveFocus(); else root.activated(delegate.index) }
+                    handleMediaKeys: false
+                    mediaItem: !root.playlistEditing
+                    singleClickActivate: root.singleClickActivate
+                    onClicked: { mediaView.currentIndex = delegate.index; root.pointerSelection = true; forceActiveFocus(Qt.MouseFocusReason) }
+                    onActivated: root.activated(delegate.index)
                     Keys.onMenuPressed: root.openItemMenu(this, delegate.index, Qt.point(0, height), "")
                     Keys.onPressed: event => {
                         if (root.playlistEditing && !root.playlistBusy && event.key === Qt.Key_Delete) {
@@ -569,7 +585,9 @@ Item {
                         } else if (event.key === Qt.Key_F10 && event.modifiers & Qt.ShiftModifier) {
                             root.openItemMenu(this, delegate.index, Qt.point(0, height), ""); event.accepted = true
                         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            click(); event.accepted = true
+                            if (!root.playlistEditing && !event.isAutoRepeat) root.activated(delegate.index); event.accepted = true
+                        } else if (event.key === Qt.Key_Space && !root.playlistEditing) {
+                            if (!event.isAutoRepeat) root.activated(delegate.index); event.accepted = true
                         } else if (mediaView.moveFocus(event.key)) {
                             event.accepted = true
                         } else event.accepted = false

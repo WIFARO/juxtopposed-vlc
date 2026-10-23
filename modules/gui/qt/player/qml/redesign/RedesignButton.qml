@@ -19,6 +19,19 @@ T.Button {
     property bool filled: false
     property bool selected: false
     property bool highlightSelection: true
+    // Media rows use selection on click and a separate activation gesture.
+    property bool mediaItem: false
+    property bool handleMediaKeys: true
+    property bool singleClickActivate: false
+    signal activated()
+    onClicked: if (mediaItem && singleClickActivate) activated()
+    onDoubleClicked: if (mediaItem && !singleClickActivate) activated()
+    Keys.onPressed: event => {
+        if (mediaItem && handleMediaKeys && [Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space].includes(event.key)) {
+            if (!event.isAutoRepeat) activated()
+            event.accepted = true
+        } else event.accepted = false
+    }
     property color foreground: primaryAction && enabled ? theme.accent : theme.foreground
     property color iconForeground: foreground
     property color selectedForeground: theme.accent
@@ -40,7 +53,7 @@ T.Button {
     focusPolicy: Qt.StrongFocus
     Accessible.name: text
     Accessible.role: root.checkable ? Accessible.CheckBox : Accessible.Button
-    Accessible.onPressAction: root.click()
+    Accessible.onPressAction: root.mediaItem ? root.activated() : root.click()
     Accessible.onToggleAction: if (root.checkable) root.click()
     RedesignToolTip {
         theme: root.theme

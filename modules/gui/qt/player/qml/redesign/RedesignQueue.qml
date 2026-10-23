@@ -10,6 +10,7 @@ FocusScope {
     property color accentColor: "#d37918"
     property bool lightTheme: false
     property Component videoBackdropContent
+    property bool singleClickActivate: false
     property var hierarchyModel: null
     property string selectedGroupKey: ""
     property var queueModel
@@ -180,7 +181,7 @@ FocusScope {
                     iconName: row.isCurrent ? "play" : "drag"
                     foreground: row.isCurrent ? theme.accent : theme.foreground
                     text: qsTr("Move queue item")
-                    onClicked: { root.selectedGroupKey = ""; root.selectedIndex = row.queueIndex; root.forceActiveFocus() }
+                    onClicked: { root.selectedGroupKey = ""; root.selectedIndex = row.queueIndex; forceActiveFocus(Qt.MouseFocusReason) }
                     DragHandler {
                         id: mover
                         target: null
@@ -213,12 +214,18 @@ FocusScope {
                         Text { Layout.fillWidth: true; text: row.title; elide: Text.ElideRight; font.pixelSize: theme.dp(14); color: row.isCurrent ? theme.accent : theme.foreground }
                         Text { objectName: "queueDuration_" + row.queueIndex; text: root.durationText(row.model.duration); font.pixelSize: theme.dp(14); color: theme.playerLabel }
                     }
+                    mediaItem: true
+                    singleClickActivate: root.singleClickActivate
+                    onActivated: {
+                        if (row.queueIndex < 0) root.hierarchyModel.toggleExpanded(row.index)
+                        else root.playRequested(row.queueIndex)
+                    }
                     onClicked: {
                         if (row.queueIndex < 0) {
                             root.selectedGroupKey = row.groupKey; root.selectedIndex = -1
-                            root.forceActiveFocus(); root.hierarchyModel.toggleExpanded(row.index)
+                            forceActiveFocus(Qt.MouseFocusReason)
                         } else {
-                            root.selectedGroupKey = ""; root.selectedIndex = row.queueIndex; root.playRequested(row.queueIndex)
+                            root.selectedGroupKey = ""; root.selectedIndex = row.queueIndex; forceActiveFocus(Qt.MouseFocusReason)
                         }
                     }
                 }

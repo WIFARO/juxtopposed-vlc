@@ -430,6 +430,7 @@ QVariantMap MainCtx::redesignPlayerPreferences() const
         {QStringLiteral("seekPreview"), bool(config_GetInt("qt-seek-preview"))},
         {QStringLiteral("subtitleTimeline"), bool(config_GetInt("qt-subtitle-timeline"))},
         {QStringLiteral("audioWaveform"), bool(config_GetInt("qt-audio-waveform"))},
+        {QStringLiteral("singleClickActivate"), bool(config_GetInt("qt-single-click-activate"))},
         {QStringLiteral("layout"), qfu(layout ? layout : "")}};
     free(layout);
     return preferences;

@@ -10,6 +10,8 @@ Flickable {
     property bool lightTheme: false
     property var sections: []
     property bool expanded: false
+    property bool singleClickActivate: false
+    property string selectedKey: ""
     property string searchText: ""
     signal activated(string section, int index)
     signal enqueueRequested(string section, int index)
@@ -97,11 +99,18 @@ Flickable {
                                     anchors.fill: parent
                                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                                     text: entry.displayTitle
-                                    onClicked: root.activated(section.modelData.key, entry.index)
+                                    handleMediaKeys: false
+                                    mediaItem: true; singleClickActivate: root.singleClickActivate
+                                    selected: root.selectedKey === section.modelData.key + "/" + entry.index
+                                    onClicked: root.selectedKey = section.modelData.key + "/" + entry.index
+                                    onActivated: root.activated(section.modelData.key, entry.index)
                                     Keys.onMenuPressed: root.contextRequested(section.modelData.key, entry.index, this, Qt.point(0, height))
                                     Keys.onPressed: event => {
                                         if (event.key === Qt.Key_F10 && event.modifiers & Qt.ShiftModifier) {
                                             root.contextRequested(section.modelData.key, entry.index, this, Qt.point(0, height)); event.accepted = true
+                                        } else if ([Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space].includes(event.key)) {
+                                            if (!event.isAutoRepeat) root.activated(section.modelData.key, entry.index)
+                                            event.accepted = true
                                         } else event.accepted = false
                                     }
                                     TapHandler { acceptedButtons: Qt.RightButton; onTapped: event => root.contextRequested(section.modelData.key, entry.index, button, event.position) }

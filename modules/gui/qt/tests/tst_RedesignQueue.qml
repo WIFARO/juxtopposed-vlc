@@ -112,7 +112,7 @@ TestCase {
     function test_treeGroupDisclosureAndKeyboardNeverPlayOrRemoveMedia() {
         queue.hierarchyModel = treeFixture
         wait(50)
-        mouseClick(findChild(queue, "queueGroup_0"))
+        mouseDoubleClickSequence(findChild(queue, "queueGroup_0"))
         compare(treeFixture.count, 1)
         compare(playSpy.count, 0)
         queue.forceActiveFocus(); keyClick(Qt.Key_Delete)
@@ -129,7 +129,7 @@ TestCase {
         queue.hierarchyModel = treeFixture
         wait(50)
         const child = findChild(queue, "queueItem_1")
-        mouseClick(child)
+        mouseDoubleClickSequence(child)
         compare(playSpy.signalArguments[0][0], 1)
         mouseClick(child, 60, child.height / 2, Qt.RightButton)
         const menu = findChild(queue, "queueActionsMenu")
@@ -148,6 +148,20 @@ TestCase {
         compare(Array.from(moveSpy.signalArguments[0]), [0, 3])
         compare(media.get(2).title, "First"); compare(playSpy.count, 0)
     }
+    function test_singleClickSelectsWithoutPlaying() {
+        const button = findChild(queue, "queueItem_0")
+        mouseClick(button)
+        compare(queue.selectedIndex, 0)
+        compare(playSpy.count, 0)
+        wait(500)
+        mouseDoubleClickSequence(button)
+        compare(playSpy.count, 1)
+        queue.singleClickActivate = true
+        wait(500)
+        mouseClick(button)
+        compare(playSpy.count, 2)
+        queue.singleClickActivate = false
+    }
     function test_summaryAndRemoveUseCurrentThenSelectedItem() {
         // VLC's translator uses the disambiguation string for plurals.
         // Standalone Qt has no VLC translator, so check the count and duration here.
@@ -156,7 +170,7 @@ TestCase {
         mouseClick(findChild(queue, "queueRemoveButton"))
         compare(removeSpy.signalArguments[0][0], 1)
         compare(media.get(1).title, "Third")
-        mouseClick(findChild(queue, "queueItem_0"))
+        mouseDoubleClickSequence(findChild(queue, "queueItem_0"))
         compare(playSpy.signalArguments[0][0], 0)
         mouseClick(findChild(queue, "queueRemoveButton"))
         compare(media.get(0).title, "Third")

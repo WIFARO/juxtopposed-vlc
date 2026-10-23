@@ -490,6 +490,7 @@ FocusScope {
                 scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
                 onCloseRequested: view.queueOpen = false
                 queueContent: Component { RedesignQueue {
+                    singleClickActivate: !!MainCtx.redesignPlayerPreferences.singleClickActivate
                 videoBackdropContent: rootPlayer.menuBackdropContent
                 scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
                 queueModel: PlaylistListModel { id: queueModel; playlist: MainPlaylistController.playlist }

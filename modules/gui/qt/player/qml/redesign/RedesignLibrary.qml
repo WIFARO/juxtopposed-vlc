@@ -18,6 +18,7 @@ RedesignLibraryView {
     playlistEditing: !!selectedPlaylist && playlistEditKey === playlistKey && sortState.selection.id === "original" && !searchText.length && !grid
     playlistBusy: playlistMedia.transactionPending
     onGridChanged: if (grid) playlistEditKey = ""
+    singleClickActivate: !!MainCtx.redesignPlayerPreferences.singleClickActivate
     addLabel: selectedPlaylist ? qsTr("Add files") : category === 4 ? qsTr("Create playlist") : category === 3 ? network.podcast ? qsTr("Add podcast") : qsTr("Add Network Stream") : qsTr("Add")
     onPlaylistEditRequested: {
         if (playlistEditing) playlistEditKey = ""
@@ -408,9 +409,11 @@ RedesignLibraryView {
         if (target.kind === "file") MediaLib.addAndPlay(Qt.resolvedUrl(target.key))
         else MediaLib.addAndPlay(MediaLib.deserializeMlItemIdFromString(target.key))
     }
-    function snapshot() { return { category: category, homeSection: homeSection, playlist: selectedPlaylist, collection: selectedCollection, folder: currentFolder, musicSection: musicSection, networkLocation: networkLocation, name: selectedName, search: searchText } }
+    function snapshot() { return { category: category, homeSection: homeSection, playlist: selectedPlaylist, collection: selectedCollection, folder: currentFolder, musicSection: musicSection, networkLocation: networkLocation, name: selectedName, search: searchText, view: viewState() } }
     function remember() { backStack = [...backStack, snapshot()]; forwardStack = [] }
-    function restore(state) { category = state.category; homeSection = state.homeSection || ""; selectedPlaylist = state.playlist; selectedCollection = state.collection; currentFolder = state.folder; musicSection = state.musicSection; networkLocation = state.networkLocation || {source: "", title: "", nodes: []}; selectedName = state.name; searchText = state.search; if (currentFolder) visits.record("folders", currentFolder, nameFromUrl(currentFolder), category); else if (selectedPlaylist) visits.record("playlists", selectedPlaylist.toString(), selectedName) }
+    function restore(state) { category = state.category; homeSection = state.homeSection || ""; selectedPlaylist = state.playlist; selectedCollection = state.collection; currentFolder = state.folder; musicSection = state.musicSection; networkLocation = state.networkLocation || {source: "", title: "", nodes: []}; selectedName = state.name; searchText = state.search; if (currentFolder) visits.record("folders", currentFolder, nameFromUrl(currentFolder), category); else if (selectedPlaylist) visits.record("playlists", selectedPlaylist.toString(), selectedName); pendingViewState = state.view; restoreViewTimer.restart() }
+    property var pendingViewState
+    Timer { id: restoreViewTimer; interval: 50; onTriggered: { if (root.loading) restart(); else { root.restoreViewState(root.pendingViewState); root.pendingViewState = null } } }
     function openFolder(url, mediaCategory) {
         remember()
         currentFolder = folderPath.location(url)

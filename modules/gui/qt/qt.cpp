@@ -493,6 +493,9 @@ vlc_module_begin ()
 
     add_bool( "qt-backdrop-blur", true, BACKDROP_BLUR_FILTER_TEXT, BACKDROP_BLUR_FILTER_LONGTEXT )
 
+    add_bool( "qt-single-click-activate", false, N_("Single click to open or play items"),
+              N_("Select an item with one click. Open or play it with two clicks. Turn this on to open or play an item with one click.") )
+
     add_bool( "qt-compact-menus", false, N_("Compact menus"),
               N_("Show menus without icons. Decrease the space around menu items.") )
 
