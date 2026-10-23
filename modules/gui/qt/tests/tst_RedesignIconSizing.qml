@@ -43,7 +43,7 @@ TestCase {
         }
     }
     Component { id: filterComponent; RedesignFilterSection { width: 320; label: "Filter" } }
-    Component { id: homeComponent; RedesignHomeView { width: 320; height: 100; sections: [{key: "recent", title: "Recent", model: []}] } }
+    Component { id: homeComponent; RedesignHomeView { width: 320; height: 100; sections: [{key: "recent", title: "Recent", emptyText: "", model: []}] } }
     function chevron(item) {
         if (String(item.name || "").startsWith("chevron-")) return item
         for (const child of item.children || []) {

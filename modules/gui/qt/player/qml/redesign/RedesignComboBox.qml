@@ -128,7 +128,6 @@ C.ComboBox {
                 readonly property color lineColor: root.theme.foreground
                 Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(18)
                 visible: !root.theme.compactMenus && root.showCurvePreviews && curve.length > 0 && root.presetPreviewAt(index).length === 0
-                sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
                 svg: {
                     if (curve.length < 2 || width <= 0 || height <= 0) return ""
                     const middle = height / 2

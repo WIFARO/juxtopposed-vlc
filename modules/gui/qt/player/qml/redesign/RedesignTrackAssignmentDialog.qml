@@ -443,7 +443,7 @@ C.Dialog {
                 background: Rectangle { color: root.lightTheme ? root.theme.panel : "#151515"; radius: root.theme.dp(6); border.color: parent.visualFocus ? root.theme.accent : "transparent" }
                 contentItem: RowLayout {
                     spacing: root.theme.dp(10)
-                    RedesignIcon { objectName: "trackAssignmentFolderIcon"; sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.leftMargin: root.theme.dp(8); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "folder"; color: root.theme.foreground }
+                    RedesignIcon { objectName: "trackAssignmentFolderIcon"; Layout.leftMargin: root.theme.dp(8); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "folder"; color: root.theme.foreground }
                     Text { objectName: "trackAssignmentFolderCaption"; Layout.fillWidth: true; Layout.rightMargin: root.theme.dp(12); text: root.sourceFolderCaption; textFormat: Text.PlainText; elide: Text.ElideMiddle; font.pixelSize: root.theme.dp(14); color: root.lightTheme ? root.theme.foreground : "#969696" }
                 }
                 onClicked: root.folderRequested()
@@ -584,7 +584,7 @@ C.Dialog {
                             }
                             contentItem: Item {}
                         }
-                        RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); visible: root.fileMode; Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel }
+                        RedesignIcon { visible: root.fileMode; Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel }
                         Text {
                             id: fileLabel
                             objectName: "trackAssignmentName_" + entry.index
@@ -620,12 +620,12 @@ C.Dialog {
                             tooltipTextFormat: Text.PlainText
                             contentItem: RowLayout {
                                 spacing: root.theme.dp(14)
-                                RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel; Layout.leftMargin: -root.theme.dp(1) }
+                                RedesignIcon { Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: root.subtitles ? "subtitle-file" : "audio-file"; color: root.theme.playerLabel; Layout.leftMargin: -root.theme.dp(1) }
                                 Text { objectName: "trackAssignmentSelection_" + entry.index; Layout.fillWidth: true; text: root.tracks(entry.modelData.url).length ? root.tracks(entry.modelData.url).map(url => root.fileName(url)).join(", ") : qsTr("Select tracks"); textFormat: Text.PlainText; elide: Text.ElideMiddle; color: root.theme.playerHeading; font.pixelSize: root.theme.dp(14) }
                             }
                             onClicked: root.chooseRow(entry.modelData.url)
                         }
-                        RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); visible: entry.highlighted; Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "check-active"; color: root.theme.accent }
+                        RedesignIcon { visible: entry.highlighted; Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "check-active"; color: root.theme.accent }
                     }
                 }
             }

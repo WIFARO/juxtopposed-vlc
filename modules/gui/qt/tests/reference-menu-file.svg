@@ -1,0 +1,4 @@
+<!-- Source: VLC Redesign by Juxtopposed, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). https://www.figma.com/community/file/1691465999134370980/vlc-redesign . Authored menu.svg icon frame (33,23,24,24); vector geometry and colors retained. -->
+<svg xmlns:ns0="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="33 23 24 24" fill="none"><g transform="matrix(1.0 0.0 0.0 1.0 0.0 0.0)"><ns0:path d="M42 25.75H50C51.7949 25.75 53.25 27.2051 53.25 29V41C53.25 42.7949 51.7949 44.25 50 44.25H40C38.2051 44.25 36.75 42.7949 36.75 41V31C36.75 28.1005 39.1005 25.75 42 25.75Z" stroke="#8F8F8F" stroke-width="1.5" stroke-linejoin="round" id="crop_node_1" />
+</g><g transform="matrix(1.0 0.0 0.0 1.0 0.0 0.0)"><ns0:path d="M43 31V28.0526C43 27.4713 42.5287 27 41.9474 27C39.7673 27 38 28.7673 38 30.9474C38 31.5287 38.4713 32 39.0526 32H42C42.5523 32 43 31.5523 43 31Z" fill="#AB6314" id="crop_node_2" />
+</g></svg>

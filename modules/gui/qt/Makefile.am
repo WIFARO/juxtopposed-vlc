@@ -1983,6 +1983,18 @@ check_PROGRAMS += test_dcomp_backdrop
 TESTS += test_dcomp_backdrop
 endif
 
+test_redesign_svg_raster_SOURCES = tests/test_redesign_svg_raster.cpp
+nodist_test_redesign_svg_raster_SOURCES = tests/test_redesign_svg_raster.moc
+BUILT_SOURCES += tests/test_redesign_svg_raster.moc
+CLEANFILES += tests/test_redesign_svg_raster.moc
+test_redesign_svg_raster_CPPFLAGS = $(QT_QTEST_COMMON_cppflags) -DTOP_SRCDIR=\"$(abs_top_srcdir)\"
+test_redesign_svg_raster_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_redesign_svg_raster_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_redesign_svg_raster_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_redesign_svg_raster
+TESTS += test_redesign_svg_raster
+EXTRA_DIST += tests/redesign-svg-raster.qml tests/reference-menu-file.svg
+
 test_backdrop_blur_SOURCES = tests/test_backdrop_blur.cpp util/textureproviderobserver.cpp util/textureproviderobserver.hpp widgets/native/viewblockingrectangle.cpp widgets/native/viewblockingrectangle.hpp widgets/native/softwarebackdropblur.cpp widgets/native/softwarebackdropblur.hpp
 nodist_test_backdrop_blur_SOURCES = tests/test_backdrop_blur.moc util/textureproviderobserver.moc.cpp widgets/native/viewblockingrectangle.moc.cpp widgets/native/softwarebackdropblur.moc.cpp shaders/shaders.cpp
 BUILT_SOURCES += tests/test_backdrop_blur.moc

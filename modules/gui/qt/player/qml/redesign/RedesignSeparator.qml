@@ -21,7 +21,6 @@ Item {
         x: -4 * root.scaleFactor; y: -2 * root.scaleFactor
         width: Math.ceil((root.width + 8 * root.scaleFactor) / root.rasterGrid) * root.rasterGrid
         height: Math.ceil(4 * root.scaleFactor / root.rasterGrid) * root.rasterGrid
-        sourceSize: Qt.size(width, height)
         svg: '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height
             + '" viewBox="-4 -2 ' + width / root.scaleFactor + ' ' + height / root.scaleFactor
             + '"><path d="M0 0H' + root.width / root.scaleFactor

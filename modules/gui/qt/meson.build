@@ -1554,6 +1554,15 @@ if qt6_dep.found()
             }
         endif
         vlc_tests += {
+            'name': 'test_qt_redesign_svg_raster',
+            'sources': files('tests/test_redesign_svg_raster.cpp'),
+            'moc_sources': files('tests/test_redesign_svg_raster.cpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+            'env': {'QT_QPA_PLATFORM': 'offscreen', 'QT_QUICK_BACKEND': 'software'},
+        }
+        vlc_tests += {
             'name': 'test_qt_backdrop_blur',
             'sources': [files('tests/test_backdrop_blur.cpp', 'util/textureproviderobserver.cpp', 'widgets/native/viewblockingrectangle.cpp', 'widgets/native/softwarebackdropblur.cpp'), shaders_processed, shader_targets],
             'moc_sources': files('tests/test_backdrop_blur.cpp'),

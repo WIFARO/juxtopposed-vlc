@@ -126,7 +126,6 @@ C.Menu {
             spacing: root.theme.dp(root.theme.compactMenus ? 6 : 10)
             RedesignIcon {
                 Layout.preferredWidth: root.theme.dp(root.theme.compactMenus ? 20 : 24); Layout.preferredHeight: Layout.preferredWidth
-                sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
                 visible: !root.theme.compactMenus || row.checkable
                 name: row.checkable ? "check-active" : row.glyph
                 color: row.checkable ? root.theme.accent : root.theme.foreground
@@ -143,7 +142,6 @@ C.Menu {
             RedesignIcon {
                 visible: !!row.subMenu
                 Layout.preferredWidth: root.theme.dp(root.theme.compactMenus ? 20 : 24); Layout.preferredHeight: Layout.preferredWidth
-                sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
                 name: row.mirrored ? "chevron-left" : "chevron-right"; color: root.theme.foreground
             }
         }

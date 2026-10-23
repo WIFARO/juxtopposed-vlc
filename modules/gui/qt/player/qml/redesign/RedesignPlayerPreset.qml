@@ -81,7 +81,7 @@ Item {
         contentItem: RowLayout {
             anchors.fill: parent; anchors.leftMargin: root.theme.dp(16); anchors.rightMargin: root.theme.dp(16)
             Text { Layout.fillWidth: true; text: root.selectedName; color: root.theme.foreground; font.pixelSize: root.theme.dp(14); elide: Text.ElideRight }
-            RedesignIcon { sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: dropdown.visible ? "chevron-down" : "chevron-up"; color: root.theme.foreground }
+            RedesignIcon { Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: dropdown.visible ? "chevron-down" : "chevron-up"; color: root.theme.foreground }
         }
         onClicked: dropdown.visible ? dropdown.close() : dropdown.open()
     }
@@ -155,7 +155,7 @@ Item {
                         RedesignIcon { objectName: "presetCreateIcon"; anchors.centerIn: parent; width: root.theme.dp(24); height: width; visible: row.modelData.action === "create"; name: "add"; color: root.theme.playerLabel }
                     }
                     Text { Layout.fillWidth: true; text: row.modelData.name; font.pixelSize: root.theme.dp(14); color: row.modelData.action === "create" ? root.theme.playerLabel : root.theme.foreground; elide: Text.ElideRight }
-                    RedesignIcon { objectName: "presetSelectionMark" + row.index; sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio); Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "check-active"; color: root.theme.accent; opacity: row.modelData.action !== "create" && row.modelData.id === root.selectedId ? 1 : 0 }
+                    RedesignIcon { objectName: "presetSelectionMark" + row.index; Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24); name: "check-active"; color: root.theme.accent; opacity: row.modelData.action !== "create" && row.modelData.id === root.selectedId ? 1 : 0 }
                 }
             }
             C.ScrollIndicator.vertical: C.ScrollIndicator { }

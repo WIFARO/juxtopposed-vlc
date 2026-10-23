@@ -99,7 +99,6 @@ C.Menu {
                     visible: !root.theme.compactMenus && !!row.modelData.icon
                     Layout.preferredWidth: root.theme.dp(24)
                     Layout.preferredHeight: root.theme.dp(24)
-                    sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio)
                     name: row.modelData.icon || ""
                     color: row.modelData.accent && !actionIcon.hasDetail ? root.theme.menuAccent : root.theme.foreground
                     detailColor: row.modelData.accent ? root.theme.menuAccent : root.theme.foreground
@@ -117,7 +116,6 @@ C.Menu {
                     opacity: row.checked ? 1 : 0
                     Layout.preferredWidth: root.theme.dp(24)
                     Layout.preferredHeight: root.theme.dp(24)
-                    sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio)
                     name: "check-active"
                     color: root.theme.accent
                 }

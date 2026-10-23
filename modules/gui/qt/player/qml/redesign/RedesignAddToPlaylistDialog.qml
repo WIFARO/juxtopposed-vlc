@@ -201,7 +201,6 @@ C.Dialog {
                         }
                         RedesignIcon {
                             Layout.preferredWidth: root.theme.dp(24); Layout.preferredHeight: root.theme.dp(24)
-                            sourceSize: Qt.size(root.theme.dp(24) * Screen.devicePixelRatio, root.theme.dp(24) * Screen.devicePixelRatio)
                             name: "check-active"; visible: destination.highlighted; color: root.theme.accent
                         }
                         Text {
