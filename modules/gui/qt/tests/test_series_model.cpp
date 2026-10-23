@@ -61,7 +61,9 @@ private slots:
             QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly));
             urls.append(QUrl::fromLocalFile(path));
         }
-        SeriesModel model; model.setCurrent(urls[0], {});
+        SeriesModel model;
+        QAbstractItemModelTester checker(&model, QAbstractItemModelTester::FailureReportingMode::QtTest);
+        model.setCurrent(urls[0], {});
         QTRY_VERIFY(!model.loading()); QCOMPARE(model.rowCount(), 1);
         QCOMPARE(model.get(0).value("urls").toList().size(), 2);
         model.setProgress(urls[0], .4); QCOMPARE(model.get(0).value("progress").toDouble(), .4);

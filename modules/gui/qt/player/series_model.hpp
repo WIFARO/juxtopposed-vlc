@@ -33,7 +33,7 @@ class SeriesModel : public QAbstractListModel
     Q_PROPERTY(int currentSeason READ currentSeason NOTIFY contextChanged FINAL)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged FINAL)
 public:
-    enum Role { Title = Qt::UserRole + 1, Number, Description, Thumbnail, Urls, Current, Progress, Played, FeedIndex };
+    enum Role { Title = Qt::UserRole + 1, Number, Description, Thumbnail, Urls, Current, CurrentVersion, Progress, Played, FeedIndex, VideoEpisode };
     explicit SeriesModel(QObject* parent = nullptr);
     ~SeriesModel() override;
     bool available() const;
@@ -52,6 +52,7 @@ public:
     QHash<int, QByteArray> roleNames() const override;
     Q_INVOKABLE void setCurrent(const QUrl& url, const QVariantMap& metadata);
     Q_INVOKABLE void refresh(const QUrl& folder = {});
+    Q_INVOKABLE void searchFurther();
     Q_INVOKABLE void setFeedEpisodes(const QUrl& feed, const QVariantList& episodes);
     Q_INVOKABLE void setFeedStatus(bool loading, bool failed);
     Q_INVOKABLE void setProgress(const QUrl& url, qreal progress);
@@ -75,10 +76,11 @@ private:
         QString title, description, thumbnail, guid;
         QDateTime published;
         int feedIndex = -1;
+        bool videoEpisode = true;
     };
     struct State { qreal progress = 0; bool played = false; QString artwork; };
     void cancel();
-    void project();
+    void project(bool resetting = false);
     void publish(const SeriesDiscovery::Result& result, bool complete);
     void requestStates();
     void update(const QUrl& url, int role);
@@ -97,6 +99,6 @@ private:
     QTimer m_refreshTimer;
     quint64 m_serial = 0;
     int m_selectedSeason = -1;
-    bool m_loading = false, m_limited = false;
+    bool m_loading = false, m_limited = false, m_extended = false;
     QString m_message;
 };

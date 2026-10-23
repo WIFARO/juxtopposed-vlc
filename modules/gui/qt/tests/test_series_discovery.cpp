@@ -100,6 +100,12 @@ private slots:
         const QUrl remote("https://example.invalid/Show.S01E01.mkv");
         QVERIFY(SeriesDiscovery::scan(remote, SeriesDiscovery::identify(remote)).root.isEmpty());
     }
+    void filesystemRootIsNotScanned() {
+        const QUrl url("file:///Show.S01E01.mkv");
+        const auto result = SeriesDiscovery::scan(url, SeriesDiscovery::identify(url));
+        QVERIFY(result.limited); QCOMPARE(result.error, "root");
+        QVERIFY(result.directories.isEmpty()); QCOMPARE(result.episodes.size(), 1);
+    }
 };
 QTEST_GUILESS_MAIN(TestSeriesDiscovery)
 #include "test_series_discovery.moc"

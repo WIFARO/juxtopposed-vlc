@@ -117,8 +117,10 @@ void MLFileArtwork::setMediaLibrary(MediaLib* library)
         m_metadataStore->setReadAudioMetadata(true);
         connect(m_store.get(), &MLMediaStore::updated, this, &MLFileArtwork::mediaUpdated);
         connect(m_metadataStore.get(), &MLMediaStore::updated, this, [this](const QString& mrl, const MLMedia& media) {
-            if (m_stateRequested.contains(mrl))
+            if (m_stateRequested.contains(mrl)) {
                 emit mediaPlayedChanged(QUrl::fromEncoded(mrl.toUtf8()), media.valid() && media.playCount() > 0);
+                emit mediaProgressChanged(QUrl::fromEncoded(mrl.toUtf8()), media.valid() ? media.progress() : 0.0);
+            }
         });
         for (const auto store : {m_store.get(), m_metadataStore.get()})
             connect(store, &MLMediaStore::audioMetadataUpdated, this,

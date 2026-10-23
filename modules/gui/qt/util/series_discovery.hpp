@@ -147,6 +147,11 @@ inline Result scan(const QUrl& current, const Identity& target, const QUrl& chos
         result.error = QStringLiteral("unreadable"); return result;
     }
     const QDir root(result.root.toLocalFile());
+    if (root.isRoot()) {
+        result.episodes.append({target, {current}});
+        result.limited = true; result.error = QStringLiteral("root");
+        return result;
+    }
     QHash<QString, int> episodes;
     const auto add = [&](const QUrl& url, const Identity& identity) {
         const auto key = episodeKey(identity);

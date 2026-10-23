@@ -432,6 +432,33 @@ private slots:
         QTRY_VERIFY(finished); QCOMPARE(QUrl(result).fileName(), "folder.png");
     }
 
+    void testWatchStatesIncludeSavedProgressWithoutArtworkRequests()
+    {
+        const QUrl url("file:///series/Show.S01E01.mkv");
+        m_env->mediaGet = [&](int query, va_list args) -> void* {
+            if (query != VLC_ML_GET_MEDIA_BY_MRL || QUrl(QString::fromUtf8(va_arg(args, const char*))) != url) return nullptr;
+            auto* media = static_cast<vlc_ml_media_t*>(calloc(1, sizeof(vlc_ml_media_t)));
+            media->i_id = 42; media->i_type = VLC_ML_MEDIA_TYPE_VIDEO;
+            media->psz_title = strdup("Episode 1"); media->psz_filename = strdup("Show.S01E01.mkv");
+            media->f_progress = .625; media->i_playcount = 1;
+            media->p_files = static_cast<vlc_ml_file_list_t*>(calloc(1, sizeof(vlc_ml_file_list_t) + sizeof(vlc_ml_file_t)));
+            media->p_files->i_nb_items = 1;
+            media->p_files->p_items[0].psz_mrl = strdup(url.toEncoded().constData());
+            media->p_files->p_items[0].i_type = VLC_ML_FILE_TYPE_MAIN;
+            return media;
+        };
+        MLFileArtwork resolver; resolver.setMediaLibrary(m_medialib.get());
+        QSignalSpy progress(&resolver, &MLFileArtwork::mediaProgressChanged);
+        QSignalSpy played(&resolver, &MLFileArtwork::mediaPlayedChanged);
+        QSignalSpy artwork(&resolver, &MLFileArtwork::artworkChanged);
+        QSignalSpy ready(&resolver, &MLFileArtwork::watchStatesReady);
+        resolver.requestWatchStates({url}, 7);
+        QTRY_COMPARE(ready.count(), 1);
+        QCOMPARE(progress.count(), 1); QCOMPARE(progress[0][0].toUrl(), url); QCOMPARE(progress[0][1].toDouble(), .625);
+        QCOMPARE(played.count(), 1); QVERIFY(played[0][1].toBool());
+        QCOMPARE(artwork.count(), 0); QCOMPARE(ready[0][0].toULongLong(), quint64(7));
+    }
+
     void testMetadataBatchesReplaceQueuedRequestsAndKeepTheUiResponsive()
     {
         QSemaphore started, release;

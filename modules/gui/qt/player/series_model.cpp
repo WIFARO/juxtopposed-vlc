@@ -27,7 +27,7 @@ int SeriesModel::rowCount(const QModelIndex& parent) const { return parent.isVal
 QHash<int, QByteArray> SeriesModel::roleNames() const
 {
     return {{Title, "title"}, {Number, "number"}, {Description, "description"}, {Thumbnail, "thumbnail"},
-        {Urls, "urls"}, {Current, "current"}, {Progress, "progress"}, {Played, "played"}, {FeedIndex, "feedIndex"}};
+        {Urls, "urls"}, {Current, "current"}, {CurrentVersion, "currentVersion"}, {Progress, "progress"}, {Played, "played"}, {FeedIndex, "feedIndex"}, {VideoEpisode, "videoEpisode"}};
 }
 bool SeriesModel::isCurrent(const Row& row) const
 {
@@ -51,9 +51,11 @@ QVariant SeriesModel::data(const QModelIndex& index, int role) const
     case Thumbnail: return state.artwork.isEmpty() ? row.thumbnail : state.artwork;
     case Urls: { QVariantList urls; for (const auto& value : row.episode.urls) urls.append(value); return urls; }
     case Current: return isCurrent(row);
+    case CurrentVersion: return std::max(0, int(row.episode.urls.indexOf(m_current)));
     case Progress: return state.progress;
     case Played: return state.played;
     case FeedIndex: return row.feedIndex;
+    case VideoEpisode: return row.videoEpisode;
     default: return {};
     }
 }
@@ -76,13 +78,13 @@ void SeriesModel::setCurrent(const QUrl& url, const QVariantMap& metadata)
     bool retained = false;
     if (same) for (const auto& row : m_rows)
         if (row.episode.urls.contains(url) || (!target.guid.isEmpty() && row.guid == target.guid)) { retained = true; break; }
+    beginResetModel();
     m_current = url; m_metadata = metadata; m_target = target;
     if (!same) {
         cancel(); m_refreshTimer.stop();
         if (!m_watcher.directories().isEmpty()) m_watcher.removePaths(m_watcher.directories());
         m_rows.clear(); m_root.clear(); m_states.clear(); m_requestedStates.clear(); m_requestedArtwork.clear();
-        m_loading = false; m_limited = false; m_message.clear();
-        emit resetRequested();
+        m_loading = false; m_limited = false; m_extended = false; m_message.clear();
     }
     if (!same || followSeason) m_selectedSeason = target.season;
     if (!retained && m_current.isLocalFile() && !m_root.isEmpty()
@@ -94,7 +96,9 @@ void SeriesModel::setCurrent(const QUrl& url, const QVariantMap& metadata)
             if (!metadata.value("description").toString().isEmpty()) row.description = metadata.value("description").toString();
         }
     }
-    project(); emit contextChanged(); emit statusChanged(); emit selectedSeasonChanged();
+    project(true);
+    if (!same) emit resetRequested();
+    emit contextChanged(); emit statusChanged(); emit selectedSeasonChanged();
     if (!retained && available() && target.feedUrl.isEmpty()) refresh();
 }
 
@@ -102,6 +106,7 @@ void SeriesModel::refresh(const QUrl& folder)
 {
     if (!available() || !feed().isEmpty()) return;
     cancel();
+    m_requestedArtwork.clear();
     m_cancelled = std::make_shared<std::atomic_bool>(false);
     const auto cancelled = m_cancelled;
     const auto results = m_results;
@@ -109,11 +114,14 @@ void SeriesModel::refresh(const QUrl& folder)
     const auto current = m_current;
     const auto target = m_target;
     const auto root = folder.isEmpty() ? m_root : folder;
+    if (!folder.isEmpty()) m_extended = false;
+    SeriesDiscovery::Limits limits;
+    if (m_extended) { limits.depth = 8; limits.directories = 256; limits.entries = 32768; limits.milliseconds = 5000; }
     m_loading = true; m_message.clear(); emit statusChanged();
-    QThreadPool::globalInstance()->start([results, serial, cancelled, current, target, root] {
+    QThreadPool::globalInstance()->start([results, serial, cancelled, current, target, root, limits] {
         QElapsedTimer notifications; notifications.start();
         bool first = true;
-        auto result = SeriesDiscovery::scan(current, target, root, {}, cancelled.get(), [&](const SeriesDiscovery::Result& partial) {
+        auto result = SeriesDiscovery::scan(current, target, root, limits, cancelled.get(), [&](const SeriesDiscovery::Result& partial) {
             if (first || notifications.elapsed() >= 100) {
                 emit results->ready(serial, partial, false);
                 first = false; notifications.restart();
@@ -122,9 +130,11 @@ void SeriesModel::refresh(const QUrl& folder)
         if (!cancelled->load()) emit results->ready(serial, result, true);
     });
 }
+void SeriesModel::searchFurther() { m_extended = true; refresh(); }
 
 void SeriesModel::publish(const SeriesDiscovery::Result& result, bool complete)
 {
+    beginResetModel();
     m_root = result.root; m_limited = result.limited;
     m_rows.clear();
     auto episodes = result.episodes;
@@ -139,17 +149,20 @@ void SeriesModel::publish(const SeriesDiscovery::Result& result, bool complete)
     }
     if (complete) {
         m_loading = false;
-        m_message = result.error.isEmpty() ? QString() : tr("This folder could not be read. Choose the series folder to try again.");
+        m_message = result.error == "root" ? tr("Choose the series folder to look for other episodes.")
+            : result.error.isEmpty() ? QString() : tr("This folder could not be read. Choose the series folder to try again.");
         if (!m_watcher.directories().isEmpty()) m_watcher.removePaths(m_watcher.directories());
         if (!result.directories.isEmpty()) m_watcher.addPaths(result.directories);
     }
-    project(); requestStates(); emit statusChanged();
+    project(true); if (complete) loadStates(); emit statusChanged();
 }
 
 void SeriesModel::setFeedEpisodes(const QUrl& source, const QVariantList& episodes)
 {
     if (source != feed() || source.isEmpty()) return;
+    beginResetModel();
     m_rows.clear();
+    QSet<QString> seen;
     for (const auto& value : episodes) {
         const auto item = value.toMap(); const auto podcast = item.value("podcast").toMap();
         if (QUrl(podcast.value("feed").toString()) != source) continue;
@@ -157,9 +170,13 @@ void SeriesModel::setFeedEpisodes(const QUrl& source, const QVariantList& episod
         row.feedIndex = item.value("sourceIndex").toInt();
         row.title = item.value("title").toString(); row.description = podcast.value("description").toString();
         row.thumbnail = item.value("thumbnail").toString(); row.guid = podcast.value("guid").toString();
+        row.videoEpisode = podcast.value("videoEpisode").toBool();
         row.published = MediaIdentity::publicationDate(podcast.value("date").toString());
         const auto url = QUrl(item.value("mrl").toString());
         if (url.isEmpty()) continue;
+        const auto key = row.guid.isEmpty() ? url.toString() : row.guid;
+        if (seen.contains(key)) continue;
+        seen.insert(key);
         row.episode.urls.append(url);
         const auto video = QUrl(podcast.value("video").toString());
         if (!video.isEmpty()) row.episode.urls.append(video);
@@ -177,7 +194,7 @@ void SeriesModel::setFeedEpisodes(const QUrl& source, const QVariantList& episod
         if (!x.episodes.isEmpty() && !y.episodes.isEmpty() && x.episodes != y.episodes) return x.episodes.first() < y.episodes.first();
         return a.published < b.published;
     });
-    project();
+    project(true);
 }
 void SeriesModel::setFeedStatus(bool loading, bool failed)
 {
@@ -188,11 +205,13 @@ void SeriesModel::setFeedStatus(bool loading, bool failed)
 void SeriesModel::setSelectedSeason(int season)
 {
     if (m_selectedSeason == season) return;
-    m_selectedSeason = season; project(); emit selectedSeasonChanged();
+    beginResetModel();
+    m_selectedSeason = season; project(true); emit selectedSeasonChanged();
 }
-void SeriesModel::project()
+void SeriesModel::project(bool resetting)
 {
-    beginResetModel(); m_visible.clear();
+    if (!resetting) beginResetModel();
+    m_visible.clear();
     QSet<int> seasons;
     for (const auto& row : m_rows) seasons.insert(row.episode.identity.season);
     bool selectedChanged = false;
