@@ -38,6 +38,9 @@
 #include <QHideEvent>
 #include <QEvent>
 #include <QStyleHints>
+#include <QKeyEvent>
+#include <QScreen>
+#include <QAbstractButton>
 
 #include <cassert>
 #include <limits>
@@ -62,11 +65,17 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
 {
     setWindowTitle( qtr( "Messages" ) );
     setWindowRole( "vlc-messages" );
+    setObjectName(QStringLiteral("redesignMessages"));
     /* Build Ui */
     ui.setupUi( this );
     ui.messages->setUndoRedoEnabled(false);
     ui.errors->setUndoRedoEnabled(false);
+    ui.messages->setTabChangesFocus(true);
+    ui.errors->setTabChangesFocus(true);
     auto* closeButton = new QPushButton(qtr("&Close"), this);
+    closeButton->setObjectName(QStringLiteral("messagesClose"));
+    closeButton->setAutoDefault(false);
+    ui.saveLogButton->setAutoDefault(false);
     ui.bottomButtonsBox->addButton(closeButton, QDialogButtonBox::RejectRole);
     m_historyInfo = new QLabel(this);
     m_historyInfo->setObjectName(QStringLiteral("logHistoryInfo"));
@@ -98,7 +107,8 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
     ui.modulesTree->setHeaderHidden( true );
 
     /* Buttons and general layout */
-    ui.saveLogButton->setToolTip( qtr( "Saves all the displayed logs to a file" ) );
+    ui.saveLogButton->setToolTip(qtr("Save the log lines that match the filter. (%1)").arg(QKeySequence(QKeySequence::Save).toString(QKeySequence::NativeText)));
+    ui.filterEdit->setToolTip(qtr("Show lines that contain this text. Letter case does not matter. (%1)").arg(QKeySequence(QKeySequence::Find).toString(QKeySequence::NativeText)));
 
     int i_verbosity = var_InheritInteger( p_intf, "verbose" );
     changeVerbosity( i_verbosity );
@@ -107,10 +117,10 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
 
     ui.filterEdit->setText( getSettings()->value( "Messages/messages-filter" ).toString() );
 
-    updateButton = new QToolButton;
+    updateButton = new QPushButton(this);
     updateButton->setObjectName(QStringLiteral("logActionButton"));
-    updateButton->setAutoRaise( true );
-    ui.mainTab->setCornerWidget( updateButton );
+    updateButton->setAutoDefault(false);
+    ui.actionsLayout->insertWidget(0, updateButton);
 
 #ifndef NDEBUG
     QWidget *pldebugTab = new QWidget();
@@ -125,7 +135,12 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
 
     tabChanged(0);
     if (p_intf->p_mi)
-        connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &MessagesDialog::updateActionIcon);
+        connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, [this] {
+            updateActionIcon();
+            const auto dp = [this](int v) { return qRound(v * p_intf->p_mi->getIntfScaleFactor()); };
+            layout()->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
+            layout()->setSpacing(dp(12));
+        });
 
     BUTTONACT( updateButton, &MessagesDialog::updateOrClear );
     BUTTONACT( ui.saveLogButton, &MessagesDialog::save );
@@ -141,7 +156,8 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
         connect(translator, &InterfaceTranslator::languageChanged, this, [this, closeButton] {
             ui.retranslateUi(this);
             ui.mainTab->setTabText(1, qtr("Errors and warnings"));
-            ui.saveLogButton->setToolTip(qtr("Saves all the displayed logs to a file"));
+            ui.saveLogButton->setToolTip(qtr("Save the log lines that match the filter. (%1)").arg(QKeySequence(QKeySequence::Save).toString(QKeySequence::NativeText)));
+            ui.filterEdit->setToolTip(qtr("Show lines that contain this text. Letter case does not matter. (%1)").arg(QKeySequence(QKeySequence::Find).toString(QKeySequence::NativeText)));
             closeButton->setText(qtr("&Close"));
             ui.verbosityBox->retranslate();
             updateHistoryInfo();
@@ -152,7 +168,17 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
         });
 
     /* General action */
-    restoreWidgetPosition( "Messages", QSize( 600, 450 ) );
+    const auto dp = [this](int v) { return qRound(v * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+    layout()->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
+    layout()->setSpacing(dp(12));
+    restoreWidgetPosition("Messages", QSize(dp(760), dp(600)));
+    if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
+    setTabOrder(ui.verbosityBox, ui.filterEdit);
+    setTabOrder(ui.filterEdit, ui.messages);
+    setTabOrder(ui.messages, updateButton);
+    setTabOrder(updateButton, ui.saveLogButton);
+    setTabOrder(ui.saveLogButton, closeButton);
+    for (auto *child : findChildren<QWidget*>()) child->installEventFilter(this);
 
     /* Hook up to LibVLC messaging */
     static const struct vlc_logger_operations log_ops =
@@ -167,6 +193,7 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
         msg_Err(p_intf, "Cannot read log messages.");
 
     buildTree( NULL, VLC_OBJECT(vlc) );
+    updateHistoryInfo();
 }
 
 MessagesDialog::~MessagesDialog()
@@ -234,6 +261,7 @@ void MessagesDialog::filterMessages()
     QSize vsize = messages->viewport()->size();
     messages->viewport()->resize( vsize + QSize( 1, 1 ) );
     messages->viewport()->resize( vsize );
+    updateHistoryInfo();
 }
 
 bool MessagesDialog::matchFilter( const QString& text )
@@ -251,19 +279,34 @@ void MessagesDialog::drainMessages()
         const auto maximum = std::numeric_limits<quint64>::max();
         m_skippedMessages = maximum - m_skippedMessages < batch.skipped
             ? maximum : m_skippedMessages + batch.skipped;
-        updateHistoryInfo();
     }
+    if (!batch.entries.isEmpty() || batch.skipped) updateHistoryInfo();
 }
 
 void MessagesDialog::updateHistoryInfo()
 {
-    auto text = qtr("This window shows up to %1 log lines.").arg(QLocale().toString(MessageLogHistoryLines));
+    const auto *document = ui.messages->document();
+    const int total = document->isEmpty() ? 0 : document->blockCount();
+    int shown = total;
+    if (!ui.filterEdit->text().isEmpty() && total)
+    {
+        shown = 0;
+        for (auto block = document->firstBlock(); block.isValid(); block = block.next())
+            if (block.isVisible()) ++shown;
+    }
+    auto text = ui.filterEdit->text().isEmpty()
+        ? qtr("Log lines: %1").arg(QLocale().toString(total))
+        : qtr("Log lines shown: %1 of %2").arg(QLocale().toString(shown), QLocale().toString(total));
+    if (!ui.filterEdit->text().isEmpty() && !shown)
+        text += QLatin1Char('\n') + qtr("No log lines match this filter.");
+    text += QLatin1Char('\n') + qtr("This window shows up to %1 log lines.").arg(QLocale().toString(MessageLogHistoryLines));
     if (m_skippedMessages)
         text += QLatin1Char('\n') + qtr("Log messages not shown: %1").arg(QLocale().toString(m_skippedMessages));
     m_historyInfo->setText(text);
     const auto help = qtr("This window can show only part of a long log message. To keep a full log, turn on Save a log in Settings. After this change, close VLC. Start VLC again.");
     m_historyInfo->setToolTip(QStringLiteral("<qt>%1</qt>").arg(help.toHtmlEscaped()));
     m_historyInfo->setAccessibleDescription(help);
+    ui.saveLogButton->setEnabled(shown > 0);
 }
 
 void MessagesDialog::showEvent(QShowEvent* event)
@@ -275,6 +318,7 @@ void MessagesDialog::showEvent(QShowEvent* event)
 void MessagesDialog::hideEvent(QHideEvent* event)
 {
     m_logTimer.stop();
+    updateConfig();
     QVLCFrame::hideEvent(event);
 }
 
@@ -299,7 +343,7 @@ void MessagesDialog::updateActionIcon()
     }
     updateButton->setIcon(ColorizedSvgIcon(resource, {}, {}, {},
         {{QStringLiteral("#8f8f8f"), foreground.name()}}));
-    const int size = qRound(24 * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1));
+    const int size = qRound(20 * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1));
     updateButton->setIconSize(QSize(size, size));
 }
 
@@ -307,7 +351,7 @@ bool MessagesDialog::save()
 {
     drainMessages();
     QString saveLogFileName = QFileDialog::getSaveFileName(
-            this, qtr( "Save log file as..." ),
+            this, qtr("Save log"),
             QVLCUserDir( VLC_DOCUMENTS_DIR ),
             qtr( "Texts/Logs (*.log *.txt);; All (*.*)") );
 
@@ -414,9 +458,53 @@ void MessagesDialog::tabChanged( int i )
     }
     else m_logTimer.stop();
     updateActionIcon();
-    updateButton->setToolTip( i > 1 ? qtr("Update the tree")
-                                     : i == 0 ? qtr("Clear the messages")
-                                              : qtr("Clear errors and warnings"));
+    ui.saveLogButton->setVisible(i == 0);
+    updateButton->setText(i > 1 ? qtr("&Refresh")
+                               : i == 0 ? qtr("&Clear log") : qtr("&Clear errors"));
+    updateButton->setToolTip(i > 1 ? qtr("Read the tree again.")
+                                  : i == 0 ? qtr("Remove the log lines from this window.")
+                                           : qtr("Remove errors and warnings from this window."));
+}
+
+bool MessagesDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent*>(event);
+        const bool find = key->matches(QKeySequence::Find);
+        const bool saveLog = key->matches(QKeySequence::Save);
+        const bool resetFilter = watched == ui.filterEdit && key->key() == Qt::Key_Escape
+            && !ui.filterEdit->text().isEmpty();
+        if (find || saveLog || resetFilter)
+        {
+            if (event->type() == QEvent::KeyPress)
+            {
+                if (find)
+                {
+                    ui.mainTab->setCurrentIndex(0);
+                    ui.filterEdit->setFocus();
+                    ui.filterEdit->selectAll();
+                }
+                else if (saveLog && ui.mainTab->currentIndex() == 0 && ui.saveLogButton->isEnabled()) save();
+                else if (resetFilter) ui.filterEdit->clear();
+            }
+            key->accept();
+            return true;
+        }
+    }
+    return QVLCFrame::eventFilter(watched, event);
+}
+
+void MessagesDialog::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+    {
+        if (focusWidget() == ui.filterEdit) ui.messages->setFocus();
+        else if (auto *button = qobject_cast<QAbstractButton*>(focusWidget())) button->click();
+        event->accept();
+        return;
+    }
+    QVLCFrame::keyPressEvent(event);
 }
 
 void MessagesDialog::showTab( int i )

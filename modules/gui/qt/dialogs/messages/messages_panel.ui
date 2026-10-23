@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
  <class>messagesPanelWidget</class>
- <widget class="QWidget" name="messagesPanelWidget">
+ <widget class="QWidget" name="redesignMessages">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -15,6 +15,26 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_2">
    <item>
+    <widget class="QLabel" name="messagesHeading">
+     <property name="text">
+      <string>Messages</string>
+     </property>
+     <property name="redesignHeading" stdset="0">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="messagesHelp">
+     <property name="text">
+      <string>Read log messages and errors. Use the filter to find text in the log.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QTabWidget" name="mainTab">
      <property name="currentIndex">
       <number>0</number>
@@ -24,7 +44,7 @@
        <string>Messages</string>
       </attribute>
       <layout class="QGridLayout" name="msgLayout" columnstretch="0,1,0,0,0,0">
-       <item row="0" column="0" colspan="6">
+       <item row="2" column="0" colspan="6">
         <widget class="QPlainTextEdit" name="messages">
          <property name="horizontalScrollBarPolicy">
           <enum>Qt::ScrollBarAlwaysOff</enum>
@@ -32,19 +52,22 @@
          <property name="readOnly">
           <bool>true</bool>
          </property>
+         <property name="placeholderText">
+          <string>No log messages yet.</string>
+         </property>
         </widget>
        </item>
-       <item row="1" column="0">
+       <item row="0" column="0">
         <widget class="QLabel" name="label">
          <property name="text">
-          <string>&amp;Verbosity:</string>
+          <string>Log &amp;level:</string>
          </property>
          <property name="buddy">
           <cstring>verbosityBox</cstring>
          </property>
         </widget>
        </item>
-       <item row="1" column="1" alignment="Qt::AlignLeft">
+       <item row="0" column="1" alignment="Qt::AlignLeft">
         <widget class="QVLCDebugLevelSpinBox" name="verbosityBox">
          <property name="wrapping">
           <bool>true</bool>
@@ -60,7 +83,7 @@
          </property>
         </widget>
        </item>
-       <item row="2" column="0">
+       <item row="1" column="0">
         <widget class="QLabel" name="label_2">
          <property name="text">
           <string>&amp;Filter:</string>
@@ -70,7 +93,7 @@
          </property>
         </widget>
        </item>
-       <item row="2" column="1" colspan="5">
+       <item row="1" column="1" colspan="5">
         <widget class="QLineEdit" name="filterEdit">
          <property name="minimumSize">
           <size>
@@ -78,12 +101,11 @@
            <height>0</height>
           </size>
          </property>
-        </widget>
-       </item>
-       <item row="1" column="5">
-        <widget class="QPushButton" name="saveLogButton">
-         <property name="text">
-          <string>&amp;Save as...</string>
+         <property name="clearButtonEnabled">
+          <bool>true</bool>
+         </property>
+         <property name="placeholderText">
+          <string>Find text in log messages</string>
          </property>
         </widget>
        </item>
@@ -101,6 +123,9 @@
          </property>
          <property name="readOnly">
           <bool>true</bool>
+         </property>
+         <property name="placeholderText">
+          <string>No errors or warnings.</string>
          </property>
         </widget>
        </item>
@@ -125,11 +150,41 @@
     </widget>
    </item>
    <item>
-    <widget class="QDialogButtonBox" name="bottomButtonsBox">
-     <property name="standardButtons">
-      <set>QDialogButtonBox::NoButton</set>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="actionsLayout">
+     <item>
+      <spacer name="actionSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item row="1" column="5">
+      <widget class="QPushButton" name="saveLogButton">
+       <property name="text">
+        <string>&amp;Save log...</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QDialogButtonBox" name="bottomButtonsBox">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="standardButtons">
+        <set>QDialogButtonBox::NoButton</set>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>
@@ -140,6 +195,6 @@
    <header>widgets/native/customwidgets.hpp</header>
   </customwidget>
  </customwidgets>
- <resources/>
- <connections/>
+ <resources />
+ <connections />
 </ui>

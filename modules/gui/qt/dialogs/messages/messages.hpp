@@ -68,7 +68,7 @@ private:
     void buildTree( QTreeWidgetItem *, vlc_object_t * );
     void updateActionIcon();
 
-    QToolButton *updateButton = nullptr;
+    QPushButton *updateButton = nullptr;
     QLabel* m_historyInfo;
     MessageLogBuffer m_pendingMessages;
     QTimer m_logTimer;
@@ -85,6 +85,8 @@ public:
     void showTab( int i );
 
 protected:
+    bool eventFilter(QObject*, QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
     void changeEvent(QEvent*) override;
     void showEvent(QShowEvent*) override;
     void hideEvent(QHideEvent*) override;
