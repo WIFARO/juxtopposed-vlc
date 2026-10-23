@@ -394,6 +394,9 @@ void VLCDialogModel::setProvider(VLCDialog* provider)
         return;
     if (m_provider)
     {
+        // The UI still needs these response connections while it dismisses
+        // requests owned by the old screen.
+        emit m_provider->cancelAll();
         disconnect(m_provider, nullptr, this, nullptr);
     }
     m_provider = provider;

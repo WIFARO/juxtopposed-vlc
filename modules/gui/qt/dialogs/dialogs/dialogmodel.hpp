@@ -194,6 +194,9 @@ signals:
     void progressUpdated(DialogId dialogId, float f_value, const QString & text);
 
     void cancelled(DialogId dialogId);
+
+    // Release outstanding UI requests before this provider is disconnected.
+    void cancelAll();
 };
 
 /**

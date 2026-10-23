@@ -446,6 +446,45 @@ private slots:
         QCOMPARE(m_questionSpy->count(), 0);
     }
 
+    void testProviderChangeCancelsOwnedProgress() {
+        auto *model = VLCDialogModel::getInstance<false>();
+        QObject scope;
+        DialogId pending;
+        bool hasPending = false;
+        connect(m_dialog, &VLCDialog::progress, &scope,
+                [&](DialogId id, const QString &, const QString &, bool, float,
+                    const QString &) {
+            pending = id;
+            hasPending = true;
+        });
+        connect(m_dialog, &VLCDialog::cancelAll, &scope, [&] {
+            if (!hasPending) return;
+            hasPending = false;
+            m_dialog->dismiss(pending);
+        });
+        model->setProvider(m_dialog);
+        auto *first = vlc_dialog_display_progress(m_intf, false, 0.25f,
+                                                  "Cancel", "First", "Work");
+        QVERIFY(first);
+        QVERIFY(hasPending);
+        VLCDialog replacement;
+        model->setProvider(&replacement);
+        // The old screen must retain its response connection during cleanup.
+        QVERIFY(!hasPending);
+        QVERIFY(vlc_dialog_is_cancelled(m_intf, first));
+        vlc_dialog_release(m_intf, first);
+
+        QSignalSpy requests(&replacement, &VLCDialog::progress);
+        auto *second = vlc_dialog_display_progress(m_intf, false, 0.5f,
+                                                   "Cancel", "Second", "Work");
+        QVERIFY(second);
+        QCOMPARE(requests.count(), 1);
+        replacement.dismiss(DialogId(second));
+        QVERIFY(vlc_dialog_is_cancelled(m_intf, second));
+        vlc_dialog_release(m_intf, second);
+        model->setProvider(m_dialog);
+    }
+
     void testLateBinding() {
         QObject::connect(m_dialog, &VLCDialog::question, this,
                          [&](DialogId dialogId, const QString& ,
