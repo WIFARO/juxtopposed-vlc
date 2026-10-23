@@ -35,8 +35,13 @@
 /* Auto-generated from .ui files */
 #include "ui_about.h"
 #include "ui_update.h"
+#include <QTextCursor>
 
 class QEvent;
+class QTextBrowser;
+class QLineEdit;
+class QLabel;
+class QPushButton;
 
 class HelpDialog : public QVLCFrame
 {
@@ -46,7 +51,22 @@ public:
     virtual ~HelpDialog();
 
 public slots:
-    void close() override { toggleVisible(); }
+    void close() override { hide(); }
+
+protected:
+    bool eventFilter(QObject*, QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
+
+private:
+    void updateSearch();
+    void showMatch(int index);
+    QTextBrowser *m_browser;
+    QLineEdit *m_find;
+    QLabel *m_findInfo;
+    QPushButton *m_previous;
+    QPushButton *m_next;
+    QList<QTextCursor> m_matches;
+    int m_currentMatch = -1;
 };
 
 class AboutDialog : public QVLCDialog
@@ -54,19 +74,14 @@ class AboutDialog : public QVLCDialog
     Q_OBJECT
 public:
     AboutDialog( qt_intf_t * );
+    ~AboutDialog() override;
 
 protected:
-    bool eventFilter(QObject *obj, QEvent *event) override;
-    void showEvent ( QShowEvent * ) override;
+    bool eventFilter(QObject*, QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
 
 private:
-    bool b_advanced;
     Ui::aboutWidget ui;
-
-private slots:
-    void showLicense();
-    void showAuthors();
-    void showCredit();
 };
 
 #if defined(UPDATE_CHECK)

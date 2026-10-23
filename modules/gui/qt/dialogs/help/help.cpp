@@ -47,165 +47,331 @@
 #include <QEvent>
 #include <QDate>
 #include <QPushButton>
-#include <QRegularExpression>
 #include <QApplication>
 #include <QStyleHints>
 #include <QScrollBar>
+#include <QLineEdit>
+#include <QTextBlock>
+#include <QClipboard>
+#include <QKeyEvent>
+#include <QToolButton>
+#include <QTimer>
+#include <QScreen>
 
 #include <cassert>
 
-HelpDialog::HelpDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
-
+namespace {
+int helpDp(qt_intf_t *intf, int value)
 {
-    setWindowTitle( qtr( "Help" ) );
-    setWindowRole( "vlc-help" );
-    setMinimumSize( 350, 300 );
+    return qRound(value * (intf->p_mi ? intf->p_mi->getIntfScaleFactor() : 1));
+}
 
-    QVBoxLayout *layout = new QVBoxLayout( this );
+void colorBrowserLinks(QTextBrowser *browser, const QColor &linkColor)
+{
+    // Change only the anchor format; keep selections and the reading position.
+    QList<QTextCursor> anchors;
+    for (auto block = browser->document()->firstBlock(); block.isValid(); block = block.next())
+        for (auto it = block.begin(); !it.atEnd(); ++it)
+        {
+            const auto fragment = it.fragment();
+            if (!fragment.isValid() || !fragment.charFormat().isAnchor()) continue;
+            QTextCursor cursor(browser->document());
+            cursor.setPosition(fragment.position());
+            cursor.setPosition(fragment.position() + fragment.length(), QTextCursor::KeepAnchor);
+            anchors.append(cursor);
+        }
+    QTextCharFormat color;
+    color.setForeground(linkColor);
+    for (auto &cursor : anchors) cursor.mergeCharFormat(color);
+}
 
-    QTextBrowser *helpBrowser = new QTextBrowser( this );
-    helpBrowser->setOpenExternalLinks( true );
-    helpBrowser->setHtml( qfut(I_LONGHELP) );
+bool activateHelpButton(QKeyEvent *event, QWidget *focused)
+{
+    if (event->key() != Qt::Key_Return && event->key() != Qt::Key_Enter) return false;
+    if (auto *button = qobject_cast<QAbstractButton*>(focused)) button->click();
+    event->accept();
+    return true;
+}
+}
 
-    QDialogButtonBox *closeButtonBox = new QDialogButtonBox( this );
-    auto* closeButton = new QPushButton(qtr("&Close"));
-    closeButtonBox->addButton(closeButton, QDialogButtonBox::RejectRole);
-    closeButtonBox->setFocus();
-
-    layout->addWidget( helpBrowser );
-    layout->addWidget( closeButtonBox );
-
-    connect( closeButtonBox, &QDialogButtonBox::rejected, this, &HelpDialog::close );
-    if (auto* translator = InterfaceTranslator::instance())
-        connect(translator, &InterfaceTranslator::languageChanged, this, [this, helpBrowser, closeButton] {
-            const auto scroll = helpBrowser->verticalScrollBar()->value();
-            setWindowTitle(qtr("Help"));
-            helpBrowser->setHtml(qfut(I_LONGHELP));
-            helpBrowser->verticalScrollBar()->setValue(scroll);
-            closeButton->setText(qtr("&Close"));
-        });
-    restoreWidgetPosition( "Help", QSize( 500, 450 ) );
+HelpDialog::HelpDialog(qt_intf_t *intf) : QVLCFrame(intf)
+{
+    setObjectName(QStringLiteral("redesignHelp"));
+    setWindowRole("vlc-help");
+    auto *root = new QVBoxLayout(this);
+    auto *heading = new QLabel(this);
+    heading->setProperty("redesignHeading", true);
+    root->addWidget(heading);
+    auto *findRow = new QHBoxLayout;
+    auto *findLabel = new QLabel(this);
+    m_find = new QLineEdit(this);
+    m_find->setObjectName(QStringLiteral("helpFind"));
+    m_find->setClearButtonEnabled(true);
+    findLabel->setBuddy(m_find);
+    m_previous = new QPushButton(this);
+    m_previous->setObjectName(QStringLiteral("helpPrevious"));
+    m_next = new QPushButton(this);
+    m_next->setObjectName(QStringLiteral("helpNext"));
+    findRow->addWidget(findLabel);
+    findRow->addWidget(m_find, 1);
+    findRow->addWidget(m_previous);
+    findRow->addWidget(m_next);
+    root->addLayout(findRow);
+    m_browser = new QTextBrowser(this);
+    m_browser->setObjectName(QStringLiteral("helpBrowser"));
+    m_browser->setOpenExternalLinks(true);
+    m_browser->setTextInteractionFlags(Qt::TextBrowserInteraction | Qt::TextSelectableByKeyboard);
+    m_browser->setUndoRedoEnabled(false);
+    m_browser->setTabChangesFocus(true);
+    root->addWidget(m_browser, 1);
+    auto *footer = new QHBoxLayout;
+    m_findInfo = new QLabel(this);
+    m_findInfo->setObjectName(QStringLiteral("helpFindInfo"));
+    m_findInfo->setWordWrap(true);
+    footer->addWidget(m_findInfo, 1);
+    auto *closeButton = new QPushButton(this);
+    closeButton->setObjectName(QStringLiteral("helpClose"));
+    footer->addWidget(closeButton);
+    root->addLayout(footer);
+    for (auto *button : {m_previous, m_next, closeButton}) button->setAutoDefault(false);
+    connect(closeButton, &QPushButton::clicked, this, &HelpDialog::close);
+    connect(m_find, &QLineEdit::textChanged, this, &HelpDialog::updateSearch);
+    connect(m_previous, &QPushButton::clicked, this, [this] { showMatch(m_currentMatch - 1); });
+    connect(m_next, &QPushButton::clicked, this, [this] { showMatch(m_currentMatch + 1); });
+    const auto reloadText = [this, heading, findLabel, closeButton] {
+        const auto scroll = m_browser->verticalScrollBar()->value();
+        setWindowTitle(qtr("Help"));
+        heading->setText(qtr("Help"));
+        findLabel->setText(qtr("&Find:"));
+        m_find->setPlaceholderText(qtr("Find in this page"));
+        m_find->setAccessibleName(qtr("Find in this page"));
+        m_find->setToolTip(QKeySequence(QKeySequence::Find).toString(QKeySequence::NativeText));
+        m_previous->setText(qtr("&Previous"));
+        m_next->setText(qtr("&Next"));
+        m_previous->setToolTip(QKeySequence(QKeySequence::FindPrevious).toString(QKeySequence::NativeText));
+        m_next->setToolTip(QKeySequence(QKeySequence::FindNext).toString(QKeySequence::NativeText));
+        closeButton->setText(qtr("&Close"));
+        m_browser->setHtml(qfut(I_LONGHELP));
+        colorBrowserLinks(m_browser, palette().color(QPalette::Link));
+        updateSearch();
+        m_browser->verticalScrollBar()->setValue(scroll);
+    };
+    const auto metrics = [this, root] {
+        root->setContentsMargins(helpDp(p_intf, 24), helpDp(p_intf, 24), helpDp(p_intf, 24), helpDp(p_intf, 24));
+        root->setSpacing(helpDp(p_intf, 12));
+    };
+    reloadText();
+    metrics();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, reloadText);
+    if (auto *ctx = p_intf->p_mi)
+    {
+        connect(ctx, &MainCtx::intfScaleFactorChanged, this, metrics);
+        const auto links = [this] { colorBrowserLinks(m_browser, palette().color(QPalette::Link)); };
+        connect(ctx, &MainCtx::redesignAccentChanged, this, links);
+        connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, links);
+        connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, links);
+    }
+    restoreWidgetPosition("Help", QSize(helpDp(p_intf, 720), helpDp(p_intf, 580)));
+    if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
+    setTabOrder(m_find, m_previous);
+    setTabOrder(m_previous, m_next);
+    setTabOrder(m_next, m_browser);
+    setTabOrder(m_browser, closeButton);
+    for (auto *child : findChildren<QWidget*>()) child->installEventFilter(this);
 }
 
 HelpDialog::~HelpDialog()
 {
-    saveWidgetPosition( "Help" );
+    saveWidgetPosition("Help");
 }
 
-AboutDialog::AboutDialog( qt_intf_t *_p_intf)
-            : QVLCDialog( nullptr, _p_intf ), b_advanced( false )
+void HelpDialog::updateSearch()
 {
-    /* Build UI */
-    ui.setupUi( this );
-    setWindowTitle( qtr( "About" ) );
-    setWindowRole( "vlc-about" );
-    setWindowModality( Qt::WindowModal );
-
-    ui.version->setText(qfu( " " VERSION_MESSAGE ) );
-    const auto updateText = [this] {
-        setWindowTitle(qtr("About"));
-        ui.title->setText("<html><head/><body><p><span style=\" font-size:26pt;\"> " + qtr( "VLC media player" ) + " </span></p></body></html>");
-
-        ui.MainBlabla->setText("<html><head/><body>" +
-        qtr( "<p>VLC media player is a free and open source media player, encoder, and streamer made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>" ).remove(QStringLiteral("color:#0057ae;")) +
-        "</p>" + AboutModel::getDesignAttribution() + "</body> </html>");
-        ui.licenseButton->setText(qtr("License"));
-        ui.authorsButton->setText(qtr("Authors"));
-        ui.creditsButton->setText(qtr("Credits"));
-        ui.UpdateLabel->setText(qtr("Update"));
-        ui.checkUpdates->setText(qtr("Update"));
-    };
-    updateText();
-
-    const QDate today = QDate::currentDate();
-    if( today.month() == 4 && today.day() == 1
-            && var_InheritBool( p_intf, "qt-icon-change" ) )
-        ui.VLCcone->setPixmap( QPixmap( ":/logo/vlc128-aprilfools.png" ) );
-
-    ui.update->hide();
-
-    /* GPL License */
-    ui.licensePage->setText( AboutModel::getLicense() );
-
-    /* People who helped */
-    ui.creditPage->setText( qfu( psz_thanks ) );
-
-    /* People who wrote the software */
-    ui.authorsPage->setText( qfu( psz_authors ) );
-
-    connect(ui.licenseButton, &QPushButton::clicked, this, &AboutDialog::showLicense);
-
-    connect(ui.authorsButton, &QPushButton::clicked, this, &AboutDialog::showAuthors);
-
-    connect(ui.creditsButton, &QPushButton::clicked, this, &AboutDialog::showCredit);
-
-    const auto updateLinkColor = [this] {
-        const QColor color = palette().color(QPalette::Link);
-        QString html = ui.MainBlabla->text();
-        html.remove(QRegularExpression(QStringLiteral(" style=\"color:#[0-9a-fA-F]{6};\"")));
-        html.replace(QStringLiteral("<a "), QStringLiteral("<a style=\"color:%1;\" ").arg(color.name()));
-        ui.MainBlabla->setText(html);
-    };
-    updateLinkColor();
-    if (auto* translator = InterfaceTranslator::instance())
-        connect(translator, &InterfaceTranslator::languageChanged, this, [updateText, updateLinkColor] {
-            updateText();
-            updateLinkColor();
-        });
-    if (p_intf->p_mi)
+    m_matches.clear();
+    if (!m_find->text().isEmpty())
     {
-        connect(p_intf->p_mi, &MainCtx::redesignAccentChanged, this, updateLinkColor);
-        connect(p_intf->p_mi->getColorScheme(), &ColorSchemeModel::currentChanged, this, updateLinkColor);
-        connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, updateLinkColor);
-    }
-
-    ui.version->installEventFilter( this );
-}
-
-void AboutDialog::showLicense()
-{
-    ui.stackedWidget->setCurrentWidget( ui.licensePage );
-}
-
-void AboutDialog::showAuthors()
-{
-    ui.stackedWidget->setCurrentWidget( ui.authorsPage );
-}
-
-void AboutDialog::showCredit()
-{
-    ui.stackedWidget->setCurrentWidget( ui.creditPage );
-}
-
-bool AboutDialog::eventFilter(QObject *obj, QEvent *event)
-{
-    if (event->type() == QEvent::MouseButtonPress )
-    {
-        if( obj == ui.version )
+        auto cursor = m_browser->document()->find(m_find->text());
+        while (!cursor.isNull())
         {
-            if( !b_advanced )
+            m_matches.append(cursor);
+            cursor = m_browser->document()->find(m_find->text(), cursor);
+        }
+    }
+    showMatch(0);
+}
+
+void HelpDialog::showMatch(int index)
+{
+    m_previous->setEnabled(!m_matches.isEmpty());
+    m_next->setEnabled(!m_matches.isEmpty());
+    if (m_matches.isEmpty())
+    {
+        m_currentMatch = -1;
+        auto cursor = m_browser->textCursor();
+        cursor.clearSelection();
+        m_browser->setTextCursor(cursor);
+        m_findInfo->setText(m_find->text().isEmpty() ? QString() : qtr("No text found."));
+        return;
+    }
+    m_currentMatch = (index % m_matches.size() + m_matches.size()) % m_matches.size();
+    m_browser->setTextCursor(m_matches.at(m_currentMatch));
+    m_browser->ensureCursorVisible();
+    m_findInfo->setText(qtr("Match %1 of %2").arg(m_currentMatch + 1).arg(m_matches.size()));
+}
+
+bool HelpDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent*>(event);
+        const bool find = key->matches(QKeySequence::Find);
+        const bool next = key->matches(QKeySequence::FindNext) ||
+            (watched == m_find && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter));
+        const bool previous = key->matches(QKeySequence::FindPrevious);
+        const bool reset = watched == m_find && key->key() == Qt::Key_Escape && !m_find->text().isEmpty();
+        const bool copy = watched == m_browser && key->matches(QKeySequence::Copy);
+        const bool selectAll = watched == m_browser && key->matches(QKeySequence::SelectAll);
+        if (find || next || previous || reset || copy || selectAll)
+        {
+            if (event->type() == QEvent::KeyPress)
             {
-                ui.version->setText(qfu( VLC_CompileBy() )+ "@" + qfu( VLC_CompileHost() )
-                    + " " + __DATE__ + " " + __TIME__);
-                b_advanced = true;
+                if (find) { m_find->setFocus(); m_find->selectAll(); }
+                else if (reset) m_find->clear();
+                else if (copy) m_browser->copy();
+                else if (selectAll) m_browser->selectAll();
+                else showMatch(m_currentMatch + (previous ? -1 : 1));
             }
-            else
-            {
-                ui.version->setText(qfu( " " VERSION_MESSAGE ) );
-                b_advanced = false;
-            }
+            key->accept();
             return true;
         }
-        return false;
     }
-
-    return QVLCDialog::eventFilter( obj, event);
+    return QVLCFrame::eventFilter(watched, event);
 }
 
-void AboutDialog::showEvent( QShowEvent *event )
+void HelpDialog::keyPressEvent(QKeyEvent *event)
 {
-    ui.stackedWidget->setCurrentWidget( ui.blablaPage );
-    QVLCDialog::showEvent( event );
+    if (!activateHelpButton(event, focusWidget())) QVLCFrame::keyPressEvent(event);
+}
+
+AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
+{
+    ui.setupUi(this);
+    setWindowRole("vlc-about");
+    setWindowModality(Qt::WindowModal);
+    ui.version->setText(AboutModel::getVersion());
+    ui.licensePage->setPlainText(AboutModel::getLicense());
+    ui.authorsPage->setPlainText(AboutModel::getAuthors());
+    ui.creditPage->setPlainText(AboutModel::getThanks());
+    ui.MainBlabla->setUndoRedoEnabled(false);
+    ui.MainBlabla->setTabChangesFocus(true);
+    ui.buildDetails->hide();
+    connect(ui.buildDetailsButton, &QToolButton::toggled, this, [this](bool show) {
+        ui.buildDetails->setVisible(show);
+        ui.buildDetailsButton->setArrowType(show ? Qt::DownArrow : Qt::RightArrow);
+    });
+    connect(ui.closeButton, &QPushButton::clicked, this, &QDialog::reject);
+    auto *copyTimer = new QTimer(this);
+    copyTimer->setSingleShot(true);
+    copyTimer->setInterval(2500);
+    connect(copyTimer, &QTimer::timeout, ui.copyFeedback, &QLabel::clear);
+    connect(ui.copyVersionButton, &QPushButton::clicked, this, [this, copyTimer] {
+        QGuiApplication::clipboard()->setText(QStringLiteral("VLC media player ") + AboutModel::getVersion());
+        ui.copyFeedback->setText(qtr("Version copied."));
+        copyTimer->start();
+    });
+    const auto updateText = [this, copyTimer] {
+        ui.retranslateUi(this);
+        setWindowTitle(qtr("About"));
+        ui.title->setText(qtr("VLC media player"));
+        ui.closeButton->setText(qtr("&Close"));
+        ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.authorsPage), qtr("Authors"));
+        ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.creditPage), qtr("Credits"));
+        ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.licensePage), qtr("License"));
+        ui.copyVersionButton->setToolTip(qtr("Copy this version to the clipboard."));
+        ui.buildDetailsButton->setToolTip(qtr("Show information about this build."));
+        ui.buildDetails->setText(qtr("Build user: %1\nBuild host: %2\nBuild date: %3 %4")
+            .arg(qfu(VLC_CompileBy()), qfu(VLC_CompileHost()), QStringLiteral(__DATE__), QStringLiteral(__TIME__)));
+        copyTimer->stop();
+        ui.copyFeedback->clear();
+        ui.MainBlabla->setHtml("<html><head/><body>" +
+        qtr( "<p>VLC media player is a free and open source media player, encoder, and streamer made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>" ).remove(QStringLiteral("color:#0057ae;")) +
+        "</p>" + AboutModel::getDesignAttribution() + "</body> </html>");
+        colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link));
+    };
+    updateText();
+    const auto metrics = [this] {
+        const int margin = helpDp(p_intf, 24);
+        layout()->setContentsMargins(margin,margin,margin,margin);
+        layout()->setSpacing(helpDp(p_intf, 12));
+        const auto today = QDate::currentDate();
+        const bool april = today.month() == 4 && today.day() == 1 && var_InheritBool(p_intf,"qt-icon-change");
+        QPixmap cone(april ? QStringLiteral(":/logo/vlc128-aprilfools.png") : QStringLiteral(":/logo/vlc256.png"));
+        cone = cone.scaled(QSize(helpDp(p_intf, 64),helpDp(p_intf, 64)) * devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        cone.setDevicePixelRatio(devicePixelRatioF());
+        ui.VLCcone->setPixmap(cone);
+        ui.VLCcone->setFixedSize(helpDp(p_intf, 64),helpDp(p_intf, 64));
+    };
+    metrics();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, updateText);
+    if (auto *ctx = p_intf->p_mi)
+    {
+        connect(ctx, &MainCtx::intfScaleFactorChanged, this, metrics);
+        const auto links = [this] { colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link)); };
+        connect(ctx, &MainCtx::redesignAccentChanged, this, links);
+        connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, links);
+        connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, links);
+    }
+    QVLCTools::restoreWidgetPosition(p_intf,"About",this,QSize(helpDp(p_intf, 720),helpDp(p_intf, 560)));
+    if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
+    setTabOrder(ui.copyVersionButton, ui.closeButton);
+    // Read-only text shortcuts belong to the dialog, before player shortcuts.
+    for (auto *view : {static_cast<QWidget*>(ui.MainBlabla), static_cast<QWidget*>(ui.authorsPage),
+                      static_cast<QWidget*>(ui.creditPage), static_cast<QWidget*>(ui.licensePage),
+                      static_cast<QWidget*>(ui.version)}) view->installEventFilter(this);
+}
+
+AboutDialog::~AboutDialog()
+{
+    QVLCTools::saveWidgetPosition(p_intf,"About",this);
+}
+
+bool AboutDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent*>(event);
+        const bool copy = key->matches(QKeySequence::Copy);
+        const bool selectAll = key->matches(QKeySequence::SelectAll);
+        if (copy || selectAll)
+        {
+            if (event->type() == QEvent::KeyPress)
+            {
+                if (auto *plain = qobject_cast<QPlainTextEdit*>(watched))
+                {
+                    if (copy) plain->copy(); else plain->selectAll();
+                }
+                else if (auto *rich = qobject_cast<QTextEdit*>(watched))
+                {
+                    if (copy) rich->copy(); else rich->selectAll();
+                }
+                else if (watched == ui.version)
+                {
+                    if (selectAll) ui.version->setSelection(0, ui.version->text().size());
+                    else if (ui.version->hasSelectedText()) QGuiApplication::clipboard()->setText(ui.version->selectedText());
+                }
+            }
+            key->accept();
+            return true;
+        }
+    }
+    return QVLCDialog::eventFilter(watched, event);
+}
+
+void AboutDialog::keyPressEvent(QKeyEvent *event)
+{
+    if (!activateHelpButton(event, focusWidget())) QVLCDialog::keyPressEvent(event);
 }
 
 #ifdef UPDATE_CHECK
