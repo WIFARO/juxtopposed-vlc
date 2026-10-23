@@ -29,6 +29,7 @@
 #include "medialibrary/mlbookmarkmodel.hpp"
 
 #include "player/player_controller.hpp"
+#include "player/series_model.hpp"
 #include "player/player_controlbar_model.hpp"
 #include "player/control_list_model.hpp"
 #include "player/control_list_filter.hpp"
@@ -294,6 +295,7 @@ void MainUI::registerQMLTypes()
         qmlRegisterType<RedesignPreferences>(uri, versionMajor, versionMinor, "RedesignPreferences");
         qmlRegisterType<FirstRunWizard>(uri, versionMajor, versionMinor, "RedesignFirstRunSetup");
         qmlRegisterType<RedesignFolderModel>(uri, versionMajor, versionMinor, "RedesignFolderModel");
+        qmlRegisterType<SeriesModel>(uri, versionMajor, versionMinor, "SeriesModel");
         qmlRegisterType<VLCDialog>( uri, versionMajor, versionMinor, "VLCDialog" );
         assert(VLCDialogModel::getInstance<false>());
         qmlRegisterSingletonInstance<VLCDialogModel>(uri, versionMajor, versionMinor, "VLCDialogModel", VLCDialogModel::getInstance<false>());

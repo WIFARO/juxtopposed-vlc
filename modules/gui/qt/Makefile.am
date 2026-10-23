@@ -312,6 +312,7 @@ libqt_plugin_la_SOURCES = \
 	player/delay_estimator.cpp \
 	player/delay_estimator.hpp \
 	player/player_controller.cpp player/player_controller.hpp player/player_controller_p.hpp \
+	player/series_model.cpp player/series_model.hpp \
 	util/seek_preview_cache.hpp util/seek_preview_image_provider.hpp \
 	util/subtitle_source_service.hpp util/subtitle_source_service.cpp \
 	util/github_release_service.hpp util/github_release_service.cpp \
@@ -549,6 +550,7 @@ nodist_libqt_plugin_la_SOURCES = \
 	util/subtitle_source_service.moc.cpp \
 	util/github_release_service.moc.cpp \
 	player/player_controller.moc.cpp \
+	player/series_model.moc.cpp \
 	player/player_controlbar_model.moc.cpp \
 	player/control_list_model.moc.cpp \
 	player/control_list_filter.moc.cpp \
@@ -2059,6 +2061,17 @@ test_cover_generator_LDADD = $(QT_QTEST_COMMON_ldadd)
 test_cover_generator_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
 check_PROGRAMS += test_cover_generator
 TESTS += test_cover_generator
+
+test_series_model_SOURCES = tests/test_series_model.cpp player/series_model.cpp player/series_model.hpp
+nodist_test_series_model_SOURCES = tests/test_series_model.moc player/series_model.moc.cpp
+BUILT_SOURCES += tests/test_series_model.moc
+CLEANFILES += tests/test_series_model.moc
+test_series_model_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_series_model_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_series_model_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_series_model_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_series_model
+TESTS += test_series_model
 
 test_series_discovery_SOURCES = tests/test_series_discovery.cpp util/series_discovery.hpp
 nodist_test_series_discovery_SOURCES = tests/test_series_discovery.moc

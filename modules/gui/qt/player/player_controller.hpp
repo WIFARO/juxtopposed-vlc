@@ -171,6 +171,7 @@ public:
     Q_PROPERTY(QString artist READ getArtist NOTIFY currentMetaChanged FINAL)
     Q_PROPERTY(QString album READ getAlbum NOTIFY currentMetaChanged FINAL)
     Q_PROPERTY(QUrl artwork READ getArtwork NOTIFY currentMetaChanged FINAL)
+    Q_PROPERTY(QVariantMap seriesContext READ getSeriesContext NOTIFY currentMetaChanged FINAL)
 
     //tracks
     Q_PROPERTY(TrackListModel* videoTracks READ getVideoTracks CONSTANT FINAL)
@@ -324,6 +325,8 @@ public:
     vlc_player_t * getPlayer() const;
 
     input_item_t *getInput() const;
+    QVariantMap getSeriesContext() const;
+    Q_INVOKABLE void playSeriesEpisode(const QUrl& url, bool fromStart = false);
 
     SharedVOutThread getVout();
     VOutThreadList getVouts() const;

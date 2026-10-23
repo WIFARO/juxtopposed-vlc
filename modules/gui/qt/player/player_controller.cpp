@@ -26,6 +26,9 @@
 #include "subtitle_timeline_scanner.hpp"
 #include "audio_waveform_scanner.hpp"
 #include "util/shared_input_item.hpp"
+#include "util/media_identity_vlc.hpp"
+#include "playlist/playlist_controller.hpp"
+#include "playlist/media.hpp"
 #include "util/seek_preview_image_provider.hpp"
 
 #include <vlc_actions.h>           /* ACTION_ID */
@@ -3388,6 +3391,33 @@ PRIMITIVETYPE_GETTER(QString, getArtist, m_artist)
 PRIMITIVETYPE_GETTER(QString, getAlbum, m_album)
 PRIMITIVETYPE_GETTER(QUrl, getArtwork, m_artwork)
 PRIMITIVETYPE_GETTER(QUrl, getUrl, m_url)
+
+QVariantMap PlayerController::getSeriesContext() const
+{
+    auto* item = getInput();
+    if (!item) return {};
+    auto metadata = MediaIdentity::inputMetadata(item);
+    const auto title = vlc::wrap_cptr(input_item_GetTitle(item));
+    const auto description = vlc::wrap_cptr(input_item_GetDescription(item));
+    // Even when the display name is the embedded title, it is useful as long
+    // as it differs from the filename and the show's name.
+    if (title && QString::fromUtf8(title.get()) != getUrl().fileName()
+        && QString::fromUtf8(title.get()) != QFileInfo(getUrl().fileName()).completeBaseName()
+        && QString::fromUtf8(title.get()) != metadata.value("showName").toString()) metadata["episodeTitle"] = QString::fromUtf8(title.get());
+    if (description) metadata["description"] = QString::fromUtf8(description.get());
+    return metadata;
+}
+
+void PlayerController::playSeriesEpisode(const QUrl& url, bool fromStart)
+{
+    Q_D(PlayerController);
+    if (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile()) return;
+    const auto uri = url.toEncoded();
+    const auto item = SharedInputItem(input_item_New(uri.constData(), nullptr), false);
+    if (!item) return;
+    input_item_AddOption(item.get(), fromStart ? "restore-playback-pos=0" : "restore-playback-pos=2", VLC_INPUT_OPTION_TRUSTED);
+    d->p_intf->p_mainPlaylistController->append(QVector<vlc::playlist::Media>{vlc::playlist::Media{item.get()}}, true);
+}
 
 TimedText PlayerController::getCurrentLyric() const
 {
