@@ -27,12 +27,13 @@
 
 #include "plugins.hpp"
 
-#include "widgets/native/searchlineedit.hpp"
 #include "dialogs/extensions/extensions_manager.hpp"
 #include "network/addonsmodel.hpp"
-#include "widgets/native/animators.hpp"
 #include "util/imagehelper.hpp"
-#include "util/colorizedsvgicon.hpp"
+#include "util/redesign_widget_theme.hpp"
+#include "util/interface_translator.hpp"
+#include "util/color_scheme_model.hpp"
+#include "maininterface/mainctx.hpp"
 
 #include <cassert>
 
@@ -62,12 +63,20 @@
 #include <QTextEdit>
 #include <QUrl>
 #include <QMimeData>
-#include <QSplitter>
-#include <QToolButton>
-#include <QStackedWidget>
 #include <QPainterPath>
-#include <QSignalMapper>
-#include <QtQml/QQmlFile>
+#include <QApplication>
+#include <QSignalBlocker>
+#include <QShortcut>
+#include <QResizeEvent>
+#include <QTextCursor>
+#include <QTextBlock>
+#include <QTextFragment>
+#include <QScreen>
+#include <QStyleHints>
+#include <QTextDocument>
+#include <QTextBrowser>
+#include <QScrollBar>
+#include <QScrollArea>
 
 //match the image source (width/height)
 #define SCORE_ICON_WIDTH_SCALE 4
@@ -76,27 +85,177 @@
 static QPixmap *loadPixmapFromData( char *, int size );
 
 
+namespace {
+int pluginDp(qt_intf_t *intf, int n)
+{
+    return qRound(n * (intf->p_mi ? intf->p_mi->getIntfScaleFactor() : 1.));
+}
+QString plainDescription(const QString &text)
+{
+    if (!Qt::mightBeRichText(text)) return text.simplified();
+    QTextDocument document;
+    document.setHtml(text);
+    return document.toPlainText().simplified();
+}
+QVBoxLayout *pluginBody(QVBoxLayout *root)
+{
+    auto *scroll = new QScrollArea(root->parentWidget());
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    auto *body = new QWidget(scroll);
+    auto *layout = new QVBoxLayout(body);
+    layout->setContentsMargins(0, 0, 0, 0);
+    scroll->setWidget(body);
+    root->addWidget(scroll, 1);
+    return layout;
+}
+
+void preservePluginRows(QAbstractItemView *view, qt_intf_t *intf)
+{
+    const auto metrics = [view, intf] { view->setMinimumHeight(pluginDp(intf, 120)); };
+    metrics();
+    if (intf->p_mi) QObject::connect(intf->p_mi, &MainCtx::intfScaleFactorChanged, view, metrics);
+}
+
+class PluginActionRow final : public QWidget
+{
+public:
+    explicit PluginActionRow(QWidget *parent) : QWidget(parent), box(new QBoxLayout(QBoxLayout::LeftToRight, this))
+    {
+        box->setContentsMargins(0, 0, 0, 0);
+    }
+    QBoxLayout *box;
+protected:
+    bool event(QEvent *event) override
+    {
+        const bool result = QWidget::event(event);
+        if (event->type() == QEvent::Resize || event->type() == QEvent::LayoutRequest)
+        {
+            int needed = 0, widgets = 0;
+            for (int i = 0; i < box->count(); ++i)
+                if (auto *widget = box->itemAt(i)->widget())
+                {
+                    needed += widget->sizeHint().width();
+                    widgets++;
+                }
+            needed += qMax(0, widgets - 1) * box->spacing();
+            const auto direction = needed > width() ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+            if (box->direction() != direction) box->setDirection(direction);
+        }
+        return result;
+    }
+};
+class ExtensionSearch final : public QSortFilterProxyModel
+{
+public:
+    using QSortFilterProxyModel::QSortFilterProxyModel;
+    QString query;
+    void search(const QString &text) { query = text.trimmed(); invalidateFilter(); }
+protected:
+    bool filterAcceptsRow(int row, const QModelIndex &parent) const override
+    {
+        const auto index = sourceModel()->index(row, 0, parent);
+        const QString text = index.data().toString() + QLatin1Char(' ')
+            + plainDescription(index.data(ExtensionListModel::SummaryRole).toString())
+            + QLatin1Char(' ') + index.data(ExtensionListModel::AuthorRole).toString()
+            + QLatin1Char(' ') + index.data(ExtensionListModel::FilenameRole).toString();
+        return text.contains(query, Qt::CaseInsensitive);
+    }
+};
+}
+
 PluginDialog::PluginDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
 {
-    setWindowTitle( qtr( "Plugins and extensions" ) );
-    setWindowRole( "vlc-plugins" );
+    setObjectName(QStringLiteral("redesignPlugins"));
+    setProperty("redesignDialog", true);
+    setWindowRole("vlc-plugins");
+    auto *root = new QVBoxLayout(this);
+    auto *heading = new QLabel(this);
+    heading->setProperty("redesignHeading", true);
+    root->addWidget(heading);
+    auto *help = new QLabel(this);
+    help->setWordWrap(true);
+    root->addWidget(help);
+    tabs = new QTabWidget(this);
+    tabs->setObjectName(QStringLiteral("pluginTabs"));
+    tabs->setUsesScrollButtons(true);
+    tabs->setElideMode(Qt::ElideRight);
+    tabs->addTab(addonsTab = new AddonsTab(p_intf), {});
+    tabs->addTab(extensionTab = new ExtensionTab(p_intf), {});
+    tabs->addTab(pluginTab = new PluginTab(p_intf), {});
+    root->addWidget(tabs, 1);
+    auto *footer = new QHBoxLayout;
+    footer->addStretch();
+    auto *close = new QPushButton(this);
+    close->setObjectName(QStringLiteral("pluginsClose"));
+    close->setAutoDefault(false);
+    footer->addWidget(close);
+    root->addLayout(footer);
+    connect(close, &QPushButton::clicked, this, &PluginDialog::close);
+    const auto text = [this, heading, help, close] {
+        setWindowTitle(qtr("Plugins and extensions"));
+        heading->setText(qtr("Plugins and extensions"));
+        help->setText(qtr("Manage add-ons, view local extensions, or find a built-in module."));
+        tabs->setTabText(0, qtr("Add-ons"));
+        tabs->setTabText(1, qtr("Local extensions"));
+        tabs->setTabText(2, qtr("Built-in modules"));
+        for (int i = 0; i < tabs->count(); ++i) tabs->setTabToolTip(i, tabs->tabText(i));
+        close->setText(qtr("&Close"));
+    };
+    text();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, text);
+    applyRedesignWidgetTheme(this, p_intf->p_mi);
+    const auto metrics = [this, root] {
+        const int margin = pluginDp(p_intf, 24);
+        root->setContentsMargins(margin, margin, margin, margin);
+        root->setSpacing(pluginDp(p_intf, 12));
+        const auto available = screen() ? screen()->availableGeometry().size() : QSize(1280, 720);
+        setMinimumSize(QSize(pluginDp(p_intf, 400), pluginDp(p_intf, 460)).boundedTo(available));
+    };
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, metrics);
+    metrics();
+    restoreWidgetPosition("PluginsDialog", QSize(pluginDp(p_intf, 740), pluginDp(p_intf, 620)));
+    if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
+    for (auto *child : findChildren<QWidget*>()) child->installEventFilter(this);
+}
 
-    QVBoxLayout *layout = new QVBoxLayout( this );
-    tabs = new QTabWidget( this );
-    tabs->addTab( addonsTab = new AddonsTab( p_intf ),
-                  qtr( "Addons Manager" ) );
-    tabs->addTab( extensionTab = new ExtensionTab( p_intf ),
-                  qtr( "Active Extensions" ) );
-    tabs->addTab( pluginTab = new PluginTab( p_intf ),
-                  qtr( "Plugins" ) );
-    layout->addWidget( tabs );
+QLineEdit *PluginDialog::activeSearch() const
+{
+    auto *current = tabs->currentWidget();
+    return current ? current->findChild<QLineEdit*>(QStringLiteral("pluginSearch")) : nullptr;
+}
 
-    QDialogButtonBox *box = new QDialogButtonBox;
-    QPushButton *okButton = new QPushButton( qtr( "&Close" ), this );
-    box->addButton( okButton, QDialogButtonBox::RejectRole );
-    layout->addWidget( box );
-    BUTTONACT( okButton, &PluginDialog::close );
-    restoreWidgetPosition( "PluginsDialog", QSize( 435, 280 ) );
+bool PluginDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent*>(event);
+        auto *search = activeSearch();
+        const bool find = key->matches(QKeySequence::Find);
+        auto *button = qobject_cast<QPushButton*>(watched);
+        const bool activate = button && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter);
+        const bool clear = watched == search && key->key() == Qt::Key_Escape && search && !search->text().isEmpty();
+        if ((search && (find || clear)) || activate)
+        {
+            if (event->type() == QEvent::KeyPress)
+            {
+                if (activate) button->click();
+                else if (find) { search->setFocus(); search->selectAll(); }
+                else search->clear();
+            }
+            key->accept();
+            return true;
+        }
+    }
+    return QVLCFrame::eventFilter(watched, event);
+}
+
+void PluginDialog::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape) { close(); event->accept(); }
+    else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) event->accept();
+    else QVLCFrame::keyPressEvent(event);
 }
 
 PluginDialog::~PluginDialog()
@@ -109,46 +268,44 @@ PluginDialog::~PluginDialog()
 
 /* Plugins tab */
 
-PluginTab::PluginTab( qt_intf_t *p_intf_ )
-        : QVLCFrame( p_intf_ )
+PluginTab::PluginTab(qt_intf_t *intf) : QVLCFrame(intf)
 {
-    QGridLayout *layout = new QGridLayout( this );
-
-    /* Main Tree for modules */
-    treePlugins = new QTreeWidget;
-    layout->addWidget( treePlugins, 0, 0, 1, -1 );
-
-    /* Users cannot move the columns around but we need to sort */
-    treePlugins->header()->setSectionsMovable( false );
-    treePlugins->header()->setSortIndicatorShown( true );
-    //    treePlugins->header()->setResizeMode( QHeaderView::ResizeToContents );
-    treePlugins->setAlternatingRowColors( true );
-    treePlugins->setColumnWidth( 0, 200 );
-
-    QStringList headerNames;
-    headerNames << qtr("Name") << qtr("Capability" ) << qtr( "Score" );
-    treePlugins->setHeaderLabels( headerNames );
-
+    auto *outer = new QVBoxLayout(this);
+    auto *root = pluginBody(outer);
+    edit = new QLineEdit(this);
+    edit->setObjectName(QStringLiteral("pluginSearch"));
+    edit->setClearButtonEnabled(true);
+    root->addWidget(edit);
+    treePlugins = new QTreeWidget(this);
+    treePlugins->setObjectName(QStringLiteral("builtInModules"));
+    preservePluginRows(treePlugins, p_intf);
+    treePlugins->setRootIsDecorated(false);
+    treePlugins->setAlternatingRowColors(true);
+    treePlugins->setSelectionMode(QAbstractItemView::SingleSelection);
+    treePlugins->header()->setSectionsMovable(false);
+    treePlugins->header()->setSortIndicatorShown(true);
+    treePlugins->setColumnCount(3);
     FillTree();
-
-    /* Set capability column to the correct Size*/
-    treePlugins->resizeColumnToContents( 1 );
-    treePlugins->header()->restoreState(
-            getSettings()->value( "Plugins/Header-State" ).toByteArray() );
-
-    treePlugins->setSortingEnabled( true );
-    treePlugins->sortByColumn( 1, Qt::AscendingOrder );
-
-    QLabel *label = new QLabel( qtr("&Search:"), this );
-    edit = new SearchLineEdit( this );
-    label->setBuddy( edit );
-
-    layout->addWidget( label, 1, 0 );
-    layout->addWidget( edit, 1, 1, 1, 1 );
-    connect( edit, &SearchLineEdit::textChanged, this, &PluginTab::search );
-
-    setMinimumSize( 500, 300 );
-    restoreWidgetPosition( "Plugins", QSize( 540, 400 ) );
+    treePlugins->setSortingEnabled(true);
+    treePlugins->sortByColumn(CAPABILITY, Qt::AscendingOrder);
+    treePlugins->header()->setSectionResizeMode(NAME, QHeaderView::Stretch);
+    treePlugins->header()->setSectionResizeMode(CAPABILITY, QHeaderView::ResizeToContents);
+    treePlugins->header()->setSectionResizeMode(SCORE, QHeaderView::ResizeToContents);
+    root->addWidget(treePlugins, 1);
+    searchInfo = new QLabel(this);
+    searchInfo->setObjectName(QStringLiteral("pluginSearchInfo"));
+    searchInfo->setWordWrap(true);
+    root->addWidget(searchInfo);
+    connect(edit, &QLineEdit::textChanged, this, &PluginTab::search);
+    const auto text = [this] {
+        edit->setPlaceholderText(qtr("Search names or capabilities"));
+        edit->setAccessibleName(qtr("Search built-in modules"));
+        treePlugins->setHeaderLabels({qtr("Name"), qtr("Capability"), qtr("Score")});
+        search(edit->text());
+    };
+    text();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, text);
 }
 
 inline void PluginTab::FillTree()
@@ -169,30 +326,30 @@ inline void PluginTab::FillTree()
 #endif
 
         QTreeWidgetItem *item = new PluginTreeItem( qs_item );
+        item->setToolTip(NAME, qs_item.join(QStringLiteral("\n")));
+        item->setTextAlignment(SCORE, Qt::AlignRight | Qt::AlignVCenter);
         treePlugins->addTopLevelItem( item );
     }
     module_list_free( p_list );
 }
 
-void PluginTab::search( const QString& qs )
+void PluginTab::search(const QString &query)
 {
-    QList<QTreeWidgetItem *> items = treePlugins->findItems( qs, Qt::MatchContains );
-    items += treePlugins->findItems( qs, Qt::MatchContains, 1 );
-
-    QTreeWidgetItem *item = NULL;
-    for( int i = 0; i < treePlugins->topLevelItemCount(); i++ )
+    int visible = 0;
+    for (int row = 0; row < treePlugins->topLevelItemCount(); ++row)
     {
-        item = treePlugins->topLevelItem( i );
-        item->setHidden( !items.contains( item ) );
+        auto *item = treePlugins->topLevelItem(row);
+        const bool match = item->text(NAME).contains(query.trimmed(), Qt::CaseInsensitive)
+            || item->text(CAPABILITY).contains(query.trimmed(), Qt::CaseInsensitive);
+        item->setHidden(!match);
+        if (!match && item->isSelected()) item->setSelected(false);
+        visible += match;
     }
+    searchInfo->setText(visible ? qtr("%1 / %2 modules").arg(visible).arg(treePlugins->topLevelItemCount())
+                               : qtr("No modules match your search."));
 }
 
-PluginTab::~PluginTab()
-{
-    saveWidgetPosition( "Plugins" );
-    getSettings()->setValue( "Plugins/Header-State",
-                             treePlugins->header()->saveState() );
-}
+PluginTab::~PluginTab() = default;
 
 void PluginTab::keyPressEvent( QKeyEvent *keyEvent )
 {
@@ -219,389 +376,286 @@ bool PluginTreeItem::operator< ( const QTreeWidgetItem & other ) const
 }
 
 /* Extensions tab */
-ExtensionTab::ExtensionTab( qt_intf_t *p_intf_ )
-        : QVLCFrame( p_intf_ )
+ExtensionTab::ExtensionTab(qt_intf_t *intf) : QVLCFrame(intf)
 {
-    // Layout
-    QVBoxLayout *layout = new QVBoxLayout( this );
-
-    // ListView
-    extList = new QListView( this );
-    connect( extList, &QListView::activated, this, &ExtensionTab::moreInformation );
-    layout->addWidget( extList );
-
-    // List item delegate
-    ExtensionItemDelegate *itemDelegate = new ExtensionItemDelegate( extList );
-    extList->setItemDelegate( itemDelegate );
-
-    // Extension list look & feeling
-    extList->setAlternatingRowColors( true );
-    extList->setSelectionMode( QAbstractItemView::SingleSelection );
-
-    // Model
-    ExtensionListModel *model =
-      new ExtensionListModel( extList, ExtensionsManager::getInstance( p_intf ) );
-    extList->setModel( model );
-
-    // Buttons' layout
-    QDialogButtonBox *buttonsBox = new QDialogButtonBox;
-
-    // More information button
-    butMoreInfo = new QPushButton( QIcon( ":/menu/info.svg" ),
-                                   qtr( "More information..." ),
-                                   this );
-    connect( butMoreInfo, &QPushButton::clicked, this, &ExtensionTab::moreInformation );
-    buttonsBox->addButton( butMoreInfo, QDialogButtonBox::ActionRole );
-
-    // Reload button
-    ExtensionsManager *EM = ExtensionsManager::getInstance( p_intf );
-    QPushButton *reload = new QPushButton( QIcon( ":/menu/update.svg" ),
-                                           qtr( "Reload extensions" ),
-                                           this );
-    connect( reload, &QPushButton::clicked, [this, EM](){
-        extList->clearSelection();
-        EM->reloadExtensions();
+    auto *outer = new QVBoxLayout(this);
+    auto *root = pluginBody(outer);
+    searchInput = new QLineEdit(this);
+    searchInput->setObjectName(QStringLiteral("pluginSearch"));
+    searchInput->setClearButtonEnabled(true);
+    root->addWidget(searchInput);
+    extList = new QListView(this);
+    extList->setObjectName(QStringLiteral("localExtensions"));
+    preservePluginRows(extList, p_intf);
+    extList->setItemDelegate(new ExtensionItemDelegate(extList));
+    extList->setAlternatingRowColors(true);
+    extList->setSelectionMode(QAbstractItemView::SingleSelection);
+    extList->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    root->addWidget(extList, 1);
+    listInfo = new QLabel(this);
+    listInfo->setObjectName(QStringLiteral("extensionListInfo"));
+    listInfo->setWordWrap(true);
+    outer->addWidget(listInfo);
+    auto *proxy = new ExtensionSearch(this);
+    proxy->setSourceModel(new ExtensionListModel(proxy, ExtensionsManager::getInstance(p_intf)));
+    extList->setModel(proxy);
+    connect(searchInput, &QLineEdit::textChanged, this, [this, proxy](const QString &text) {
+        proxy->search(text);
+        updateButtons();
     });
-    connect( reload, &QPushButton::clicked, this, &ExtensionTab::updateButtons );
-    connect( extList->selectionModel(), &QItemSelectionModel::selectionChanged,
-             this, &ExtensionTab::updateButtons );
-    buttonsBox->addButton( reload, QDialogButtonBox::ResetRole );
-
-    layout->addWidget( buttonsBox );
-    updateButtons();
+    auto *actions = new PluginActionRow(this);
+    auto *buttons = actions->box;
+    auto *reload = new QPushButton(this);
+    reload->setObjectName(QStringLiteral("extensionsReload"));
+    butMoreInfo = new QPushButton(this);
+    butMoreInfo->setObjectName(QStringLiteral("extensionInfo"));
+    for (auto *button : {reload, butMoreInfo}) button->setAutoDefault(false);
+    buttons->addWidget(reload);
+    buttons->addStretch();
+    buttons->addWidget(butMoreInfo);
+    outer->addWidget(actions);
+    connect(reload, &QPushButton::clicked, this, [this] {
+        ExtensionsManager::getInstance(p_intf)->reloadExtensions();
+        updateButtons();
+    });
+    connect(butMoreInfo, &QPushButton::clicked, this, &ExtensionTab::moreInformation);
+    connect(extList, &QListView::activated, this, &ExtensionTab::moreInformation);
+    connect(extList->selectionModel(), &QItemSelectionModel::selectionChanged, this, &ExtensionTab::updateButtons);
+    connect(proxy, &QAbstractItemModel::modelReset, this, &ExtensionTab::updateButtons);
+    const auto text = [this, reload] {
+        searchInput->setPlaceholderText(qtr("Search local extensions"));
+        searchInput->setAccessibleName(qtr("Search local extensions"));
+        reload->setText(qtr("Reload"));
+        reload->setToolTip(qtr("Reload local extension files. This closes active extensions."));
+        butMoreInfo->setText(qtr("More information"));
+        updateButtons();
+    };
+    text();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, text);
 }
 
-ExtensionTab::~ExtensionTab()
-{
-}
+ExtensionTab::~ExtensionTab() = default;
 
 void ExtensionTab::updateButtons()
 {
-    butMoreInfo->setEnabled( extList->selectionModel()->hasSelection() );
+    butMoreInfo->setEnabled(extList->currentIndex().isValid() && extList->selectionModel()->hasSelection());
+    if (extList->model()->rowCount() > 0) listInfo->setText(extList->model()->rowCount() == 1 ? qtr("1 extension") : qtr("%1 extensions").arg(extList->model()->rowCount()));
+    else if (!searchInput->text().trimmed().isEmpty()) listInfo->setText(qtr("No extensions match your search."));
+    else if (ExtensionsManager::getInstance(p_intf)->cannotLoad()) listInfo->setText(qtr("VLC cannot load local extensions in this build."));
+    else listInfo->setText(qtr("No local extensions were found."));
 }
 
-// Do not close on ESC or ENTER
-void ExtensionTab::keyPressEvent( QKeyEvent *keyEvent )
+void ExtensionTab::keyPressEvent(QKeyEvent *event)
 {
-    if( keyEvent->key() == Qt::Key_Return ||
-        keyEvent->key() == Qt::Key_Enter )
-        keyEvent->accept();
-    else
-        keyEvent->ignore();
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) event->accept();
+    else event->ignore();
 }
 
-// Show more information
 void ExtensionTab::moreInformation()
 {
-    QModelIndex index = extList->selectionModel()->selectedIndexes().first();
-
-    if( !index.isValid() )
-        return;
-
-    QWidget* windowWidget = window();
-    QWindow* parentWindow = windowWidget ? windowWidget->windowHandle() : nullptr;
-    ExtensionInfoDialog dlg( index, p_intf, parentWindow );
-    dlg.exec();
+    const auto selected = extList->selectionModel()->selectedIndexes();
+    if (selected.isEmpty()) return;
+    QWidget *owner = window();
+    ExtensionInfoDialog dialog(selected.first(), p_intf, owner ? owner->windowHandle() : nullptr);
+    dialog.exec();
 }
 
 /* Add-ons tab */
-AddonsTab::AddonsTab( qt_intf_t *p_intf_ ) : QVLCFrame( p_intf_ )
+AddonsTab::AddonsTab(qt_intf_t *intf) : QVLCFrame(intf)
 {
-    b_localdone = false;
-    QSplitter *splitter = new QSplitter( this );
-    setLayout( new QHBoxLayout() );
-    layout()->addWidget( splitter );
-
-    QWidget *leftPane = new QWidget();
-    splitter->addWidget( leftPane );
-    leftPane->setLayout( new QVBoxLayout() );
-
-    QWidget *rightPane = new QWidget();
-    splitter->addWidget( rightPane );
-
-    splitter->setCollapsible( 0, false );
-    splitter->setCollapsible( 1, false );
-    splitter->setSizeIncrement( 32, 1 );
-
-    // Layout
-    QVBoxLayout *layout = new QVBoxLayout( rightPane );
-
-    // Left Pane
-    leftPane->layout()->setContentsMargins(0, 0, 0, 0);
-    leftPane->layout()->setSpacing(0);
-
-    SearchLineEdit *searchInput = new SearchLineEdit();
-    leftPane->layout()->addWidget( searchInput );
-    leftPane->layout()->addItem( new QSpacerItem( 0, 10 ) );
-
-    signalMapper = new QSignalMapper();
-
-    auto addCategory = [this, leftPane]( const QString& label, const QString& ltooltip,  AddonsModel::Type type) {
-        if (!AddonsModel::isTypeVisible(type))
-            return;
-        auto button = new QToolButton( this );
-
-        QString iconpath = QQmlFile::urlToLocalFileOrQrc(AddonsModel::getIconForType( type ));
-        button->setIcon( QIcon{ iconpath } );
-        button->setText( label );
-        button->setToolTip( ltooltip );
-        button->setToolButtonStyle( Qt::ToolButtonTextBesideIcon );
-        button->setIconSize( QSize( 32, 32 ) );
-        button->setSizePolicy(QSizePolicy::MinimumExpanding,QSizePolicy::Maximum) ;
-        button->setMinimumSize( 32, 32 );
-        button->setAutoRaise( true );
-        button->setCheckable( true );
-        if ( type == AddonsModel::Type::TYPE_NONE )
-            button->setChecked( true );
-        button->setAutoExclusive( true );
-        connect( button, &QToolButton::clicked, signalMapper, QOverload<>::of(&QSignalMapper::map) );
-        signalMapper->setMapping( button, static_cast<int>(type) );
-        leftPane->layout()->addWidget( button );
-    };
-
-    addCategory( qtr("All"), qtr("Interface Settings"),
-                  AddonsModel::Type::TYPE_NONE );
-    addCategory( qtr("Skins"),
-                  qtr( "Skins customize player's appearance."
-                       " You can activate them through preferences." ),
-                  AddonsModel::Type::TYPE_SKIN2 );
-    addCategory( qtr("Playlist parsers"),
-                  qtr( "Playlist parsers add new capabilities to read"
-                       " internet streams or extract meta data." ),
-                  AddonsModel::Type::TYPE_PLAYLIST_PARSER );
-    addCategory( qtr("Service Discovery"),
-                  qtr( "Service discoveries adds new sources to your play queue"
-                       " such as web radios, video websites, ..." ),
-                  AddonsModel::Type::TYPE_SERVICE_DISCOVERY );
-    addCategory( qtr("Interfaces"),
-                  "",
-                  AddonsModel::Type::TYPE_INTERFACE );
-    addCategory( qtr("Art and meta fetchers"),
-                  qtr( "Retrieves extra info and art for play queue items" ),
-                  AddonsModel::Type::TYPE_META );
-    addCategory( qtr("Extensions"),
-                  qtr( "Extensions brings various enhancements."
-                       " Check descriptions for more details" ),
-                  AddonsModel::Type::TYPE_EXTENSION );
-
-    // Right Pane
-    rightPane->layout()->setContentsMargins(0, 0, 0, 0);
-    rightPane->layout()->setSpacing(0);
-
-    // Splitter sizes init
-    QList<int> sizes;
-    int width = leftPane->sizeHint().width();
-    sizes << width << size().width() - width;
-    splitter->setSizes( sizes );
-
-    // Filters
-    leftPane->layout()->addItem( new QSpacerItem( 0, 30 ) );
-
-    QStackedWidget *switchStack = new QStackedWidget();
-    switchStack->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Maximum );
-    leftPane->layout()->addWidget( switchStack );
-
-    QCheckBox *installedOnlyBox = new QCheckBox( qtr("Only installed") );
-    installedOnlyBox->setSizePolicy( QSizePolicy::Ignored, QSizePolicy::Preferred );
-    switchStack->insertWidget( WITHONLINEADDONS, installedOnlyBox );
-    connect( installedOnlyBox, &QtCheckboxChanged, this, &AddonsTab::installChecked );
-
-    // Model
-    m_model = std::make_unique<AddonsModel>( );
-    //model expect QMLlike behavior
+    auto *outer = new QVBoxLayout(this);
+    auto *root = pluginBody(outer);
+    searchInput = new QLineEdit(this);
+    searchInput->setObjectName(QStringLiteral("pluginSearch"));
+    searchInput->setClearButtonEnabled(true);
+    root->addWidget(searchInput);
+    category = new QComboBox(this);
+    category->setObjectName(QStringLiteral("addonCategory"));
+    root->addWidget(category);
+    installedOnly = new QCheckBox(this);
+    installedOnly->setObjectName(QStringLiteral("addonsInstalledOnly"));
+    root->addWidget(installedOnly);
+    loadingIndicator = new QProgressBar(this);
+    loadingIndicator->setRange(0, 0);
+    loadingIndicator->setTextVisible(false);
+    loadingIndicator->setMaximumHeight(pluginDp(p_intf, 4));
+    root->addWidget(loadingIndicator);
+    m_model = std::make_unique<AddonsModel>(this);
+    m_model->setObjectName(QStringLiteral("nativeAddonsModel"));
     m_model->classBegin();
     m_model->setCtx(p_intf->p_mi);
-    connect( signalMapper, &QSignalMapper::mappedInt,
-            m_model.get(), [model = m_model.get()](int mapped){
-                model->setTypeFilter(static_cast<AddonsModel::Type>(mapped));
-            });
-
-    connect( searchInput, &SearchLineEdit::textChanged,
-            m_model.get(), &AddonsModel::setSearchPattern );
-
-
-    // Update button
-    QPushButton *reposyncButton = new QPushButton( QIcon( ":/menu/update.svg" ),
-                                              qtr("Find more addons online") );
-    reposyncButton->setSizePolicy( QSizePolicy::Ignored, QSizePolicy::Preferred );
-    switchStack->insertWidget( ONLYLOCALADDONS, reposyncButton );
-    switchStack->setCurrentIndex( ONLYLOCALADDONS );
-    connect( reposyncButton, &QPushButton::clicked, this, &AddonsTab::reposync );
-    connect(
-        m_model.get(), &AddonsModel::loadingChanged,
-        this, [this]() {
-            if ( !m_model->loading()) {
-                spinnerAnimation->stop();
-                addonsView->viewport()->update();
-            }
-        });
-
-    leftPane->layout()->addItem( new QSpacerItem( 0, 0, QSizePolicy::Maximum, QSizePolicy::Expanding ) );
-
-    // Main View
-
-    // ListView
-    addonsView = new QListView( this );
+    addonsView = new QListView(this);
+    addonsView->setObjectName(QStringLiteral("nativeAddonsList"));
+    preservePluginRows(addonsView, p_intf);
     addonsView->setModel(m_model.get());
-
-    connect( addonsView, &QListView::activated, this, &AddonsTab::moreInformation );
-    layout->addWidget( addonsView );
-
-    // List item delegate
-    AddonItemDelegate *addonsDelegate = new AddonItemDelegate( addonsView );
-    addonsView->setItemDelegate( addonsDelegate );
-    addonsDelegate->setAnimator( new DelegateAnimationHelper( addonsView ) );
-    connect( addonsDelegate, &AddonItemDelegate::showInfo, this, &AddonsTab::moreInformation );
-
-    // Extension list look & feeling
-    addonsView->setAlternatingRowColors( true );
-    addonsView->setSelectionMode( QAbstractItemView::SingleSelection );
-
-    // Drop packages
-    addonsView->setAcceptDrops( true );
-    addonsView->setDefaultDropAction( Qt::CopyAction );
-    addonsView->setDropIndicatorShown( true );
-    addonsView->setDragDropMode( QAbstractItemView::DropOnly );
-
-    connect( addonsView->selectionModel(), &QItemSelectionModel::currentChanged,
-             addonsView, QOverload<const QModelIndex&>::of(&QListView::edit) );
-
-
-    QList<QString> frames;
-    frames << ":/misc/wait1.svg";
-    frames << ":/misc/wait2.svg";
-    frames << ":/misc/wait3.svg";
-    frames << ":/misc/wait4.svg";
-    spinnerAnimation = new PixmapAnimator( this, std::move(frames), SPINNER_SIZE, SPINNER_SIZE );
-    connect( spinnerAnimation, &PixmapAnimator::pixmapReady,
-             addonsView->viewport(), QOverload<>::of(&QWidget::update) );
-    addonsView->viewport()->installEventFilter( this );
-
-    //model expect QMLlike behavior
+    addonsView->setItemDelegate(new AddonItemDelegate(addonsView));
+    addonsView->setAlternatingRowColors(true);
+    addonsView->setSelectionMode(QAbstractItemView::SingleSelection);
+    addonsView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    addonsView->setAcceptDrops(true);
+    addonsView->setDefaultDropAction(Qt::CopyAction);
+    addonsView->setDragDropMode(QAbstractItemView::DropOnly);
+    addonsView->viewport()->installEventFilter(this);
+    root->addWidget(addonsView, 1);
+    listInfo = new QLabel(this);
+    listInfo->setObjectName(QStringLiteral("addonsListInfo"));
+    listInfo->setWordWrap(true);
+    outer->addWidget(listInfo);
+    auto *actions = new PluginActionRow(this);
+    auto *buttons = actions->box;
+    repositoryButton = new QPushButton(this);
+    repositoryButton->setObjectName(QStringLiteral("addonsFindOnline"));
+    infoButton = new QPushButton(this);
+    infoButton->setObjectName(QStringLiteral("addonInfo"));
+    manageButton = new QPushButton(this);
+    manageButton->setObjectName(QStringLiteral("addonManage"));
+    manageButton->setProperty("redesignPrimary", true);
+    for (auto *button : {repositoryButton, infoButton, manageButton}) button->setAutoDefault(false);
+    buttons->addWidget(repositoryButton);
+    buttons->addStretch();
+    buttons->addWidget(infoButton);
+    buttons->addWidget(manageButton);
+    outer->addWidget(actions);
+    connect(repositoryButton, &QPushButton::clicked, this, &AddonsTab::reposync);
+    connect(infoButton, &QPushButton::clicked, this, &AddonsTab::moreInformation);
+    connect(addonsView, &QListView::activated, this, &AddonsTab::moreInformation);
+    connect(manageButton, &QPushButton::clicked, this, [this] {
+        const auto index = addonsView->currentIndex();
+        if (!manageButton->isEnabled() || !index.isValid()) return;
+        const auto id = index.data(AddonsModel::IDENTIFIER).toString();
+        if (index.data(AddonsModel::STATE).toInt() == int(AddonsModel::State::STATE_INSTALLED)) m_model->removeAddon(id);
+        else m_model->installAddon(id);
+        updateControls();
+    });
+    connect(searchInput, &QLineEdit::textChanged, this, [this](const QString &text) {
+        m_model->setSearchPattern(text);
+        updateControls();
+    });
+    connect(category, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] {
+        m_model->setTypeFilter(static_cast<AddonsModel::Type>(category->currentData().toInt()));
+        updateControls();
+    });
+    connect(installedOnly, &QtCheckboxChanged, this, &AddonsTab::installChecked);
+    connect(addonsView->selectionModel(), &QItemSelectionModel::selectionChanged, this, &AddonsTab::updateControls);
+    connect(m_model.get(), &AddonsModel::catalogChanged, this, &AddonsTab::updateControls);
+    connect(m_model.get(), &AddonsModel::loadingChanged, this, &AddonsTab::updateControls);
+    connect(m_model.get(), &AddonsModel::countChanged, this, &AddonsTab::updateControls);
+    connect(m_model.get(), &QAbstractItemModel::modelAboutToBeReset, this, [this] {
+        const auto id = addonsView->currentIndex().data(AddonsModel::IDENTIFIER).toString();
+        if (!id.isEmpty()) restoreSelectionId = id;
+    });
+    connect(m_model.get(), &QAbstractItemModel::modelReset, this, &AddonsTab::updateControls);
+    connect(m_model.get(), &QAbstractItemModel::dataChanged, this, &AddonsTab::updateControls);
+    connect(m_model.get(), &QAbstractItemModel::rowsInserted, this, &AddonsTab::updateControls);
+    connect(m_model.get(), &QAbstractItemModel::rowsRemoved, this, &AddonsTab::updateControls);
+    const auto text = [this] {
+        searchInput->setPlaceholderText(qtr("Search add-ons"));
+        searchInput->setAccessibleName(qtr("Search add-ons"));
+        category->setAccessibleName(qtr("Add-on type"));
+        const QSignalBlocker blocked(category);
+        const int type = category->currentIndex() < 0 ? int(AddonsModel::Type::TYPE_NONE) : category->currentData().toInt();
+        category->clear();
+        category->addItem(qtr("All types"), int(AddonsModel::Type::TYPE_NONE));
+        for (auto type : {AddonsModel::Type::TYPE_EXTENSION, AddonsModel::Type::TYPE_SKIN2,
+             AddonsModel::Type::TYPE_PLAYLIST_PARSER, AddonsModel::Type::TYPE_SERVICE_DISCOVERY,
+             AddonsModel::Type::TYPE_INTERFACE, AddonsModel::Type::TYPE_META})
+            if (AddonsModel::isTypeVisible(type)) category->addItem(AddonsModel::getLabelForType(type), int(type));
+        category->setCurrentIndex(qMax(0, category->findData(type)));
+        installedOnly->setText(qtr("Only installed"));
+        updateControls();
+    };
+    text();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, text);
     m_model->componentComplete();
+    updateControls();
 }
 
-AddonsTab::~AddonsTab()
+AddonsTab::~AddonsTab() = default;
+
+void AddonsTab::updateControls()
 {
-    delete spinnerAnimation;
-    delete signalMapper;
+    if (!restoreSelectionId.isEmpty() && !addonsView->currentIndex().isValid())
+        for (int row = 0; row < m_model->rowCount(); ++row)
+        {
+            const auto candidate = m_model->index(row, 0);
+            if (candidate.data(AddonsModel::IDENTIFIER).toString() == restoreSelectionId)
+            {
+                restoreSelectionId.clear();
+                addonsView->setCurrentIndex(candidate);
+                break;
+            }
+        }
+    const auto index = addonsView->currentIndex();
+    const bool selected = index.isValid() && addonsView->selectionModel()->hasSelection();
+    const auto state = static_cast<AddonsModel::State>(index.data(AddonsModel::STATE).toInt());
+    const auto details = selected ? m_model->addonById(index.data(AddonsModel::IDENTIFIER).toString()) : QVariantMap{};
+    const bool busy = details.value(QStringLiteral("pending")).toBool()
+        || state == AddonsModel::State::STATE_INSTALLING || state == AddonsModel::State::STATE_UNINSTALLING;
+    const bool installed = state == AddonsModel::State::STATE_INSTALLED;
+    manageButton->setText(busy ? (installed || state == AddonsModel::State::STATE_UNINSTALLING ? qtr("Removing...") : qtr("Installing..."))
+                               : (installed ? qtr("Remove") : qtr("Install")));
+    manageButton->setEnabled(selected && !busy && index.data(AddonsModel::MANAGEABLE).toBool()
+        && (installed || !index.data(AddonsModel::BROKEN).toBool()));
+    infoButton->setText(qtr("More information"));
+    infoButton->setEnabled(selected);
+    repositoryButton->setText(onlineCatalogRequested ? qtr("Refresh") : qtr("Find online"));
+    repositoryButton->setEnabled(!m_model->loading());
+    loadingIndicator->setVisible(m_model->loading());
+    if (!m_model->errorMessage().isEmpty()) listInfo->setText(m_model->errorMessage());
+    else if (m_model->loading()) listInfo->setText(qtr("Loading add-ons..."));
+    else if (m_model->rowCount()) listInfo->setText(m_model->rowCount() == 1 ? qtr("1 add-on") : qtr("%1 add-ons").arg(m_model->rowCount()));
+    else if (!searchInput->text().trimmed().isEmpty() || category->currentData().toInt() != int(AddonsModel::Type::TYPE_NONE) || installedOnly->isChecked())
+        listInfo->setText(qtr("No add-ons match your filters."));
+    else if (onlineCatalogRequested) listInfo->setText(qtr("No add-ons were found."));
+    else listInfo->setText(qtr("No local add-ons were found. Select Find online to load the add-on list."));
 }
 
-// Do not close on ESC or ENTER
-void AddonsTab::keyPressEvent( QKeyEvent *keyEvent )
+void AddonsTab::keyPressEvent(QKeyEvent *event)
 {
-    if( keyEvent->key() == Qt::Key_Return ||
-        keyEvent->key() == Qt::Key_Enter )
-        keyEvent->accept();
-    else
-        keyEvent->ignore();
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) event->accept();
+    else event->ignore();
 }
 
-bool AddonsTab::eventFilter( QObject *obj, QEvent *event )
+bool AddonsTab::eventFilter(QObject *object, QEvent *event)
 {
-    if ( obj != addonsView->viewport() )
-        return false;
-
-    switch( event->type() )
+    if (object != addonsView->viewport()) return false;
+    if (event->type() == QEvent::DragEnter || event->type() == QEvent::DragMove || event->type() == QEvent::Drop)
     {
-    case QEvent::Paint:
-        if ( spinnerAnimation->state() == PixmapAnimator::Running )
-        {
-            QWidget *viewport = qobject_cast<QWidget *>( obj );
-            if ( !viewport ) break;
-            QStylePainter painter( viewport );
-            const QPixmap& spinner = spinnerAnimation->getPixmap();
-            QPoint point = viewport->geometry().center();
-            point -= QPoint( spinner.width() / 2, spinner.height() / 2 );
-            painter.drawPixmap( point, spinner );
-            QString text = qtr("Retrieving addons...");
-            QSize textsize = fontMetrics().size( 0, text );
-            point = viewport->geometry().center();
-            point -= QPoint( textsize.width() / 2, -spinner.height() );
-            painter.drawText( point, text );
-        }
-        else if ( m_model->rowCount() == 0 )
-        {
-            QWidget *viewport = qobject_cast<QWidget *>( obj );
-            if ( !viewport ) break;
-            QStylePainter painter( viewport );
-            QString text = qtr("No addons found");
-            QSize size = fontMetrics().size( 0, text );
-            QPoint point = viewport->geometry().center();
-            point -= QPoint( size.width() / 2, size.height() / 2 );
-            painter.drawText( point, text );
-        }
-        break;
-    case QEvent::DragEnter:
-    {
-        QDragEnterEvent *dragEvent = static_cast<QDragEnterEvent *>(event);
-        if ( !dragEvent ) break;
-        QList<QUrl> urls = dragEvent->mimeData()->urls();
-        if ( dragEvent->proposedAction() != Qt::CopyAction
-          || urls.count() != 1
-          || urls.first().scheme() != "file"
-          || ! urls.first().path().endsWith(".vlp") )
-            return false;
-        dragEvent->acceptProposedAction();
+        auto *drop = static_cast<QDropEvent*>(event);
+        const auto urls = drop->mimeData()->urls();
+        const bool valid = drop->proposedAction() == Qt::CopyAction && urls.size() == 1
+            && urls.first().isLocalFile() && urls.first().path().endsWith(QLatin1String(".vlp"), Qt::CaseInsensitive);
+        if (!valid) { drop->ignore(); return true; }
+        if (event->type() == QEvent::Drop) m_model->loadFromExternalRepository(urls.first());
+        drop->acceptProposedAction();
         return true;
     }
-    case QEvent::DragMove:
-    {
-        QDragMoveEvent *moveEvent = static_cast<QDragMoveEvent *>(event);
-        if ( !moveEvent ) break;
-        if ( moveEvent->proposedAction() != Qt::CopyAction )
-            return false;
-        moveEvent->acceptProposedAction();
-        return true;
-    }
-    case QEvent::Drop:
-    {
-        QDropEvent *dropEvent = static_cast<QDropEvent *>(event);
-        if ( !dropEvent ) break;
-        if ( dropEvent->proposedAction() != Qt::CopyAction )
-            return false;
-        if ( dropEvent->mimeData()->urls().count() )
-        {
-            m_model->loadFromExternalRepository(dropEvent->mimeData()->urls().first());
-            dropEvent->acceptProposedAction();
-        }
-        return true;
-    }
-    default:
-        break;
-    }
-    return false;
+    return QVLCFrame::eventFilter(object, event);
 }
 
 void AddonsTab::moreInformation()
 {
-    QModelIndex index = addonsView->selectionModel()->selectedIndexes().first();
-    if( !index.isValid() ) return;
-    QWidget* windowWidget = window();
-    QWindow* parentWindow = windowWidget ? windowWidget->windowHandle() : nullptr;
-    AddonInfoDialog dlg( index, p_intf, parentWindow );
-    dlg.exec();
+    const auto selected = addonsView->selectionModel()->selectedIndexes();
+    if (selected.isEmpty()) return;
+    QWidget *owner = window();
+    AddonInfoDialog dialog(selected.first(), p_intf, owner ? owner->windowHandle() : nullptr);
+    dialog.exec();
 }
 
-void AddonsTab::installChecked( int i )
+void AddonsTab::installChecked(int value)
 {
-    if ( i == Qt::Checked )
-        m_model->setStateFilter( AddonsModel::State::STATE_INSTALLED );
-    else
-        m_model->setStateFilter( AddonsModel::State::STATE_NONE );
+    m_model->setStateFilter(value == Qt::Checked ? AddonsModel::State::STATE_INSTALLED : AddonsModel::State::STATE_NONE);
+    updateControls();
 }
 
 void AddonsTab::reposync()
 {
-    QStackedWidget *tab = qobject_cast<QStackedWidget *>(sender()->parent());
-    if ( tab )
-    {
-        tab->setCurrentIndex( WITHONLINEADDONS );
-
-        spinnerAnimation->start();
-
-        m_model->loadFromDefaultRepository();
-    }
+    if (m_model->loading()) return;
+    onlineCatalogRequested = true;
+    m_model->loadFromDefaultRepository();
+    updateControls();
 }
 
 /* Safe copy of the extension_t struct */
@@ -615,6 +669,7 @@ ExtensionListModel::ExtensionCopy::ExtensionCopy( extension_t *p_ext )
     if( shortdesc.isEmpty() && !description.isEmpty() )
         shortdesc = description;
     title = qfu( p_ext->psz_title );
+    if (title.isEmpty()) title = name;
     author = qfu( p_ext->psz_author );
     version = qfu( p_ext->psz_version );
     url = qfu( p_ext->psz_url );
@@ -637,6 +692,10 @@ QVariant ExtensionListModel::ExtensionCopy::data( int role ) const
         return *icon;
     case SummaryRole:
         return shortdesc;
+    case DescriptionRole:
+        return description;
+    case Qt::ToolTipRole:
+        return QString(title + QLatin1Char('\n') + plainDescription(shortdesc));
     case VersionRole:
         return version;
     case AuthorRole:
@@ -676,68 +735,34 @@ ExtensionListModel::~ExtensionListModel()
 
 void ExtensionListModel::updateList()
 {
-    ExtensionCopy *ext;
-
-    // Clear extensions list
-    while( !extensions.isEmpty() )
+    beginResetModel();
+    qDeleteAll(extensions);
+    extensions.clear();
+    if (auto *manager = EM ? EM->getManager() : nullptr)
     {
-        ext = extensions.takeLast();
-        delete ext;
+        vlc_mutex_locker lock{&manager->lock};
+        extension_t *extension;
+        ARRAY_FOREACH(extension, manager->extensions)
+            extensions.append(new ExtensionCopy(extension));
     }
-
-    // Find new extensions
-    extensions_manager_t *p_mgr = EM->getManager();
-    if( !p_mgr )
-        return;
-
-    vlc_mutex_lock( &p_mgr->lock );
-    extension_t *p_ext;
-    ARRAY_FOREACH( p_ext, p_mgr->extensions )
-    {
-        ext = new ExtensionCopy( p_ext );
-        extensions.append( ext );
-    }
-    vlc_mutex_unlock( &p_mgr->lock );
-
-    emit dataChanged( index( 0 ), index( rowCount() - 1 ) );
+    endResetModel();
 }
 
-int ExtensionListModel::rowCount( const QModelIndex& ) const
+int ExtensionListModel::rowCount(const QModelIndex &parent) const
 {
-    int count = 0;
-    extensions_manager_t *p_mgr = EM->getManager();
-    if( !p_mgr )
-        return 0;
-
-    vlc_mutex_lock( &p_mgr->lock );
-    count = p_mgr->extensions.i_size;
-    vlc_mutex_unlock( &p_mgr->lock );
-
-    return count;
+    return parent.isValid() ? 0 : extensions.size();
 }
 
-QVariant ExtensionListModel::data( const QModelIndex& index, int role ) const
+QVariant ExtensionListModel::data(const QModelIndex &index, int role) const
 {
-    if( !index.isValid() )
-        return QVariant();
-
-    ExtensionCopy * extension =
-            static_cast<ExtensionCopy *>(index.internalPointer());
-    if ( !extension )
-        return QVariant();
-    else
-        return extension->data( role );
+    if (!index.isValid() || index.model() != this || index.column() != 0 || index.row() < 0 || index.row() >= extensions.size()) return {};
+    return extensions.at(index.row())->data(role);
 }
 
-QModelIndex ExtensionListModel::index( int row, int column,
-                                       const QModelIndex& ) const
+QModelIndex ExtensionListModel::index(int row, int column, const QModelIndex &parent) const
 {
-    if( column != 0 )
-        return QModelIndex();
-    if( row < 0 || row >= extensions.count() )
-        return QModelIndex();
-
-    return createIndex( row, 0, extensions.at( row ) );
+    if (parent.isValid() || column != 0 || row < 0 || row >= extensions.size()) return {};
+    return createIndex(row, column);
 }
 
 static void commonPaint(
@@ -746,7 +771,8 @@ static void commonPaint(
     const QMargins& margins,
     const QPixmap& icon,
     const QString& name,
-    const QString& description
+    const QString& description,
+    int titleInset = 0
     )
 {
     QStyleOptionViewItem opt = option;
@@ -769,8 +795,7 @@ static void commonPaint(
     painter->save();
     painter->setRenderHint( QPainter::TextAntialiasing );
 
-    if ( opt.state & QStyle::State_Selected )
-        painter->setPen( opt.palette.highlightedText().color() );
+    painter->setPen((opt.state & QStyle::State_Selected) ? opt.palette.highlightedText().color() : opt.palette.text().color());
 
     QFont font( option.font );
     font.setBold( true );
@@ -781,13 +806,14 @@ static void commonPaint(
                      - margins.right(),
                      - margins.bottom() - opt.fontMetrics.height() );
 
-    painter->drawText( textrect, Qt::AlignLeft, name);
+    painter->drawText(textrect.adjusted(0, 0, -titleInset, 0), Qt::AlignLeft, QFontMetrics(font).elidedText(name, Qt::ElideRight, qMax(0, textrect.width() - titleInset)));
 
     font.setBold( false );
     painter->setFont( font );
+    painter->setPen((opt.state & QStyle::State_Selected) ? opt.palette.highlightedText().color() : opt.palette.windowText().color());
     painter->drawText( textrect.translated( 0, option.fontMetrics.height() ),
                        Qt::AlignLeft,
-                       description );
+                       QFontMetrics(font).elidedText(plainDescription(description), Qt::ElideRight, qMax(0, textrect.width())) );
 
     painter->restore();
 }
@@ -817,11 +843,11 @@ void ExtensionItemDelegate::paint( QPainter *painter,
 
     commonPaint(
         painter,
-        option,
+        opt,
         margins,
         icon,
         name,
-        description
+        plainDescription(description)
         );
 }
 
@@ -851,10 +877,7 @@ AddonItemDelegate::AddonItemDelegate( QObject *parent )
     , margins( 4,4,4,4 )
 { }
 
-AddonItemDelegate::~AddonItemDelegate()
-{
-    delete progressbar;
-}
+AddonItemDelegate::~AddonItemDelegate() = default;
 
 void AddonItemDelegate::paint( QPainter *painter,
                                const QStyleOptionViewItem &option,
@@ -862,40 +885,21 @@ void AddonItemDelegate::paint( QPainter *painter,
 {
     QStyleOptionViewItem newopt = option;
     auto i_state = index.data( AddonsModel::Role::STATE ).value<AddonsModel::State>();
-    auto i_type = index.data( AddonsModel::Role::TYPE ).value<AddonsModel::Type>();
-
-    /* Draw Background gradient by addon type */
-    QColor backgroundColor = AddonsModel::getColorForType( i_type );
-
-    if ( backgroundColor.isValid() )
-    {
-        painter->save();
-        int i_corner = qMin( (int)(option.rect.width() * .05), 30 );
-        QLinearGradient gradient(
-                    QPoint( option.rect.right() - i_corner, option.rect.bottom() - i_corner ),
-                    option.rect.bottomRight() );
-        gradient.setColorAt( 0, Qt::transparent );
-        gradient.setColorAt( 1.0, backgroundColor );
-        painter->fillRect( option.rect, gradient );
-        painter->restore();
-    }
 
     /* Draw base info from parent */
     initStyleOption( &newopt, index );
 
     /* Draw common base  */
     QString name = index.data( Qt::DisplayRole ).toString();
-    QPixmap icon = index.data( Qt::DecorationRole ).value<QPixmap>();
+    QPixmap icon = index.data(Qt::DecorationRole).value<QPixmap>();
+    if (icon.isNull()) icon = QPixmap(QStringLiteral(":/logo/vlc48.png"));
     QString description = index.data( AddonsModel::Role::SUMMARY ).toString();
 
-    commonPaint(
-        painter,
-        newopt,
-        margins,
-        icon,
-        name,
-        description
-        );
+    QFont badgeFont(newopt.font);
+    badgeFont.setBold(true);
+    const int badgeWidth = i_state == AddonsModel::State::STATE_INSTALLED
+        ? QFontMetrics(badgeFont).horizontalAdvance(qtr("Installed")) + 16 : 0;
+    commonPaint(painter, newopt, margins, icon, name, description, badgeWidth);
 
     painter->save();
     painter->setRenderHint( QPainter::TextAntialiasing );
@@ -911,15 +915,14 @@ void AddonItemDelegate::paint( QPainter *painter,
         QFontMetrics metrics( font );
         painter->setFont( font );
         QRect statusRect = metrics.boundingRect( qtr("Installed") );
-        statusRect.translate( newopt.rect.width() - statusRect.width(),
-                              newopt.rect.top() + statusRect.height() );
+        statusRect.moveTopLeft(QPoint(newopt.rect.right() - statusRect.width(), newopt.rect.top() + margins.top()));
         statusRect.adjust( - statusMargins.left() - statusMargins.right(),
                            0, 0,
                            statusMargins.top() + statusMargins.bottom() );
         QPainterPath path;
         path.addRoundedRect( statusRect, 2.0, 2.0 );
-        painter->fillPath( path, QColor( Qt::green ).darker( 125 ) );
-        painter->setPen( Qt::white );
+        painter->fillPath(path, newopt.palette.highlight());
+        painter->setPen(newopt.palette.highlightedText().color());
         painter->drawText(
             statusRect.adjusted( statusMargins.left(), statusMargins.top(),
                                  -statusMargins.right(), -statusMargins.bottom() ),
@@ -927,8 +930,7 @@ void AddonItemDelegate::paint( QPainter *painter,
         painter->restore();
     }
 
-    if ( newopt.state & QStyle::State_Selected )
-        painter->setPen( newopt.palette.highlightedText().color() );
+    painter->setPen((newopt.state & QStyle::State_Selected) ? newopt.palette.highlightedText().color() : newopt.palette.windowText().color());
 
     /* Start below text */
     QRect textrect( newopt.rect );
@@ -973,37 +975,7 @@ void AddonItemDelegate::paint( QPainter *painter,
 
     painter->restore();
 
-    if ( animator )
-    {
-        if ( animator->isRunning() && animator->getIndex() == index )
-        {
-            if ( i_state != AddonsModel::State::STATE_INSTALLING
-                && i_state != AddonsModel::State::STATE_UNINSTALLING )
-                animator->run( false );
-        }
-        /* Create our installation progress overlay */
 
-        if ( i_state == AddonsModel::State::STATE_INSTALLING
-            || i_state == AddonsModel::State::STATE_UNINSTALLING )
-        {
-            painter->save();
-            painter->setCompositionMode( QPainter::CompositionMode_SourceOver );
-            painter->fillRect( newopt.rect, QColor( 255, 255, 255, 128 ) );
-            if ( animator && index.isValid() )
-            {
-                animator->setIndex( index );
-                animator->run( true );
-                QSize adjustment = newopt.rect.size() / 4;
-                progressbar->setGeometry(
-                    newopt.rect.adjusted( adjustment.width(), adjustment.height(),
-                                          -adjustment.width(), -adjustment.height() ) );
-                painter->drawPixmap( newopt.rect.left() + adjustment.width(),
-                                     newopt.rect.top() + adjustment.height(),
-                                     progressbar->grab() );
-            }
-            painter->restore();
-        }
-    }
 }
 
 QSize AddonItemDelegate::sizeHint( const QStyleOptionViewItem &option,
@@ -1027,290 +999,150 @@ void AddonItemDelegate::initStyleOption( QStyleOptionViewItem *option,
                                     margins.top() + margins.bottom() );
 }
 
-QWidget *AddonItemDelegate::createEditor( QWidget *parent,
-                                          const QStyleOptionViewItem &option,
-                                          const QModelIndex &index) const
-{
-    Q_UNUSED( option );
-    QWidget *editorWidget = new QWidget( parent );
-    QPushButton *installButton;
-    QPushButton *infoButton;
-
-    editorWidget->setLayout( new QHBoxLayout() );
-    editorWidget->layout()->setContentsMargins(0, 0, 0, 0);
-
-    infoButton = new QPushButton( QIcon( ":/menu/info.svg" ),
-                                  qtr( "More information..." ) );
-    connect( infoButton, &QPushButton::clicked, this, &AddonItemDelegate::showInfo );
-    editorWidget->layout()->addWidget( infoButton );
-
-    if ( index.data( AddonsModel::Role::MANAGEABLE).toBool() )
-    {
-        if ( index.data( AddonsModel::Role::STATE ).value<AddonsModel::State>()
-            == AddonsModel::State::STATE_INSTALLED )
-            installButton = new QPushButton( QIcon( ":/menu/remove.svg" ),
-                                             qtr("&Uninstall"), parent );
-        else
-        {
-            installButton = new QPushButton( qtr("&Install"), parent );
-            installButton->setIcon( ColorizedSvgIcon::colorizedIconForWidget( ":/menu/add.svg", installButton ) );
-        }
-        connect( installButton, &QPushButton::clicked, this, &AddonItemDelegate::editButtonClicked );
-        editorWidget->layout()->addWidget( installButton );
-    }
-
-    editorWidget->setSizePolicy( QSizePolicy::Maximum, QSizePolicy::Preferred );
-
-    return editorWidget;
-}
-
-void AddonItemDelegate::updateEditorGeometry( QWidget *editor,
-                                              const QStyleOptionViewItem &option,
-                                              const QModelIndex &index) const
-{
-    Q_UNUSED( index );
-    QSize size = editor->sizeHint();
-    editor->setGeometry( option.rect.right() - size.width(),
-                         option.rect.top() + ( option.rect.height() - size.height()),
-                         size.width(),
-                         size.height() );
-}
-
-void AddonItemDelegate::setModelData( QWidget *editor, QAbstractItemModel *model,
-                                      const QModelIndex &index ) const
-{
-    model->setData( index, editor->property("Addon::state"), AddonsModel::Role::STATE);
-}
-
-void AddonItemDelegate::setEditorData( QWidget *editor, const QModelIndex &index ) const
-{
-    editor->setProperty("Addon::state", index.data( AddonsModel::Role::STATE ) );
-}
-
-void AddonItemDelegate::setAnimator( DelegateAnimationHelper *animator_ )
-{
-    if ( !progressbar )
-    {
-        QProgressBar *progress = new QProgressBar(  );
-        progress->setMinimum( 0 );
-        progress->setMaximum( 0 );
-        progress->setTextVisible( false );
-        progressbar = progress;
-    }
-    animator = animator_;
-}
-
-void AddonItemDelegate::editButtonClicked()
-{
-    QWidget *editor = qobject_cast<QWidget *>(sender()->parent());
-    if ( !editor ) return;
-    auto value = editor->property("Addon::state").value<AddonsModel::State>();
-    if ( value == AddonsModel::State::STATE_INSTALLED )
-        /* uninstall */
-        editor->setProperty("Addon::state", QVariant::fromValue(AddonsModel::State::STATE_UNINSTALLING) );
-    else
-        /* install */
-        editor->setProperty("Addon::state", QVariant::fromValue(AddonsModel::State::STATE_INSTALLING) );
-    emit commitData( editor );
-    emit closeEditor( editor );
-}
-
 /* "More information" dialog */
 
-ExtensionInfoDialog::ExtensionInfoDialog( const QModelIndex &index,
-                                          qt_intf_t *p_intf,
-                                          QWindow *parent )
-       : QVLCDialog( parent, p_intf )
+namespace {
+void colorPluginLinks(QTextBrowser *browser)
 {
-    // Let's be a modal dialog
-    setWindowModality( Qt::WindowModal );
-
-    // Window title
-    setWindowTitle( qtr( "About" ) + " " + index.data(Qt::DisplayRole).toString() );
-
-    // Layout
-    QGridLayout *layout = new QGridLayout( this );
-
-    // Icon
-    QLabel *icon = new QLabel( this );
-    QPixmap pix = index.data(Qt::DecorationRole).value<QPixmap>();
-    Q_ASSERT( !pix.isNull() );
-    icon->setPixmap( pix );
-    icon->setAlignment( Qt::AlignCenter );
-    icon->setFixedSize( 48, 48 );
-    layout->addWidget( icon, 1, 0, 2, 1 );
-
-    // Title
-    QLabel *label = new QLabel( index.data(Qt::DisplayRole).toString(), this );
-    QFont font = label->font();
-    font.setBold( true );
-    font.setPointSizeF( font.pointSizeF() * 1.3f );
-    label->setFont( font );
-    layout->addWidget( label, 0, 0, 1, -1 );
-
-    // Version
-    label = new QLabel( "<b>" + qtr( "Version" ) + ":</b>", this );
-    layout->addWidget( label, 1, 1, 1, 1, Qt::AlignBottom );
-    label = new QLabel( index.data(ExtensionListModel::VersionRole).toString(), this );
-    layout->addWidget( label, 1, 2, 1, 2, Qt::AlignBottom );
-
-    // Author
-    label = new QLabel( "<b>" + qtr( "Author" ) + ":</b>", this );
-    layout->addWidget( label, 2, 1, 1, 1, Qt::AlignTop );
-    label = new QLabel( index.data(ExtensionListModel::AuthorRole).toString(), this );
-    layout->addWidget( label, 2, 2, 1, 2, Qt::AlignTop );
-
-
-    // Description
-    label = new QLabel( this );
-    label->setText( index.data(ExtensionListModel::SummaryRole).toString() );
-    label->setWordWrap( true );
-    label->setOpenExternalLinks( true );
-    layout->addWidget( label, 4, 0, 1, -1 );
-
-    // URL
-    label = new QLabel( "<b>" + qtr( "Website" ) + ":</b>", this );
-    layout->addWidget( label, 5, 0, 1, 2 );
-    label = new QLabel( QString("<a href=\"%1\">%2</a>")
-                        .arg( index.data(ExtensionListModel::LinkRole).toString() )
-                        .arg( index.data(ExtensionListModel::LinkRole).toString() )
-                        , this );
-    label->setOpenExternalLinks( true );
-    layout->addWidget( label, 5, 2, 1, -1 );
-
-    // Script file
-    label = new QLabel( "<b>" + qtr( "File" ) + ":</b>", this );
-    layout->addWidget( label, 6, 0, 1, 2 );
-    QLineEdit *line =
-            new QLineEdit( index.data(ExtensionListModel::FilenameRole).toString(), this );
-    line->setReadOnly( true );
-    layout->addWidget( line, 6, 2, 1, -1 );
-
-    // Close button
-    QDialogButtonBox *group = new QDialogButtonBox( this );
-    QPushButton *closeButton = new QPushButton( qtr( "&Close" ) );
-    group->addButton( closeButton, QDialogButtonBox::RejectRole );
-    BUTTONACT( closeButton, &ExtensionInfoDialog::close );
-
-    layout->addWidget( group, 7, 0, 1, -1 );
-
-    // Fix layout
-    layout->setColumnStretch( 2, 1 );
-    layout->setRowStretch( 4, 1 );
-    setMinimumSize( 450, 350 );
+    QList<QPair<int, int>> anchors;
+    for (auto block = browser->document()->begin(); block.isValid(); block = block.next())
+        for (auto it = block.begin(); !it.atEnd(); ++it)
+        {
+            const auto fragment = it.fragment();
+            if (fragment.isValid() && fragment.charFormat().isAnchor())
+                anchors.append({fragment.position(), fragment.length()});
+        }
+    for (const auto &anchor : anchors)
+    {
+        QTextCursor cursor(browser->document());
+        cursor.setPosition(anchor.first);
+        cursor.setPosition(anchor.first + anchor.second, QTextCursor::KeepAnchor);
+        QTextCharFormat format;
+        format.setForeground(browser->palette().color(QPalette::Link));
+        cursor.mergeCharFormat(format);
+    }
 }
 
-
-AddonInfoDialog::AddonInfoDialog( const QModelIndex &index,
-                                  qt_intf_t *p_intf, QWindow *parent )
-       : QVLCDialog( parent, p_intf )
+void createPluginInfo(QVLCDialog *dialog, qt_intf_t *intf, const QString &name, const QPixmap &art,
+                      const QString &version, const QString &author, const QString &type,
+                      const QString &summary, const QString &description, const QString &website,
+                      const QStringList &files)
 {
-    // Let's be a modal dialog
-    setWindowModality( Qt::WindowModal );
-
-    // Window title
-    setWindowTitle( qtr( "About" ) + " " + index.data(AddonsModel::Role::NAME).toString() );
-
-    // Layout
-    QGridLayout *layout = new QGridLayout( this );
-    QLabel *label;
-
-    // Icon
-    QLabel *iconLabel = new QLabel( this );
-    iconLabel->setFixedSize( 100, 100 );
-    QPixmap icon = index.data( Qt::DecorationRole ).value<QPixmap>();
-    icon.scaled( iconLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation );
-    iconLabel->setPixmap( icon );
-    iconLabel->setAlignment( Qt::AlignCenter | Qt::AlignTop );
-    layout->addWidget( iconLabel, 1, 0, 2, 1 );
-
-    // Title
-    label = new QLabel( index.data(AddonsModel::Role::NAME).toString(), this );
-    QFont font = label->font();
-    font.setBold( true );
-    font.setPointSizeF( font.pointSizeF() * 1.3f );
-    label->setFont( font );
-    layout->addWidget( label, 0, 0, 1, -1 );
-
-    // HTML Content on right side
-    QTextEdit *textContent = new QTextEdit();
-    textContent->viewport()->setAutoFillBackground( false );
-    textContent->setAcceptRichText( true );
-    textContent->setBackgroundRole( QPalette::Window );
-    textContent->setFrameStyle( QFrame::NoFrame );
-    textContent->setAutoFillBackground( false );
-    textContent->setReadOnly( true );
-    layout->addWidget( textContent, 1, 1, 4, -1 );
-
-    // Type
-    QString type = AddonsModel::getLabelForType( index.data(AddonsModel::Role::TYPE).value<AddonsModel::Type>() );
-    textContent->append( QString("<b>%1:</b> %2<br/>")
-                         .arg( qtr("Type") ).arg( type ) );
-
-    // Version
-    QString version = index.data(AddonsModel::Role::ADDON_VERSION).toString();
-    if ( !version.isEmpty() )
+    dialog->setObjectName(QStringLiteral("redesignPluginInfo"));
+    dialog->setProperty("redesignDialog", true);
+    dialog->setWindowRole("vlc-plugin-info");
+    dialog->setWindowModality(Qt::WindowModal);
+    auto *root = new QVBoxLayout(dialog);
+    auto *header = new QHBoxLayout;
+    auto *icon = new QLabel(dialog);
+    header->addWidget(icon, 0, Qt::AlignTop);
+    auto *title = new QLabel(name, dialog);
+    title->setTextFormat(Qt::PlainText);
+    title->setWordWrap(true);
+    title->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    title->setProperty("redesignHeading", true);
+    title->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    header->addWidget(title, 1);
+    root->addLayout(header);
+    auto *browser = new QTextBrowser(dialog);
+    browser->setObjectName(QStringLiteral("pluginDetails"));
+    browser->setOpenExternalLinks(true);
+    browser->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    browser->setTabChangesFocus(true);
+    root->addWidget(browser, 1);
+    auto *footer = new QHBoxLayout;
+    footer->addStretch();
+    auto *close = new QPushButton(dialog);
+    close->setObjectName(QStringLiteral("pluginInfoClose"));
+    close->setAutoDefault(false);
+    footer->addWidget(close);
+    root->addLayout(footer);
+    QObject::connect(close, &QPushButton::clicked, dialog, &QVLCDialog::reject);
+    for (auto key : {Qt::Key_Return, Qt::Key_Enter})
     {
-        textContent->append( QString("<b>%1:</b> %2<br/>")
-                             .arg( qtr("Version") ).arg( version ) );
+        auto *shortcut = new QShortcut(QKeySequence(key), close);
+        shortcut->setContext(Qt::WidgetShortcut);
+        QObject::connect(shortcut, &QShortcut::activated, close, &QPushButton::click);
     }
-
-    // Author
-    QString author = index.data(AddonsModel::Role::AUTHOR).toString();
-    if ( !author.isEmpty() )
+    const auto text = [=] {
+        dialog->setWindowTitle(qtr("About") + QLatin1Char(' ') + name);
+        close->setText(qtr("&Close"));
+        QString html;
+        const auto field = [&html](const QString &label, const QString &value) {
+            if (!value.isEmpty()) html += QStringLiteral("<p><b>%1:</b> %2</p>").arg(label.toHtmlEscaped(), value.toHtmlEscaped());
+        };
+        field(qtr("Type"), type);
+        field(qtr("Version"), version);
+        field(qtr("Author"), author);
+        if (!summary.isEmpty() && summary != description) html += QStringLiteral("<p>%1</p>").arg(Qt::mightBeRichText(summary) ? summary : summary.toHtmlEscaped());
+        if (!description.isEmpty())
+            html += Qt::mightBeRichText(description) ? description : QStringLiteral("<p>%1</p>").arg(QString(description.toHtmlEscaped()).replace(QLatin1Char('\n'), QStringLiteral("<br>")));
+        const QUrl url(website);
+        if (!website.isEmpty())
+        {
+            if (url.isValid() && (url.scheme() == QLatin1String("https") || url.scheme() == QLatin1String("http")))
+                html += QStringLiteral("<p><b>%1:</b><br><a href=\"%2\">%3</a></p>").arg(qtr("Website").toHtmlEscaped(), QString::fromUtf8(url.toEncoded()).toHtmlEscaped(), website.toHtmlEscaped());
+            else field(qtr("Website"), website);
+        }
+        if (!files.isEmpty())
+        {
+            html += QStringLiteral("<p><b>%1:</b></p>").arg(qtr("Files").toHtmlEscaped());
+            for (const auto &file : files) html += QStringLiteral("<p>%1</p>").arg(file.toHtmlEscaped());
+        }
+        const int scroll = browser->verticalScrollBar()->value();
+        browser->setHtml(html);
+        browser->verticalScrollBar()->setValue(scroll);
+        colorPluginLinks(browser);
+    };
+    text();
+    if (auto *translator = InterfaceTranslator::instance())
+        QObject::connect(translator, &InterfaceTranslator::languageChanged, dialog, text);
+    applyRedesignWidgetTheme(dialog, intf->p_mi);
+    const auto links = [browser] { colorPluginLinks(browser); };
+    links();
+    if (auto *ctx = intf->p_mi)
     {
-        textContent->append( QString("<b>%1:</b> %2<br/>")
-                             .arg( qtr("Author") ).arg( author ) );
+        QObject::connect(ctx, &MainCtx::redesignAccentChanged, dialog, links);
+        QObject::connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, dialog, links);
+        QObject::connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, dialog, links);
     }
+    const auto metrics = [=] {
+        const int margin = pluginDp(intf, 24);
+        root->setContentsMargins(margin, margin, margin, margin);
+        root->setSpacing(pluginDp(intf, 12));
+        icon->setFixedSize(pluginDp(intf, 48), pluginDp(intf, 48));
+        const auto pixmap = art.isNull() ? QPixmap(QStringLiteral(":/logo/vlc48.png")) : art;
+        icon->setPixmap(pixmap.scaled(icon->size() * dialog->devicePixelRatioF(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        auto scaled = icon->pixmap(); scaled.setDevicePixelRatio(dialog->devicePixelRatioF()); icon->setPixmap(scaled);
+        const auto available = dialog->screen() ? dialog->screen()->availableGeometry().size() : QSize(1280, 720);
+        dialog->setMinimumSize(QSize(pluginDp(intf, 360), pluginDp(intf, 300)).boundedTo(available));
+    };
+    metrics();
+    if (intf->p_mi) QObject::connect(intf->p_mi, &MainCtx::intfScaleFactorChanged, dialog, metrics);
+    dialog->resize(pluginDp(intf, 620), pluginDp(intf, 520));
+    if (dialog->screen()) dialog->resize(dialog->size().boundedTo(dialog->screen()->availableGeometry().size()));
+}
+}
 
-    // Summary
-    textContent->append( QString("%1<br/>\n")
-                .arg( index.data(AddonsModel::Role::SUMMARY).toString() ) );
+ExtensionInfoDialog::ExtensionInfoDialog(const QModelIndex &index, qt_intf_t *intf, QWindow *parent)
+    : QVLCDialog(parent, intf)
+{
+    createPluginInfo(this, intf, index.data().toString(), index.data(Qt::DecorationRole).value<QPixmap>(),
+        index.data(ExtensionListModel::VersionRole).toString(), index.data(ExtensionListModel::AuthorRole).toString(), {},
+        index.data(ExtensionListModel::SummaryRole).toString(), index.data(ExtensionListModel::DescriptionRole).toString(),
+        index.data(ExtensionListModel::LinkRole).toString(), {index.data(ExtensionListModel::FilenameRole).toString()});
+}
 
-    // Description
-    QString description = index.data(AddonsModel::Role::DESCRIPTION).toString();
-    if ( !description.isEmpty() )
-    {
-        textContent->append( QString("<hr/>\n%1")
-                             .arg( description.replace("\n", "<br/>") ) );
-    }
-
-    // URL
-    QString sourceUrl = index.data(AddonsModel::Role::LINK).toString();
-    if ( !sourceUrl.isEmpty() )
-    {
-        label = new QLabel( "<b>" + qtr( "Website" ) + ":</b>", this );
-        layout->addWidget( label, 5, 0, 1, 2 );
-        label = new QLabel( QString("<a href=\"%1\">%2</a>")
-                            .arg( sourceUrl ).arg( sourceUrl ), this );
-        label->setOpenExternalLinks( true );
-        layout->addWidget( label, 5, 2, 1, -1 );
-    }
-
-    // Script files
-    QList<QVariant> list = index.data(AddonsModel::Role::FILENAME).toList();
-    if ( ! list.empty() )
-    {
-        label = new QLabel( "<b>" + qtr( "Files" ) + ":</b>", this );
-        layout->addWidget( label, 6, 0, 1, 2 );
-        QComboBox *filesCombo = new QComboBox();
-        Q_FOREACH( const QVariant & file, list )
-            filesCombo->addItem( file.toString() );
-        layout->addWidget( filesCombo, 6, 2, 1, -1 );
-    }
-
-    // Close button
-    QDialogButtonBox *group = new QDialogButtonBox( this );
-    QPushButton *closeButton = new QPushButton( qtr( "&Close" ) );
-    group->addButton( closeButton, QDialogButtonBox::RejectRole );
-    BUTTONACT( closeButton, &AddonInfoDialog::close );
-
-    layout->addWidget( group, 7, 0, 1, -1 );
-
-    // Fix layout
-    layout->setColumnStretch( 2, 1 );
-    layout->setRowStretch( 4, 1 );
-    setMinimumSize( 640, 480 );
+AddonInfoDialog::AddonInfoDialog(const QModelIndex &index, qt_intf_t *intf, QWindow *parent)
+    : QVLCDialog(parent, intf)
+{
+    QStringList files;
+    for (const auto &file : index.data(AddonsModel::FILENAME).toList()) files << file.toString();
+    createPluginInfo(this, intf, index.data(AddonsModel::NAME).toString(), index.data(Qt::DecorationRole).value<QPixmap>(),
+        index.data(AddonsModel::ADDON_VERSION).toString(), index.data(AddonsModel::AUTHOR).toString(),
+        AddonsModel::getLabelForType(index.data(AddonsModel::TYPE).value<AddonsModel::Type>()),
+        index.data(AddonsModel::SUMMARY).toString(), index.data(AddonsModel::DESCRIPTION).toString(),
+        index.data(AddonsModel::LINK).toString(), files);
 }
 
 static QPixmap *loadPixmapFromData( char *data, int size )

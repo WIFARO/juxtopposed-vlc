@@ -33,11 +33,12 @@
 #include <QStyledItemDelegate>
 
 class QLabel;
+class QCheckBox;
+class QProgressBar;
 class QTabWidget;
 class QComboBox;
 class QTreeWidget;
 class QLineEdit;
-class QSignalMapper;
 //class QTextBrowser;
 class QListView;
 class QStyleOptionViewItem;
@@ -47,11 +48,8 @@ class PluginTab;
 class ExtensionTab;
 class AddonsTab;
 class ExtensionListItem;
-class SearchLineEdit;
 class ExtensionCopy;
 class ExtensionsManager;
-class PixmapAnimator;
-class DelegateAnimationHelper;
 class AddonsModel;
 
 extern "C" {
@@ -66,7 +64,11 @@ public:
     PluginDialog( qt_intf_t * );
     virtual ~PluginDialog();
 
+protected:
+    bool eventFilter(QObject*, QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
 private:
+    QLineEdit *activeSearch() const;
     QTabWidget *tabs;
     PluginTab *pluginTab;
     ExtensionTab *extensionTab;
@@ -93,7 +95,8 @@ private:
 
     void FillTree();
     QTreeWidget *treePlugins;
-    SearchLineEdit *edit;
+    QLineEdit *edit;
+    QLabel *searchInfo;
 
 private slots:
     void search( const QString& );
@@ -118,6 +121,8 @@ private slots:
 
 private:
     QListView *extList;
+    QLineEdit *searchInput;
+    QLabel *listInfo;
     QPushButton *butMoreInfo;
 
     friend class PluginDialog;
@@ -135,22 +140,22 @@ private slots:
     void moreInformation();
     void installChecked( int );
     void reposync();
+    void updateControls();
 
 private:
     AddonsTab( qt_intf_t *p_intf );
     virtual ~AddonsTab();
     bool eventFilter ( QObject * watched, QEvent * event ) override;
 
-    enum
-    {
-        ONLYLOCALADDONS = 0,
-        WITHONLINEADDONS
-    };
     QListView *addonsView;
-    /* Wait spinner */
-    PixmapAnimator *spinnerAnimation;
-    bool b_localdone;
-    QSignalMapper *signalMapper;
+    QLineEdit *searchInput;
+    QComboBox *category;
+    QCheckBox *installedOnly;
+    QPushButton *repositoryButton, *infoButton, *manageButton;
+    QLabel *listInfo;
+    QProgressBar *loadingIndicator;
+    bool onlineCatalogRequested = false;
+    QString restoreSelectionId;
     std::unique_ptr<AddonsModel> m_model;
 };
 
@@ -194,7 +199,8 @@ public:
         VersionRole,
         AuthorRole,
         LinkRole,
-        FilenameRole
+        FilenameRole,
+        DescriptionRole
     };
 
     QVariant data( const QModelIndex& index, int role ) const override;
@@ -246,23 +252,8 @@ public:
                     const QModelIndex &index ) const override;
     void initStyleOption( QStyleOptionViewItem *option,
                          const QModelIndex &index ) const override;
-    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
-    void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const override;
-    void setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const override;
-    void setEditorData(QWidget *editor, const QModelIndex &index) const override;
-
-    void setAnimator( DelegateAnimationHelper *animator );
-
-public slots:
-    void editButtonClicked();
-
-signals:
-    void showInfo();
-
 protected:
     QMargins margins;
-    DelegateAnimationHelper *animator = nullptr;
-    QWidget *progressbar = nullptr;
 };
 
 class ExtensionInfoDialog : public QVLCDialog
