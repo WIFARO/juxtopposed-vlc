@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "subtitle_source_service.hpp"
+#include "subtitle_matching.hpp"
 #include <QDir>
 #include <QCoreApplication>
 #include <QEvent>
@@ -44,6 +45,30 @@ QString safeName(QString name, const QString& format = QStringLiteral("srt"))
     if (device.match(name).hasMatch()) name.prepend(QLatin1Char('_'));
     return name + QLatin1Char('.') + format;
 }
+class HashJob : public QThread
+{
+public:
+    explicit HashJob(const QUrl& url) : m_url(url) {}
+    MediaFingerprint::Fingerprint fingerprint;
+protected:
+    void run() override { fingerprint = MediaFingerprint::openSubtitles(m_url, [this] { return isInterruptionRequested(); }); }
+private:
+    QUrl m_url;
+};
+
+void mergeSources(QVariantList& sources, const QVariantList& additions)
+{
+    QHash<qint64, qsizetype> indexes;
+    for (qsizetype i = 0; i < sources.size(); ++i) indexes.insert(sources[i].toMap().value("fileId").toLongLong(), i);
+    for (const auto& value : additions) {
+        auto source = value.toMap(); const auto id = source.value("fileId").toLongLong();
+        if (!indexes.contains(id)) { indexes.insert(id, sources.size()); sources.append(source); continue; }
+        auto existing = sources[indexes.value(id)].toMap();
+        auto hashes = existing.value("hashFor").toStringList(); hashes.append(source.value("hashFor").toStringList()); hashes.removeDuplicates();
+        existing.insert("hashFor", hashes); sources[indexes.value(id)] = existing;
+    }
+}
+
 QString sourceUrl(qint64 id, const QString& name)
 {
     QUrl url; url.setScheme(QStringLiteral("opensubtitles"));
@@ -86,6 +111,7 @@ bool SubtitleSourceService::eventFilter(QObject* object, QEvent* event)
 
 SubtitleSourceService::~SubtitleSourceService()
 {
+    if (m_hashJob) m_hashJob->requestInterruption();
     for (auto* reply : m_network.findChildren<QNetworkReply*>()) {
         disconnect(reply, nullptr, this, nullptr); reply->abort();
     }
@@ -193,8 +219,12 @@ QNetworkReply* SubtitleSourceService::request(const QUrl& url, const QByteArray&
 void SubtitleSourceService::cancelSearch()
 {
     ++m_searchGeneration;
+    if (m_hashJob) m_hashJob->requestInterruption();
+    m_hashJob = nullptr;
+    m_searchTargets.clear(); m_searchSources.clear(); m_targetSources.clear(); m_searchIdentities.clear();
     if (m_searchReply) m_searchReply->abort();
-    m_searchReply = nullptr;
+    m_searchReply = nullptr; m_targetIndex = 0;
+    emit searchProgressChanged();
 }
 
 QVariantList SubtitleSourceService::parseSources(const QByteArray& bytes, QString& error)
@@ -216,11 +246,21 @@ QVariantList SubtitleSourceService::parseSources(const QByteArray& bytes, QStrin
             const QFileInfo cached(cachePath({id, name}));
             const auto available = cached.isFile() && cached.size() > 0 && cached.size() <= m_options.maxFileBytes
                 ? QUrl::fromLocalFile(cached.absoluteFilePath()).toString(QUrl::FullyEncoded) : url;
-            sources.append(QVariantMap{{"url", available}, {"name", name},
+            QVariantMap source{{"url", available}, {"name", name}, {"fileId", id},
+                {"filename", file.value("file_name").toString()},
+                {"feature", attributes.value("feature_details").toObject().toVariantMap()},
+                {"hashMatched", attributes.value("moviehash_match").toBool()},
+                {"fps", attributes.value("fps").toDouble()},
+                {"downloads", attributes.value("download_count").toDouble()},
+                {"rating", attributes.value("ratings").toDouble()}, {"votes", attributes.value("votes").toInt()},
+                {"trusted", attributes.value("from_trusted").toBool()},
                 {"language", attributes.value("language").toString()},
                 {"release", attributes.value("release").toString()},
                 {"hearingImpaired", attributes.value("hearing_impaired").toBool()},
-                {"forced", attributes.value("foreign_parts_only").toBool()}});
+                {"forced", attributes.value("foreign_parts_only").toBool()}};
+            auto identity = SubtitleMatching::identity(source);
+            if (source.value("fps").toDouble() > 0) identity.release.insert("fps", QString::number(source.value("fps").toDouble()));
+            source.insert("identity", MediaIdentity::toMap(identity)); sources.append(source);
             if (sources.size() >= 500) return sources;
         }
     }
@@ -254,31 +294,190 @@ void SubtitleSourceService::fetchLanguages()
         });
 }
 
+QVariantMap SubtitleSourceService::identifyMedia(const QUrl& url, const QVariantMap& metadata) const
+{
+    return MediaIdentity::toMap(MediaIdentity::identify(url, metadata));
+}
+
+QVariantMap SubtitleSourceService::parseMediaName(const QString& name) const
+{
+    return MediaIdentity::toMap(MediaIdentity::parse(name));
+}
+
+QVariantList SubtitleSourceService::rankSources(const QVariantMap& identity, const QVariantList& sources,
+                                               const QString& mediaUrl, const QString& language) const
+{
+    return SubtitleMatching::rank(MediaIdentity::fromMap(identity), sources, mediaUrl, language);
+}
+
 quint64 SubtitleSourceService::search(const QString& text, const QString& language)
 {
+    return searchMedia({{"query", text}, {"manual", true}}, language);
+}
+
+quint64 SubtitleSourceService::searchMedia(const QVariantMap& input, const QString& language)
+{
     cancelSearch(); const auto generation = m_searchGeneration;
-    const auto query = text.trimmed();
     static const QRegularExpression code(QStringLiteral("^[a-z]{2,3}(?:-[a-z]{2,3})?$"));
-    if (!configured() || query.isEmpty() || query.size() > 512 || (!language.isEmpty() && !code.match(language).hasMatch())) {
-        const auto error = !configured() ? tr("OpenSubtitles is not set up. Add an API key to use this source.")
-                                        : tr("Enter a title and select a subtitle language.");
-        QTimer::singleShot(0, this, [this, generation, error] {
-            if (generation == m_searchGeneration) emit searchFinished(generation, {{"success", false}, {"error", error}});
-        }); return generation;
+    const auto query = input.value("query").toString().trimmed();
+    auto targets = input.value("targets").toList();
+    if (targets.isEmpty()) targets.append(input);
+    const bool manual = input.value("manual").toBool();
+    QString error;
+    if (!configured()) error = tr("OpenSubtitles is not set up. Add an API key to use this source.");
+    else if (query.size() > 512 || (!language.isEmpty() && !code.match(language).hasMatch())) error = tr("Enter a title and select a subtitle language.");
+    else if (!input.value("details").toMap().value("airDate").toString().isEmpty()
+             && !QDate::fromString(input.value("details").toMap().value("airDate").toString(), Qt::ISODate).isValid())
+        error = tr("Enter a valid air date in YYYY-MM-DD format.");
+    else if (!manual && targets.size() > 64) error = tr("Search up to 64 files at a time. Select a smaller folder or search one file.");
+    else {
+        QSet<QString> seen;
+        for (const auto& value : targets) {
+            const auto row = value.toMap(); const auto url = row.value("url").toUrl();
+            auto identity = row.contains("identity") ? MediaIdentity::fromMap(row.value("identity").toMap())
+                : MediaIdentity::identify(url, row.value("metadata").toMap());
+            if (manual) {
+                const auto release = identity.release;
+                identity = MediaIdentity::parse(query); identity.release = release;
+                for (auto it = identity.provenance.begin(); it != identity.provenance.end(); ++it) it.value() = "user";
+                const auto details = input.value("details").toMap();
+                MediaIdentity::applyMetadata(identity, details, "user");
+                if (details.contains("year") && details.value("year").toInt() < 0) identity.year = -1;
+                if (details.contains("season") && details.value("season").toInt() < 0) identity.season = -1;
+                if (details.contains("episodes") && details.value("episodes").toList().isEmpty()) identity.episodes.clear();
+                // User correction starts a new identity; never reuse the original file's IDs or hash.
+            }
+            const auto key = url.toString(QUrl::FullyEncoded);
+            if (!key.isEmpty() && seen.contains(key)) continue;
+            seen.insert(key);
+            m_searchTargets.append({identity, url, !manual});
+            m_searchIdentities.insert(key, MediaIdentity::toMap(identity));
+            if (manual) break; // A manual query is one explicit search, including in folder mode.
+        }
+        if (m_searchTargets.isEmpty() || (manual && m_searchTargets.first().identity.title.isEmpty()
+            && m_searchTargets.first().identity.ids.isEmpty())) error = tr("Enter the movie or series title to search for subtitles.");
     }
-    auto url = m_options.apiBase.resolved(QUrl(QStringLiteral("subtitles")));
+    m_searchLanguage = language; m_searchWarning.clear(); m_targetIndex = 0;
+    emit searchProgressChanged();
+    QTimer::singleShot(0, this, [this, generation, error] {
+        if (generation != m_searchGeneration) return;
+        if (!error.isEmpty()) finishSearch(generation, error);
+        else beginSearchTarget(generation);
+    });
+    return generation;
+}
+
+void SubtitleSourceService::beginSearchTarget(quint64 generation)
+{
+    if (generation != m_searchGeneration) return;
+    if (m_targetIndex >= m_searchTargets.size()) { finishSearch(generation); return; }
+    m_targetSources.clear(); m_searchFingerprint = {}; m_searchPhase = 1; m_searchPage = 1;
+    const auto& target = m_searchTargets[m_targetIndex];
+    if (target.useHash && target.url.isLocalFile()) {
+        auto* job = new HashJob(target.url); m_hashJob = job;
+        connect(job, &QThread::finished, this, [this, generation, job] {
+            if (generation != m_searchGeneration) return;
+            m_hashJob = nullptr; m_searchFingerprint = job->fingerprint;
+            if (!m_searchFingerprint.hash.isEmpty()) m_searchPhase = 0;
+            requestSearchPage(generation);
+        });
+        connect(job, &QThread::finished, job, &QObject::deleteLater);
+        job->start(QThread::LowPriority);
+    } else requestSearchPage(generation);
+}
+
+void SubtitleSourceService::requestSearchPage(quint64 generation)
+{
+    if (generation != m_searchGeneration) return;
+    const auto& target = m_searchTargets[m_targetIndex]; const auto& identity = target.identity;
     QUrlQuery parameters;
-    if (!language.isEmpty()) parameters.addQueryItem(QStringLiteral("languages"), language);
-    parameters.addQueryItem(QStringLiteral("query"), query.toLower());
-    url.setQuery(parameters);
+    if (!m_searchLanguage.isEmpty()) parameters.addQueryItem(QStringLiteral("languages"), m_searchLanguage);
+    if (m_searchPhase == 0) {
+        parameters.addQueryItem(QStringLiteral("moviehash"), m_searchFingerprint.hash);
+        parameters.addQueryItem(QStringLiteral("moviebytesize"), QString::number(m_searchFingerprint.size));
+    } else {
+        const QMap<QString, QString> ids{{"imdb", "imdb_id"}, {"seriesImdb", "parent_imdb_id"},
+            {"tmdbMovie", "tmdb_id"}, {"tmdbEpisode", "tmdb_id"}, {"seriesTmdb", "parent_tmdb_id"}};
+        bool hasId = false;
+        for (auto it = ids.cbegin(); it != ids.cend(); ++it) {
+            if (!identity.ids.contains(it.key())) continue;
+            auto id = identity.ids.value(it.key()); if (id.startsWith("tt")) id.remove(0, 2);
+            parameters.addQueryItem(it.value(), id); hasId = true;
+        }
+        if (!hasId && identity.title.isEmpty()) { finishSearchTarget(generation); return; }
+        if (!hasId) parameters.addQueryItem(QStringLiteral("query"), identity.title.toLower());
+        if (identity.kind != MediaIdentity::Kind::Unknown)
+            parameters.addQueryItem(QStringLiteral("type"), identity.kind == MediaIdentity::Kind::Movie ? "movie" : "episode");
+        if (identity.year >= 0 && m_searchPhase == 1) parameters.addQueryItem(QStringLiteral("year"), QString::number(identity.year));
+        if (identity.season >= 0) parameters.addQueryItem(QStringLiteral("season_number"), QString::number(identity.season));
+        if (identity.episodes.size() == 1) parameters.addQueryItem(QStringLiteral("episode_number"), QString::number(identity.episodes.first()));
+    }
+    if (m_searchPage > 1) parameters.addQueryItem(QStringLiteral("page"), QString::number(m_searchPage));
+    auto url = m_options.apiBase.resolved(QUrl(QStringLiteral("subtitles"))); url.setQuery(parameters);
     m_searchReply = request(url, {}, true, m_options.maxJsonBytes,
         [this, generation](const QByteArray& bytes, QString error) {
             if (generation != m_searchGeneration) return;
             m_searchReply = nullptr;
             auto sources = error.isEmpty() ? parseSources(bytes, error) : QVariantList{};
-            emit searchFinished(generation, {{"success", error.isEmpty()}, {"error", error}, {"sources", sources}});
+            if (!error.isEmpty()) { mergeSources(m_searchSources, m_targetSources); finishSearch(generation, error); return; }
+            const auto key = m_searchTargets[m_targetIndex].url.toString(QUrl::FullyEncoded);
+            for (auto& value : sources) {
+                auto source = value.toMap();
+                source.insert("hashFor", m_searchPhase == 0 && source.value("hashMatched").toBool() ? QStringList{key} : QStringList{});
+                value = source;
+            }
+            mergeSources(m_targetSources, sources);
+            const int pages = QJsonDocument::fromJson(bytes).object().value("total_pages").toInt(1);
+            if (pages > m_searchPage && m_searchPage < 3) { ++m_searchPage; requestSearchPage(generation); return; }
+            if (pages > m_searchPage) m_searchWarning = tr("More subtitles are available. Refine the title or language to narrow the results.");
+            finishSearchPhase(generation);
         });
-    return generation;
+}
+
+void SubtitleSourceService::finishSearchPhase(quint64 generation)
+{
+    if (generation != m_searchGeneration) return;
+    const auto& target = m_searchTargets[m_targetIndex];
+    if (m_searchPhase == 0) {
+        const auto key = target.url.toString(QUrl::FullyEncoded);
+        const bool found = std::any_of(m_targetSources.cbegin(), m_targetSources.cend(), [&key](const QVariant& value) {
+            return value.toMap().value("hashFor").toStringList().contains(key);
+        });
+        if (!found) { m_searchPhase = 1; m_searchPage = 1; requestSearchPage(generation); return; }
+    } else if (m_searchPhase == 1 && target.identity.year >= 0 && target.identity.ids.isEmpty()) {
+        const auto provenance = target.identity.provenance.value("year");
+        const auto ranked = SubtitleMatching::rank(target.identity, m_targetSources, target.url.toString(QUrl::FullyEncoded), m_searchLanguage);
+        const bool found = std::any_of(ranked.cbegin(), ranked.cend(), [](const QVariant& value) { return value.toMap().value("matchScore").toInt() > 0; });
+        if (!found && (provenance == "filename" || provenance == "folder")) {
+            m_searchPhase = 2; m_searchPage = 1; requestSearchPage(generation); return;
+        }
+    }
+    finishSearchTarget(generation);
+}
+
+void SubtitleSourceService::finishSearchTarget(quint64 generation)
+{
+    if (generation != m_searchGeneration) return;
+    mergeSources(m_searchSources, m_targetSources);
+    ++m_targetIndex;
+    emit searchProgressChanged();
+    if (m_searchSources.size() >= 4000) {
+        m_searchWarning = tr("Many subtitles were found. Refine the title or language before searching more files.");
+        finishSearch(generation); return;
+    }
+    QTimer::singleShot(0, this, [this, generation] { beginSearchTarget(generation); });
+}
+
+void SubtitleSourceService::finishSearch(quint64 generation, const QString& error)
+{
+    if (generation != m_searchGeneration) return;
+    QVariantList ranked = m_searchSources;
+    if (!m_searchTargets.isEmpty()) ranked = SubtitleMatching::rank(m_searchTargets.first().identity,
+        ranked, m_searchTargets.first().url.toString(QUrl::FullyEncoded), m_searchLanguage);
+    const bool success = error.isEmpty() || !ranked.isEmpty();
+    emit searchFinished(generation, {{"success", success}, {"error", success ? QString() : error},
+        {"warning", !error.isEmpty() && success ? error : m_searchWarning}, {"sources", ranked},
+        {"identities", m_searchIdentities}});
 }
 
 QString SubtitleSourceService::cachePath(const Record& record) const

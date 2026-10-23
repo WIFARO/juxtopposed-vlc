@@ -344,7 +344,7 @@ libqt_plugin_la_SOURCES = \
 	util/color_scheme_model.cpp util/color_scheme_model.hpp \
 	util/redesign_widget_theme.cpp util/redesign_widget_theme.hpp \
 	util/playlist_cover_store.hpp \
-	util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp \
+	util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp util/media_identity_vlc.hpp util/subtitle_matching.hpp \
 	util/local_file_url.hpp \
 	util/gettext_translator.cpp util/gettext_translator.hpp \
 	util/interface_translator.cpp util/interface_translator.hpp \

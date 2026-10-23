@@ -100,9 +100,10 @@ private slots:
         QCOMPARE(sources[1].toMap().value("name").toString(),"other.srt");
         QVERIFY(sources[0].toMap().value("hearingImpaired").toBool());
         QCOMPARE(server.requests.size(),1);QCOMPARE(server.requests[0].url.path(),"/api/subtitles");
-        QCOMPARE(QUrlQuery(server.requests[0].url).queryItemValue("query"),"the wand s01e04");
+        QCOMPARE(QUrlQuery(server.requests[0].url).queryItemValue("query"),"the wand");
         QCOMPARE(QUrlQuery(server.requests[0].url).queryItemValue("languages"),"en");
-        QVERIFY(server.requests[0].url.query().startsWith("languages=en&query="));
+        QCOMPARE(QUrlQuery(server.requests[0].url).queryItemValue("season_number"),"1");
+        QCOMPARE(QUrlQuery(server.requests[0].url).queryItemValue("episode_number"),"4");
         QCOMPARE(server.requests[0].headers.value("api-key"),QByteArray("unit-secret"));QVERIFY(!server.requests[0].headers.value("user-agent").isEmpty());
     }
     void allLanguagesDoesNotSendALanguageFilter() {
@@ -112,6 +113,100 @@ private slots:
         QVERIFY(result(spy).value("success").toBool());QCOMPARE(server.requests.size(),1);
         const QUrlQuery query(server.requests[0].url);
         QVERIFY(!query.hasQueryItem("languages"));QCOMPARE(query.queryItemValue("query"),"the wand");
+    }
+    void structuredIdentitySearchAndManualCorrection() {
+        QTemporaryDir directory; Server server;
+        server.respond=[](const HttpRequest&,QTcpSocket* socket){Server::send(socket,results());};
+        SubtitleSourceService client(options(server)); client.setStorageDirectory(directory.path()); QVERIFY(client.setApiKey("unit-secret"));
+        QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);
+        client.searchMedia({{"url","https://example.com/Dune.2021.1080p.WEB-DL.mkv"}},"en");
+        QVERIFY(result(spy).value("success").toBool());
+        QUrlQuery query(server.requests.first().url);
+        QCOMPARE(query.queryItemValue("query"),"dune"); QCOMPARE(query.queryItemValue("year"),"2021");
+        QCOMPARE(query.queryItemValue("type"),"movie");
+        spy.clear();
+        client.searchMedia({{"url","https://example.com/Show.S01E04.mkv"},
+            {"metadata",QVariantMap{{"seriesImdbId","tt1234567"}}}},"en");
+        QVERIFY(result(spy).value("success").toBool()); query=QUrlQuery(server.requests.last().url);
+        QCOMPARE(query.queryItemValue("parent_imdb_id"),"1234567"); QVERIFY(!query.hasQueryItem("query"));
+        QCOMPARE(query.queryItemValue("season_number"),"1"); QCOMPARE(query.queryItemValue("episode_number"),"4");
+        spy.clear();
+        client.searchMedia({{"url","https://example.com/Show.S01E04.mkv"},{"manual",true},{"query","Other Show S02E05"},
+            {"metadata",QVariantMap{{"seriesImdbId","tt1234567"}}}},"en");
+        QVERIFY(result(spy).value("success").toBool()); query=QUrlQuery(server.requests.last().url);
+        QCOMPARE(query.queryItemValue("query"),"other show"); QVERIFY(!query.hasQueryItem("parent_imdb_id"));
+        QCOMPARE(query.queryItemValue("season_number"),"2"); QCOMPARE(query.queryItemValue("episode_number"),"5");
+    }
+    void hashLookupIsScopedAndCanFallBack() {
+        QTemporaryDir directory; QFile video(directory.filePath("Show.S01E04.mkv"));
+        QVERIFY(video.open(QIODevice::WriteOnly)); QVERIFY(video.resize(131072)); video.close();
+        const auto url=QUrl::fromLocalFile(video.fileName()).toString(QUrl::FullyEncoded);
+        Server server; bool hashMatch=true;
+        server.respond=[&](const HttpRequest& request,QTcpSocket* socket) {
+            auto body=results();
+            if(hashMatch && QUrlQuery(request.url).hasQueryItem("moviehash")) body.replace("\"language\":\"en\"","\"moviehash_match\":true,\"language\":\"en\"");
+            Server::send(socket,body);
+        };
+        SubtitleSourceService client(options(server));client.setStorageDirectory(directory.path());QVERIFY(client.setApiKey("unit-secret"));
+        QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);
+        client.searchMedia({{"url",url}},"en"); auto answer=result(spy);
+        QCOMPARE(server.requests.size(),1); const QUrlQuery query(server.requests[0].url);
+        QCOMPARE(query.queryItemValue("moviehash"),"0000000000020000"); QCOMPARE(query.queryItemValue("moviebytesize"),"131072");
+        const auto source=answer.value("sources").toList()[0].toMap(); QCOMPARE(source.value("hashFor").toStringList(),QStringList{url});
+        QCOMPARE(source.value("matchReason").toString(),"Exact file match");
+        hashMatch=false;spy.clear();server.requests.clear();client.searchMedia({{"url",url}},"en");
+        answer=result(spy);QCOMPARE(server.requests.size(),2);
+        QVERIFY(QUrlQuery(server.requests[0].url).hasQueryItem("moviehash"));
+        QCOMPARE(QUrlQuery(server.requests[1].url).queryItemValue("episode_number"),"4");
+        QVERIFY(answer.value("sources").toList()[0].toMap().value("hashFor").toStringList().isEmpty());
+        spy.clear();server.requests.clear();client.searchMedia({{"url",url},{"manual",true},{"query","Corrected Title 2020"}},"en");
+        QVERIFY(result(spy).value("success").toBool());QCOMPARE(server.requests.size(),1);
+        QVERIFY(!QUrlQuery(server.requests[0].url).hasQueryItem("moviehash"));
+    }
+    void uncertainYearFallbackPreservesEpisodeConstraints() {
+        QTemporaryDir directory;Server server;
+        server.respond=[](const HttpRequest&,QTcpSocket* socket){Server::send(socket,R"({"data":[]})");};
+        SubtitleSourceService client(options(server));client.setStorageDirectory(directory.path());QVERIFY(client.setApiKey("unit-secret"));
+        QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);
+        client.searchMedia({{"url","https://example.com/Show.2005.S02E03.mkv"}},"en");
+        QVERIFY(result(spy).value("success").toBool());QCOMPARE(server.requests.size(),2);
+        QVERIFY(QUrlQuery(server.requests.first().url).hasQueryItem("year"));
+        const QUrlQuery last(server.requests.last().url);QVERIFY(!last.hasQueryItem("year"));
+        QCOMPARE(last.queryItemValue("season_number"),"2");QCOMPARE(last.queryItemValue("episode_number"),"3");
+        spy.clear();server.requests.clear();client.search("Show 2005 S02E03","en");
+        QVERIFY(result(spy).value("success").toBool());QCOMPARE(server.requests.size(),1);
+        spy.clear();server.requests.clear();
+        client.searchMedia({{"url","https://example.com/Show.S02E03.mkv"},{"metadata",QVariantMap{{"year",2005}}}},"en");
+        QVERIFY(result(spy).value("success").toBool());QCOMPARE(server.requests.size(),1);
+    }
+    void cancellationStopsHashAndRemainingBatchTargets() {
+        QTemporaryDir directory;QFile video(directory.filePath("Show.S01E04.mkv"));
+        QVERIFY(video.open(QIODevice::WriteOnly));QVERIFY(video.resize(131072));video.close();
+        Server server;server.respond=[](const HttpRequest&,QTcpSocket*){};
+        SubtitleSourceService client(options(server));client.setStorageDirectory(directory.path());QVERIFY(client.setApiKey("unit-secret"));
+        QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);
+        client.searchMedia({{"url",QUrl::fromLocalFile(video.fileName())}},"en");client.cancelSearch();
+        QTest::qWait(50);QCOMPARE(spy.count(),0);QVERIFY(server.requests.isEmpty());
+        const QVariantList targets{QVariantMap{{"url","https://example.com/Show.S01E04.mkv"}},
+                                   QVariantMap{{"url","https://example.com/Show.S01E05.mkv"}}};
+        client.searchMedia({{"targets",targets}},"en");
+        QVERIFY(QTest::qWaitFor([&]{return server.requests.size()==1;}));
+        client.cancelSearch();QTest::qWait(50);QCOMPARE(server.requests.size(),1);QCOMPARE(spy.count(),0);
+        QCOMPARE(client.searchTotal(),0);
+    }
+    void paginationAndBatchKeepProviderEvidence() {
+        QTemporaryDir directory;Server server;
+        server.respond=[](const HttpRequest&,QTcpSocket* socket){auto body=results();body.replace("\"data\":","\"total_pages\":5,\"data\":");Server::send(socket,body);};
+        SubtitleSourceService client(options(server));client.setStorageDirectory(directory.path());QVERIFY(client.setApiKey("unit-secret"));
+        QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);
+        const QVariantList targets{QVariantMap{{"url","https://example.com/The.Wand.S01E04.mkv"}},
+                                   QVariantMap{{"url","https://example.com/The.Wand.S01E05.mkv"}}};
+        client.searchMedia({{"targets",targets}},"en");const auto answer=result(spy);
+        QVERIFY(answer.value("success").toBool());QCOMPARE(server.requests.size(),6);
+        QCOMPARE(answer.value("sources").toList().size(),2);QCOMPARE(answer.value("identities").toMap().size(),2);
+        QVERIFY(!answer.value("warning").toString().isEmpty());
+        QCOMPARE(QUrlQuery(server.requests.last().url).queryItemValue("episode_number"),"5");
+        QCOMPARE(QUrlQuery(server.requests.last().url).queryItemValue("page"),"3");
     }
     void consumerKeyAndCustomOverride() {
         QTemporaryDir directory;Server server;server.respond=[](const HttpRequest&,QTcpSocket* socket){Server::send(socket,results());};

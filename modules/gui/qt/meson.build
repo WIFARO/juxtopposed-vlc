@@ -508,6 +508,8 @@ qt_plugin_sources = files(
     'util/track_matching.hpp',
     'util/media_identity.hpp',
     'util/media_fingerprint.hpp',
+    'util/media_identity_vlc.hpp',
+    'util/subtitle_matching.hpp',
     'util/local_file_url.hpp',
     'util/gettext_translator.cpp',
     'util/gettext_translator.hpp',

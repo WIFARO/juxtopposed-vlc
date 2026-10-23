@@ -67,6 +67,7 @@ inline Identity parse(QString name)
     name.remove(QRegularExpression(QStringLiteral(
         "\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|srt|ass|ssa|vtt|sub|idx|smi)$"),
         QRegularExpression::CaseInsensitiveOption));
+    const bool hasExtension = name != originalName;
     const auto insensitive = QRegularExpression::CaseInsensitiveOption;
     qsizetype end = name.size();
     const auto cut = [&end](qsizetype position) { if (position >= 0) end = std::min(end, position); };
@@ -110,7 +111,7 @@ inline Identity parse(QString name)
                 // A leading fansub group is evidence only in an anime-style release.
                 static const QRegularExpression group(QStringLiteral("^\\[([^\\]]+)\\][ _.-]*"));
                 const auto leading = group.match(name);
-                if (leading.hasMatch()) {
+                if (leading.hasMatch() && end > leading.capturedLength() && !displayTitle(name.mid(leading.capturedLength(), end - leading.capturedLength())).isEmpty()) {
                     result.release.insert("group", leading.captured(1));
                     name.remove(0, leading.capturedLength());
                     end -= leading.capturedLength();
@@ -121,6 +122,15 @@ inline Identity parse(QString name)
                 const auto pack = season.match(name);
                 if (pack.hasMatch()) { result.kind = Kind::Episode; result.season = pack.captured(1).toInt(); cut(pack.capturedStart()); }
             }
+        }
+    }
+
+    if (result.kind == Kind::Episode) {
+        static const QRegularExpression group(QStringLiteral("^\\[([^\\]]+)\\][ _.-]*"));
+        const auto leading = group.match(name);
+        if (leading.hasMatch() && end > leading.capturedLength() && !displayTitle(name.mid(leading.capturedLength(), end - leading.capturedLength())).isEmpty()) {
+            result.release.insert("group", leading.captured(1));
+            name.remove(0, leading.capturedLength()); end -= leading.capturedLength();
         }
     }
 
@@ -168,7 +178,7 @@ inline Identity parse(QString name)
     static const QRegularExpression identifier(QStringLiteral(
         "[\\[{](?:imdb(?:id)?[ ._:=/-]*)?(tt\\d{5,12})[\\]}]"), insensitive);
     const auto id = identifier.match(name);
-    if (id.hasMatch()) { result.ids.insert("imdb", id.captured(1).toLower()); cut(id.capturedStart()); }
+    if (id.hasMatch()) { result.ids.insert(result.kind == Kind::Episode ? "seriesImdb" : "imdb", id.captured(1).toLower()); cut(id.capturedStart()); }
     static const QRegularExpression tmdb(QStringLiteral("[\\[{]tmdb(?:id)?[ ._:=/-]*(\\d+)[\\]}]"), insensitive);
     const auto tmdbId = tmdb.match(name);
     if (tmdbId.hasMatch()) {
@@ -176,7 +186,7 @@ inline Identity parse(QString name)
         cut(tmdbId.capturedStart());
     }
     result.title = displayTitle(name.left(std::max(qsizetype(0), end)));
-    if (name != originalName && genericTitle(result.title)) result.title.clear();
+    if (hasExtension && genericTitle(result.title)) result.title.clear();
     if (!result.title.isEmpty()) result.provenance.insert("title", "filename");
     if (result.year >= 0) result.provenance.insert("year", "filename");
     if (result.kind == Kind::Episode) result.provenance.insert("episode", "filename");
@@ -187,7 +197,9 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
 {
     const auto text = [&](const char* key) { return metadata.value(QLatin1String(key)).toString().trimmed(); };
     auto title = text("showName");
-    if (title.isEmpty()) title = text("title");
+    // In episode metadata, Title commonly names the episode rather than the series.
+    if (title.isEmpty() && (source == "user" || (identity.kind != Kind::Episode
+        && text("type") != "episode" && !metadata.contains("episode")))) title = text("title");
     if (!title.isEmpty() && (source == "user" || !genericTitle(title))) {
         if (!identity.title.isEmpty() && compact(identity.title) != compact(title)) {
             identity.conflicts.append(QStringLiteral("title"));
@@ -230,6 +242,21 @@ inline void applyMetadata(Identity& identity, const QVariantMap& metadata, const
         if (it.value().contains("imdb", Qt::CaseInsensitive)) value.prepend("tt");
         identity.ids.insert(it.value(), value); identity.provenance.insert(it.value(), source);
     }
+    if (metadata.contains("absoluteEpisode")) {
+        const auto absolute = metadata.value("absoluteEpisode").toString();
+        static const QRegularExpression pattern(QStringLiteral("^\\d{1,4}(?:\\.\\d{1,2})?$"));
+        if (absolute.isEmpty() || pattern.match(absolute).hasMatch()) {
+            identity.absoluteEpisode = absolute;
+            if (!absolute.isEmpty()) { identity.kind = Kind::Episode; identity.provenance.insert("absoluteEpisode", source); }
+        }
+    }
+    if (metadata.contains("airDate")) {
+        const auto date = QDate::fromString(metadata.value("airDate").toString(), Qt::ISODate);
+        if (date.isValid() || metadata.value("airDate").toString().isEmpty()) {
+            identity.airDate = date;
+            if (date.isValid()) { identity.kind = Kind::Episode; identity.provenance.insert("airDate", source); }
+        }
+    }
     const auto release = metadata.value("release").toMap();
     for (auto it = release.cbegin(); it != release.cend(); ++it)
         if (!it.value().toString().isEmpty()) identity.release.insert(it.key(), it.value().toString());
@@ -254,6 +281,11 @@ inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
             if (result.year >= 0) result.provenance.insert("year", "folder");
         }
     }
+    if (result.season >= 0 && result.episodes.isEmpty()) {
+        const auto stem = QFileInfo(url.fileName()).completeBaseName();
+        static const QRegularExpression number(QStringLiteral("^\\d{1,3}$"));
+        if (number.match(stem).hasMatch()) { result.episodes.append(stem.toInt()); result.provenance.insert("episode", "folder"); }
+    }
     if (result.kind == Kind::Unknown && result.season >= 0) result.kind = Kind::Episode;
     applyMetadata(result, metadata);
     return result;
@@ -277,7 +309,7 @@ inline QVariantMap toMap(const Identity& identity)
 inline Identity fromMap(const QVariantMap& data)
 {
     Identity identity;
-    applyMetadata(identity, data);
+    applyMetadata(identity, data, "user");
     identity.aliases = data.value("aliases").toStringList();
     identity.absoluteEpisode = data.value("absoluteEpisode").toString();
     identity.airDate = QDate::fromString(data.value("airDate").toString(), Qt::ISODate);
@@ -352,6 +384,7 @@ inline Comparison compare(const Identity& target, const Identity& candidate)
     const bool workId = result.agreements.contains("imdb") || result.agreements.contains("tmdbMovie")
         || result.agreements.contains("tmdbEpisode") || result.agreements.contains("tvdbEpisode");
     result.strong = episodic ? (episode || absolute || date) && (result.exactTitle || idMatch || workId)
+                                && (target.year < 0 || year || idMatch)
                             : workId || (result.exactTitle && year);
     return result;
 }

@@ -2,6 +2,7 @@
 #include <QTest>
 #include <QTemporaryDir>
 #include "util/media_fingerprint.hpp"
+#include "util/subtitle_matching.hpp"
 #include "util/media_identity.hpp"
 #include "util/track_matching.hpp"
 using namespace MediaIdentity;
@@ -23,6 +24,7 @@ private slots:
         QTest::newRow("part-one") << "Movie.Part.1.2024.mkv" << "Movie Part 1" << 2024 << -1 << QList<int>{};
         QTest::newRow("bracket-title") << "[REC].2007.mkv" << "[REC]" << 2007 << -1 << QList<int>{};
         QTest::newRow("unicode") << QString::fromUtf8("Le.Fabuleux.Destin.d’Amélie.Poulain.2001.mkv") << QString::fromUtf8("Le Fabuleux Destin d’Amélie Poulain") << 2001 << -1 << QList<int>{};
+        QTest::newRow("fansub-seasonal") << "[Fansub] The.Show.S02E03.1080p.mkv" << "The Show" << -1 << 2 << QList<int>{3};
         QTest::newRow("episode") << "The.Show.S02E03.1080p.WEB-DL-GROUP.mkv" << "The Show" << -1 << 2 << QList<int>{3};
         QTest::newRow("series-year") << "The.Show.2005.S02E03.mkv" << "The Show" << 2005 << 2 << QList<int>{3};
         QTest::newRow("x-episode") << "The_Show.2x03.en.srt" << "The Show" << -1 << 2 << QList<int>{3};
@@ -65,6 +67,8 @@ private slots:
         const auto movie = parse("Dune (2021) [imdbid-tt1160419] [tmdbid-438631].mkv");
         QCOMPARE(movie.ids.value("imdb"),"tt1160419"); QCOMPARE(movie.ids.value("tmdbMovie"),"438631");
         const auto series = parse("Show.S01E01.[tmdb-438631].mkv");
+        const auto taggedSeries = parse("Show.[imdbid-tt1234567].S01E01.mkv");
+        QCOMPARE(taggedSeries.ids.value("seriesImdb"),"tt1234567"); QVERIFY(!taggedSeries.ids.contains("imdb"));
         QCOMPARE(series.ids.value("seriesTmdb"),"438631"); QVERIFY(!series.ids.contains("tmdbMovie"));
     }
     void foldersAndMetadata() {
@@ -85,8 +89,46 @@ private slots:
         QVERIFY(compare(parse("Show.S01E03E04.mkv"),parse("Show.S01E03.srt")).conflict);
         QVERIFY(!compare(parse("Show.S01E03.mkv"),parse("Show.S01.srt")).strong);
         QVERIFY(!compare(parse("Show.S01E03.mkv"),parse("Other.Show.S01E03.srt")).strong);
+        QVERIFY(!compare(parse("Show.2005.S01E03.mkv"),parse("Show.S01E03.srt")).strong);
+        const auto tagged = identify(QUrl("file:///Show.S01E03.mkv"),{{"title","Episode Title"},{"episode",3}});
+        QCOMPARE(tagged.title,"Show");
         QVERIFY(similarity("The Matrx","The Matrix")>.86);
         QVERIFY(!compare(parse("The.Matrx.1999.mkv"),parse("The.Matrix.1999.srt")).strong);
+    }
+    void subtitleRankingAndAmbiguity() {
+        const auto target=parse("Dune.2021.1080p.WEB-DL-GROUP.mkv");
+        const QVariantMap web{{"url","opensubtitles:/1"},{"release","Dune.2021.720p.WEB-DL-GROUP"},{"language","en"}};
+        const QVariantMap bluray{{"url","opensubtitles:/2"},{"release","Dune.2021.1080p.BluRay-OTHER"},{"language","en"}};
+        const QVariantMap wrong{{"url","opensubtitles:/3"},{"release","Dune.1984.1080p.WEB-DL-GROUP"},{"language","en"}};
+        const auto ranked=SubtitleMatching::rank(target,{wrong,bluray,web},"file:///Dune.mkv","en");
+        QCOMPARE(ranked[0].toMap().value("url").toString(),"opensubtitles:/1");
+        QCOMPARE(ranked.last().toMap().value("matchScore").toInt(),-1);
+        const QVariantList media{QVariantMap{{"url","file:///Dune.mkv"},{"identity",toMap(target)}}};
+        QCOMPARE(SubtitleMatching::match(media,{bluray,web},"en").value("file:///Dune.mkv").toStringList(),QStringList{"opensubtitles:/1"});
+        auto duplicate=web;duplicate.insert("url","opensubtitles:/4");
+        QVERIFY(SubtitleMatching::match(media,{web,duplicate},"en").isEmpty());
+        const QVariantList ambiguous{media[0],QVariantMap{{"url","file:///other/Dune.mkv"},{"identity",toMap(target)}}};
+        QVERIFY(SubtitleMatching::match(ambiguous,{web},"en").isEmpty());
+        auto forced=web;forced.insert("forced",true);
+        QVERIFY(SubtitleMatching::match(media,{forced},"en").isEmpty());
+        QVERIFY(SubtitleMatching::match(media,{web},"fr").isEmpty());
+        auto cut=web;cut.insert("release","Dune.2021.Extended.720p.WEB-DL-GROUP");
+        auto theatrical=target;theatrical.release.insert("edition","theatrical");
+        QVERIFY(!SubtitleMatching::rank(theatrical,{cut}).first().toMap().value("automaticMatch").toBool());
+    }
+    void providerIdentityAndScopedHash() {
+        const QVariantMap source{{"url","opensubtitles:/1"},{"release","unhelpful"},{"language","en"},
+            {"feature",QVariantMap{{"feature_type","Episode"},{"parent_title","Show"},{"season_number",1},
+                {"episode_number",3},{"year",2024},{"parent_imdb_id",1234567},{"imdb_id",7654321}}}};
+        const auto candidate=SubtitleMatching::identity(source);
+        QCOMPARE(candidate.title,"Show");QCOMPARE(candidate.year,-1);QCOMPARE(candidate.ids.value("seriesImdb"),"tt1234567");
+        auto target=parse("Show.S01E03.mkv");
+        QVERIFY(SubtitleMatching::rank(target,{source}).first().toMap().value("automaticMatch").toBool());
+        target.episodes={4};QCOMPARE(SubtitleMatching::rank(target,{source}).first().toMap().value("matchScore").toInt(),-1);
+        auto hash=source;hash.insert("hashFor",QStringList{"file:///one.mkv"});
+        const Identity unknown;
+        QVERIFY(SubtitleMatching::rank(unknown,{hash},"file:///one.mkv").first().toMap().value("automaticMatch").toBool());
+        QVERIFY(!SubtitleMatching::rank(unknown,{hash},"file:///two.mkv").first().toMap().value("automaticMatch").toBool());
     }
     void fileFingerprint() {
         QTemporaryDir directory;
@@ -106,6 +148,8 @@ private slots:
         QCOMPARE(TrackMatching::match({film},{subtitle}).value(film),QList<QUrl>{subtitle});
         QVERIFY(TrackMatching::match({film,QUrl("file:///other/Dune.2021.mkv")},{subtitle}).isEmpty());
         QVERIFY(TrackMatching::match({film},{QUrl("file:///Dune.1984.srt")}).isEmpty());
+        QVERIFY(TrackMatching::match({QUrl("file:///Dune.2021.Theatrical.mkv")},
+            {QUrl("file:///Dune.2021.Extended.srt")}).isEmpty());
         const QUrl show("file:///Show.S01E01E02.mkv");
         QVERIFY(TrackMatching::match({show},{QUrl("file:///Show.S01E01.srt")}).isEmpty());
     }

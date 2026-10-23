@@ -76,6 +76,8 @@ inline int score(const Name& media, const Name& track)
     const auto& b = track.identity;
     const auto comparison = MediaIdentity::compare(a, b);
     if (comparison.conflict) return 0;
+    if (a.release.contains("edition") && b.release.contains("edition")
+        && MediaIdentity::compact(a.release.value("edition")) != MediaIdentity::compact(b.release.value("edition"))) return 0;
     if (comparison.strong) return 90;
     if (!a.episodes.isEmpty() && !b.episodes.isEmpty()) {
         if (a.episodes != b.episodes || a.season != b.season) return 0;
