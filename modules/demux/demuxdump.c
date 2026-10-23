@@ -66,6 +66,10 @@ static int Open( vlc_object_t * p_this )
 {
     demux_t *p_demux = (demux_t*)p_this;
 
+    /* A metadata scan must not create or write the output file. */
+    if( p_demux->b_preparsing )
+        return VLC_EGENERIC;
+
     /* Accept only if forced */
     if( !p_demux->obj.force )
         return VLC_EGENERIC;

@@ -1145,7 +1145,8 @@ void DialogsProvider::streamingDialog( QWindow *parent,
                                        bool b_transcode_only,
                                        QStringList options )
 {
-    QStringList outputMRLs;
+    if (mrls.isEmpty()) return;
+    QList<QStringList> outputOptions;
 
     /* Stream */
     // Does streaming multiple files make sense?  I suppose so, just stream one
@@ -1156,7 +1157,7 @@ void DialogsProvider::streamingDialog( QWindow *parent,
         s->setAttribute( Qt::WA_QuitOnClose, false ); // See #4883
         if( s->exec() == QDialog::Accepted )
         {
-            outputMRLs.append(s->getChain());
+            outputOptions.append(s->getChain().split(" :"));
             delete s;
         }
         else
@@ -1172,7 +1173,7 @@ void DialogsProvider::streamingDialog( QWindow *parent,
             /* Clear the playlist.  This is because we're going to be populating
                it */
             THEMPL->clear();
-            outputMRLs = s->getMrls();
+            outputOptions = s->getOptions();
             delete s;
         }
         else
@@ -1184,11 +1185,11 @@ void DialogsProvider::streamingDialog( QWindow *parent,
     /* Get SoutChain(s) */
     QVector<vlc::playlist::Media> outputMedias;
 
-    for( auto it = outputMRLs.cbegin(); it != outputMRLs.cend(); ++it )
+    for (int i = 0; i < outputOptions.size(); ++i)
     {
-        const QString &mrl = mrls[std::distance(outputMRLs.cbegin(), it)];
+        const QString &mrl = mrls[i];
         QString title = "Converting " + mrl;
-        outputMedias.append(vlc::playlist::Media(mrl, title, options + (*it).split(" :")));
+        outputMedias.append(vlc::playlist::Media(mrl, title, options + outputOptions[i]));
     }
 
     if( !outputMedias.empty() )

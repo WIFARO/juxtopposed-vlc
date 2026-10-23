@@ -1,5 +1,5 @@
 /*****************************************************************************
- * convert.hpp : GotoTime dialogs
+ * convert.hpp : Conversion dialogs
  ****************************************************************************
  * Copyright (C) 2007 the VideoLAN team
  *
@@ -24,6 +24,8 @@
 #define QVLC_CONVERT_DIALOG_H_ 1
 
 #include <QUrl>
+#include <QStringList>
+#include <QList>
 
 #include "widgets/native/qvlcframe.hpp"
 
@@ -32,6 +34,9 @@ class QCheckBox;
 class QRadioButton;
 class QPushButton;
 class VLCProfileSelector;
+class QLabel;
+class QTreeWidget;
+class QTimer;
 
 class ConvertDialog : public QVLCDialog
 {
@@ -40,20 +45,30 @@ public:
     ConvertDialog(QWindow *, qt_intf_t *, const QStringList& );
     virtual ~ConvertDialog(){}
 
-    QStringList getMrls() {return mrls;}
+    QList<QStringList> getOptions() const { return outputOptions; }
 
 private:
     QLineEdit *fileLine;
 
     QCheckBox *displayBox, *deinterBox, *appendBox;
     QRadioButton *dumpRadio;
+    QLabel *feedback, *outputPreview;
+    QTreeWidget *batchPreview;
+    QTimer *validationTimer;
+    QStringList plannedPaths;
+    QString previousExtension;
     QPushButton *okButton;
     VLCProfileSelector *profile;
 
-    const QStringList *incomingMRLs;
+    const QStringList incomingMRLs;
     const bool singleFileSelected;
-    QUrl outgoingMRL;
-    QStringList mrls;
+    QList<QStringList> outputOptions;
+    QString outputPathText() const;
+    QString extensionFor(const QString &) const;
+    void profileChanged();
+
+protected:
+    void keyPressEvent(QKeyEvent *) override;
 
 public slots:
     void accept() override;
