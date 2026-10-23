@@ -26,6 +26,7 @@
 #include <vlc_log_observer.h>
 #include "qt.hpp"
 #include <QThread>
+#include <QScopeGuard>
 
 #include "maininterface/mainctx.hpp"
 
@@ -287,95 +288,96 @@ void DialogErrorModel::resetRepeatedMessageCount()
 // DialogModel
 //=================================================================================================
 
-//static functions
+// Native callback strings only remain valid until their callback returns.
 namespace {
-
-void onDialogLogin(void * p_data, vlc_dialog_id * dialogId,
-                                       const char * psz_title, const char * psz_text,
-                                       const char * psz_default_username, bool b_ask_store)
+void onDialogLogin(void *data, vlc_dialog_id *id, const char *title,
+                   const char *text, const char *username, bool askStore)
 {
-    VLCDialogModel * model = static_cast<VLCDialogModel *>(p_data);
-    model->dialogCallback(dialogId, [=](VLCDialog* provider){
-        emit provider->login(dialogId, psz_title, psz_text, psz_default_username, b_ask_store);
-    });
-
+    auto *model = static_cast<VLCDialogModel *>(data);
+    model->dialogCallback(id, VLCDialogModel::DialogEvent::Request,
+        [title = qfu(title), text = qfu(text), username = qfu(username), askStore]
+        (VLCDialog *provider, DialogId handle) {
+            emit provider->login(handle, title, text, username, askStore);
+        });
 }
 
-void onDialogQuestion(void * p_data, vlc_dialog_id * dialogId,
-                                          const char * psz_title, const char * psz_text,
-                                          vlc_dialog_question_type i_type,
-                                          const char * psz_cancel, const char * psz_action1,
-                                          const char * psz_action2)
+void onDialogQuestion(void *data, vlc_dialog_id *id, const char *title,
+                      const char *text, vlc_dialog_question_type type,
+                      const char *cancel, const char *action1, const char *action2)
 {
-    auto model = static_cast<VLCDialogModel *>(p_data);
-    if (!model->shouldShowQuestion(i_type))
+    auto *model = static_cast<VLCDialogModel *>(data);
+    if (!model->shouldShowQuestion(type))
     {
-        // Suppression must never accept an action on the user's behalf.
-        vlc_dialog_id_dismiss(dialogId);
+        vlc_dialog_id_dismiss(id);
         return;
     }
-    model->dialogCallback(dialogId, [=](VLCDialog* provider){
-        emit provider->question(
-            dialogId, psz_title, psz_text,
-            static_cast<VLCDialog::QuestionType>(i_type), psz_cancel,
-            psz_action1, psz_action2);
-    });
+    model->dialogCallback(id, VLCDialogModel::DialogEvent::Request,
+        [title = qfu(title), text = qfu(text), type, cancel = qfu(cancel),
+         action1 = qfu(action1), action2 = qfu(action2)]
+        (VLCDialog *provider, DialogId handle) {
+            emit provider->question(handle, title, text,
+                static_cast<VLCDialog::QuestionType>(type), cancel, action1, action2);
+        });
 }
 
-void onDialogProgress(void * p_data, vlc_dialog_id * dialogId,
-                                          const char * psz_title, const char * psz_text,
-                                          bool b_indeterminate, float f_position,
-                                          const char * psz_cancel)
+void onDialogProgress(void *data, vlc_dialog_id *id, const char *title,
+                      const char *text, bool indeterminate, float position,
+                      const char *cancel)
 {
-    auto model = static_cast<VLCDialogModel*>(p_data);
-    model->dialogCallback(dialogId, [=](VLCDialog* provider){
-        emit provider->progress(dialogId, psz_title, psz_text, b_indeterminate, f_position, psz_cancel);
-    });
+    auto *model = static_cast<VLCDialogModel *>(data);
+    model->dialogCallback(id, VLCDialogModel::DialogEvent::Request,
+        [title = qfu(title), text = qfu(text), indeterminate, position,
+         cancel = qfu(cancel)](VLCDialog *provider, DialogId handle) {
+            emit provider->progress(handle, title, text, indeterminate, position, cancel);
+        });
 }
 
-void onDialogProgressUpdated(void * p_data, vlc_dialog_id * dialogId,
-                                                 float f_value, const char * psz_text)
+void onDialogProgressUpdated(void *data, vlc_dialog_id *id, float value,
+                            const char *text)
 {
-    auto model = static_cast<VLCDialogModel*>(p_data);
-    model->dialogCallback(dialogId, [=](VLCDialog* provider){
-        emit provider->progressUpdated(dialogId, f_value, psz_text);
-    });
+    auto *model = static_cast<VLCDialogModel *>(data);
+    model->dialogCallback(id, VLCDialogModel::DialogEvent::Update,
+        [value, text = qfu(text)](VLCDialog *provider, DialogId handle) {
+            emit provider->progressUpdated(handle, value, text);
+        });
 }
 
-void onDialogCancelled(void * p_data, vlc_dialog_id * dialogId)
+void onDialogCancelled(void *data, vlc_dialog_id *id)
 {
-    auto model = static_cast<VLCDialogModel*>(p_data);
-    model->dialogCallback(dialogId, [=](VLCDialog* provider){
-        emit provider->cancelled(dialogId);
-    });
+    auto *model = static_cast<VLCDialogModel *>(data);
+    model->dialogCallback(id, VLCDialogModel::DialogEvent::Cancel,
+        [](VLCDialog *provider, DialogId handle) { emit provider->cancelled(handle); });
+}
 }
 
-}
-
-VLCDialogModel::VLCDialogModel(qt_intf_t* intf, QObject* parent)
-    : QObject(parent)
-    , m_intf(intf)
+VLCDialogModel::VLCDialogModel(qt_intf_t *intf, QObject *parent)
+    : QObject(parent), m_intf(intf)
 {
-    const vlc_dialog_cbs cbs =
-        {
-            onDialogLogin, onDialogQuestion, onDialogProgress,
-            onDialogCancelled, onDialogProgressUpdated
-        };
-    vlc_dialog_provider_set_callbacks(intf, &cbs, this);
+    const vlc_dialog_cbs callbacks = {
+        onDialogLogin, onDialogQuestion, onDialogProgress,
+        onDialogCancelled, onDialogProgressUpdated
+    };
+    vlc_dialog_provider_set_callbacks(intf, &callbacks, this);
 }
 
 VLCDialogModel::~VLCDialogModel()
 {
-    m_shuttingDown = true;
-    m_providerWait.wakeAll();
-    vlc_dialog_provider_set_callbacks(m_intf, nullptr, nullptr);
-
-    //ensure that we are not destroying ourselve before
     {
         QMutexLocker lock(&m_lock);
-        while (m_pendingDialog > 0)
-            m_pendingDialogCond.wait(&m_lock);
+        m_shuttingDown = true;
+        m_providerWait.wakeAll();
     }
+    setProvider(nullptr);
+    QList<DialogId> waiting;
+    {
+        QMutexLocker lock(&m_lock);
+        for (const auto &request : m_dialogs) waiting.append(request.id);
+        m_dialogs.clear();
+    }
+    for (const auto &id : waiting) vlc_dialog_id_dismiss(id.m_id);
+    vlc_dialog_provider_set_callbacks(m_intf, nullptr, nullptr);
+    QMutexLocker lock(&m_lock);
+    while (m_pendingDialog > 0) m_pendingDialogCond.wait(&m_lock);
 }
 
 bool VLCDialogModel::shouldShowQuestion(vlc_dialog_question_type type) const
@@ -383,76 +385,152 @@ bool VLCDialogModel::shouldShowQuestion(vlc_dialog_question_type type) const
     return type == VLC_DIALOG_QUESTION_CRITICAL || var_InheritBool(m_intf, "qt-error-dialogs");
 }
 
-VLCDialog* VLCDialogModel::getProvider() const
+VLCDialog *VLCDialogModel::getProvider() const
 {
-    return m_provider;
+    return m_provider.data();
 }
 
-void VLCDialogModel::setProvider(VLCDialog* provider)
+bool VLCDialogModel::takeDialog(DialogId id, quint64 generation)
 {
-    if (m_provider == provider)
-        return;
-    if (m_provider)
-    {
-        // The UI still needs these response connections while it dismisses
-        // requests owned by the old screen.
-        emit m_provider->cancelAll();
-        disconnect(m_provider, nullptr, this, nullptr);
-    }
-    m_provider = provider;
-    if (m_provider)
-    {
-        connect(m_provider, &VLCDialog::post_login,
-                this, [](DialogId dialogId, const QString & username,
-                        const QString & password, bool store){
-                    vlc_dialog_id_post_login(dialogId.m_id, qtu(username), qtu(password), store);
-                });
-        connect(m_provider, &VLCDialog::post_action1,
-                this, [](DialogId dialogId){
-                    vlc_dialog_id_post_action(dialogId.m_id, 1);
-                });
-        connect(m_provider, &VLCDialog::post_action2,
-                this, [](DialogId dialogId){
-                    vlc_dialog_id_post_action(dialogId.m_id, 2);
-                });
-        connect(m_provider, &VLCDialog::dismiss,
-                this, [](DialogId dialogId){
-                    vlc_dialog_id_dismiss(dialogId.m_id);
-                });
+    QMutexLocker lock(&m_lock);
+    auto request = m_dialogs.find(id.m_id);
+    if (request == m_dialogs.end() || !(request->id == id)
+        || request->providerGeneration != generation) return false;
+    m_dialogs.erase(request);
+    return true;
+}
 
+void VLCDialogModel::setProvider(VLCDialog *provider)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    Q_ASSERT(!provider || provider->thread() == thread());
+    QPointer<VLCDialog> previous;
+    QList<DialogId> abandoned;
+    {
+        QMutexLocker lock(&m_lock);
+        if (m_providerIdentity == provider) return;
+        previous = m_provider;
+        const auto previousGeneration = m_providerGeneration;
+        for (auto it = m_dialogs.begin(); it != m_dialogs.end(); )
+        {
+            if (it->providerGeneration && it->providerGeneration == previousGeneration)
+            {
+                abandoned.append(it->id);
+                it = m_dialogs.erase(it);
+            }
+            else ++it;
+        }
+        if (previous) disconnect(previous, nullptr, this, nullptr);
+        m_provider = provider;
+        m_providerIdentity = provider;
+        const auto generation = ++m_providerGeneration;
+        if (provider)
+        {
+            connect(provider, &VLCDialog::post_login, this,
+                [this, generation](DialogId id, const QString &user,
+                                   const QString &password, bool store) {
+                    if (takeDialog(id, generation))
+                        vlc_dialog_id_post_login(id.m_id, qtu(user), qtu(password), store);
+                });
+            connect(provider, &VLCDialog::post_action1, this,
+                [this, generation](DialogId id) {
+                    if (takeDialog(id, generation)) vlc_dialog_id_post_action(id.m_id, 1);
+                });
+            connect(provider, &VLCDialog::post_action2, this,
+                [this, generation](DialogId id) {
+                    if (takeDialog(id, generation)) vlc_dialog_id_post_action(id.m_id, 2);
+                });
+            connect(provider, &VLCDialog::dismiss, this,
+                [this, generation](DialogId id) {
+                    if (takeDialog(id, generation)) vlc_dialog_id_dismiss(id.m_id);
+                });
+            connect(provider, &QObject::destroyed, this,
+                [this, provider, generation] {
+                    if (m_providerIdentity == provider && m_providerGeneration == generation)
+                        setProvider(nullptr);
+                });
+        }
+        m_providerWait.wakeAll();
     }
-    m_providerWait.wakeAll();
+    // The model owns all native references, including requests whose initial
+    // GUI delivery has not run. UI cleanup may safely send redundant replies.
+    if (previous) emit previous->cancelAll();
+    for (const auto &id : abandoned) vlc_dialog_id_dismiss(id.m_id);
     emit providerChanged();
 }
 
-
-void VLCDialogModel::dialogCallback(vlc_dialog_id * dialogId, std::function<void(VLCDialog* provider)> callback)
+void VLCDialogModel::dialogCallback(vlc_dialog_id *nativeId, DialogEvent event,
+                                   std::function<void(VLCDialog*, DialogId)> callback)
 {
-    QMutexLocker lock(&m_lock);
-    m_pendingDialog++;
-    //dialogs are synchronous calls, if they are spawned from qt thread
-    //(which shouldn't happen), we can't wait for m_provider
-    if (QThread::currentThread() == this->thread() && m_provider == nullptr)
     {
-        vlc_dialog_id_dismiss(dialogId);
-        m_pendingDialog--;
-        m_pendingDialogCond.wakeOne();
-        return;
+        QMutexLocker lock(&m_lock);
+        ++m_pendingDialog;
     }
-
-    while (m_provider == nullptr && !m_shuttingDown)
-        m_providerWait.wait(&m_lock);
-
-    if (m_shuttingDown)
+    const auto finished = qScopeGuard([this] {
+        QMutexLocker lock(&m_lock);
+        --m_pendingDialog;
+        m_pendingDialogCond.wakeAll();
+    });
+    const bool onGuiThread = QThread::currentThread() == thread();
+    DialogId handle;
+    QPointer<VLCDialog> owner;
+    quint64 generation = 0;
+    bool dismiss = false;
     {
-        vlc_dialog_id_dismiss(dialogId);
-        m_pendingDialog--;
-        m_pendingDialogCond.wakeOne();
-        return;
+        QMutexLocker lock(&m_lock);
+        if (event == DialogEvent::Request)
+        {
+            Q_ASSERT(!m_dialogs.contains(nativeId));
+            handle = DialogId(nativeId, ++m_dialogSerial);
+            m_dialogs.insert(nativeId, {handle, 0});
+            while (!m_provider && !m_shuttingDown && !onGuiThread)
+                m_providerWait.wait(&m_lock);
+            auto request = m_dialogs.find(nativeId);
+            if (request == m_dialogs.end() || !(request->id == handle)) return;
+            if (m_shuttingDown || !m_provider)
+            {
+                m_dialogs.erase(request);
+                dismiss = true;
+            }
+            else
+            {
+                owner = m_provider;
+                generation = m_providerGeneration;
+                request->providerGeneration = generation;
+            }
+        }
+        else
+        {
+            auto request = m_dialogs.find(nativeId);
+            if (request == m_dialogs.end()) return;
+            handle = request->id;
+            generation = request->providerGeneration;
+            owner = m_provider;
+            if (event == DialogEvent::Cancel)
+            {
+                m_dialogs.erase(request);
+                dismiss = true;
+            }
+        }
     }
-
-    callback(m_provider);
-
-    m_pendingDialog--;
-    m_pendingDialogCond.wakeOne();
+    if (dismiss) vlc_dialog_id_dismiss(nativeId);
+    if (!owner) return;
+    const auto deliver = [this, owner, generation, handle, event,
+                          callback = std::move(callback)] {
+        {
+            QMutexLocker lock(&m_lock);
+            if (m_shuttingDown || !owner || m_provider != owner
+                || m_providerGeneration != generation) return;
+            if (event != DialogEvent::Cancel)
+            {
+                const auto request = m_dialogs.constFind(handle.m_id);
+                if (request == m_dialogs.cend() || !(request->id == handle)) return;
+            }
+        }
+        callback(owner.data(), handle);
+    };
+    // Same-thread requests must be answerable before their native wait begins.
+    // Worker requests reach QML only through this guarded GUI-thread delivery.
+    if (onGuiThread) deliver();
+    else QMetaObject::invokeMethod(this, deliver, Qt::QueuedConnection);
 }

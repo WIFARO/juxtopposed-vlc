@@ -33,6 +33,8 @@
 #include <QAbstractListModel>
 #include <QQmlEngine>
 #include <QMutex>
+#include <QHash>
+#include <QPointer>
 #include <QWaitCondition>
 #include <QTimer>
 #include "util/warning_log_buffer.hpp"
@@ -49,16 +51,18 @@ class DialogId
     Q_GADGET
 
 public:
-    DialogId(vlc_dialog_id * id = nullptr) : m_id(id) {}
+    DialogId(vlc_dialog_id * id = nullptr, quint64 serial = 0)
+        : m_id(id), m_serial(serial) {}
 
 public: // Operators
     bool operator ==(const DialogId & other) const
     {
-        return m_id == other.m_id;
+        return m_id == other.m_id && m_serial == other.m_serial;
     }
 
 public: // Variables
     vlc_dialog_id * m_id;
+    quint64 m_serial;
 };
 
 
@@ -195,7 +199,7 @@ signals:
 
     void cancelled(DialogId dialogId);
 
-    // Release outstanding UI requests before this provider is disconnected.
+    // Close the UI requests owned by a provider that is replaced or removed.
     void cancelAll();
 };
 
@@ -219,8 +223,11 @@ public:
 public:
     bool shouldShowQuestion(vlc_dialog_question_type type) const;
 
-    //block dialog until m_provider is available the call the callback on it
-    void dialogCallback(vlc_dialog_id*, std::function<void(VLCDialog* provider)>);
+    enum class DialogEvent { Request, Update, Cancel };
+    // Native callbacks may run on worker threads. Copy callback data before
+    // handing it to this method; UI delivery can outlive the native callback.
+    void dialogCallback(vlc_dialog_id*, DialogEvent,
+                        std::function<void(VLCDialog*, DialogId)>);
 
 signals:
     void providerChanged();
@@ -235,8 +242,19 @@ private:
     QWaitCondition m_pendingDialogCond;
     unsigned m_pendingDialog = 0;
 
-    VLCDialog* m_provider = nullptr;
+    struct PendingDialog
+    {
+        DialogId id;
+        quint64 providerGeneration = 0;
+    };
+    // Each entry owns the native UI reference until a reply or cancellation.
+    QHash<vlc_dialog_id*, PendingDialog> m_dialogs;
+    quint64 m_dialogSerial = 0;
+    QPointer<VLCDialog> m_provider;
+    VLCDialog *m_providerIdentity = nullptr; // comparison only, never dereferenced
+    quint64 m_providerGeneration = 0;
     bool m_shuttingDown = false;
+    bool takeDialog(DialogId, quint64 providerGeneration);
 
     friend class Singleton<VLCDialogModel>;
 };

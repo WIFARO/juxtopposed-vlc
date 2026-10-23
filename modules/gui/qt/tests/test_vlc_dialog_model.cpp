@@ -469,7 +469,7 @@ private slots:
         QVERIFY(hasPending);
         VLCDialog replacement;
         model->setProvider(&replacement);
-        // The old screen must retain its response connection during cleanup.
+        // The model must release the UI reference as the old screen disconnects.
         QVERIFY(!hasPending);
         QVERIFY(vlc_dialog_is_cancelled(m_intf, first));
         vlc_dialog_release(m_intf, first);
@@ -479,10 +479,159 @@ private slots:
                                                    "Cancel", "Second", "Work");
         QVERIFY(second);
         QCOMPARE(requests.count(), 1);
-        replacement.dismiss(DialogId(second));
+        replacement.dismiss(requests.first().first().value<DialogId>());
         QVERIFY(vlc_dialog_is_cancelled(m_intf, second));
         vlc_dialog_release(m_intf, second);
         model->setProvider(m_dialog);
+    }
+
+    void testProviderChangeBeforeQueuedDelivery() {
+        auto *model = VLCDialogModel::getInstance<false>();
+        QObject screen;
+        DialogId knownId;
+        bool delivered = false;
+        connect(m_dialog, &VLCDialog::progress, &screen,
+                [&](DialogId id, const QString &, const QString &, bool, float,
+                    const QString &) {
+            knownId = id;
+            delivered = true;
+        }, Qt::QueuedConnection);
+        connect(m_dialog, &VLCDialog::cancelAll, &screen, [&] {
+            if (delivered) m_dialog->dismiss(knownId);
+        });
+        model->setProvider(m_dialog);
+        vlc_dialog_id *id = nullptr;
+        std::thread producer([&] {
+            id = vlc_dialog_display_progress(m_intf, false, 0.25f,
+                                             "Cancel", "Queued", "Work");
+        });
+        producer.join();
+        QVERIFY(id);
+        QVERIFY(!delivered);
+        VLCDialog replacement;
+        model->setProvider(&replacement);
+        const bool cancelled = vlc_dialog_is_cancelled(m_intf, id);
+        // Bound a failing regression without stealing a reference from the model.
+        if (!cancelled) VLCDialogModel::killInstance();
+        vlc_dialog_release(m_intf, id);
+        if (cancelled) model->setProvider(m_dialog);
+        QVERIFY2(cancelled, "Provider change must cancel a request that the old UI has not received yet");
+    }
+
+    void testProviderDestroyedBeforeDelivery() {
+        auto *model = VLCDialogModel::getInstance<false>();
+        auto screen = std::make_unique<VLCDialog>();
+        model->setProvider(screen.get());
+        vlc_dialog_id *id = nullptr;
+        std::thread producer([&] {
+            id = vlc_dialog_display_progress(m_intf, false, 0.5f,
+                                             "Cancel", "Destroyed screen", "Work");
+        });
+        producer.join();
+        QVERIFY(id);
+        screen.reset();
+        const bool cancelled = vlc_dialog_is_cancelled(m_intf, id);
+        const bool providerCleared = model->getProvider() == nullptr;
+        if (!cancelled) VLCDialogModel::killInstance();
+        vlc_dialog_release(m_intf, id);
+        if (cancelled) model->setProvider(m_dialog);
+        QVERIFY(providerCleared);
+        QCoreApplication::processEvents();
+        QVERIFY(cancelled);
+        QCOMPARE(m_progressSpy->count(), 0);
+    }
+
+    void testModelDestroyedBeforeDelivery() {
+        auto *model = VLCDialogModel::getInstance<false>();
+        model->setProvider(m_dialog);
+        vlc_dialog_id *id = nullptr;
+        std::thread producer([&] {
+            id = vlc_dialog_display_progress(m_intf, false, 0.5f,
+                                             "Cancel", "Destroyed model", "Work");
+        });
+        producer.join();
+        QVERIFY(id);
+        VLCDialogModel::killInstance();
+        const bool cancelled = vlc_dialog_is_cancelled(m_intf, id);
+        if (!cancelled) vlc_dialog_id_dismiss(id);
+        vlc_dialog_release(m_intf, id);
+        QCoreApplication::processEvents();
+        QVERIFY(cancelled);
+        QCOMPARE(m_progressSpy->count(), 0);
+    }
+
+    void testCancellationBeforeDelivery() {
+        VLCDialogModel::getInstance<false>()->setProvider(m_dialog);
+        QObject screen;
+        connect(m_dialog, &VLCDialog::cancelled, &screen,
+                [&](DialogId id) { m_dialog->dismiss(id); });
+        std::thread producer([&] {
+            auto *id = vlc_dialog_display_progress(m_intf, false, 0.25f,
+                                                  "Cancel", "Quick work", "Starting");
+            if (!id) return;
+            vlc_dialog_update_progress_text(m_intf, id, 0.75f, "Already done");
+            vlc_dialog_release(m_intf, id);
+        });
+        producer.join();
+        QTRY_COMPARE(m_canceledSpy->count(), 1);
+        QCOMPARE(m_progressSpy->count(), 0);
+        QCOMPARE(m_progressUpdatedSpy->count(), 0);
+    }
+
+    void testWorkerDeliveryOwnsTextAndRunsOnGuiThread() {
+        auto *model = VLCDialogModel::getInstance<false>();
+        model->setProvider(m_dialog);
+        QObject screen;
+        bool onGuiThread = false;
+        connect(m_dialog, &VLCDialog::progress, &screen,
+                [&](DialogId, const QString &, const QString &, bool, float,
+                    const QString &) {
+            onGuiThread = QThread::currentThread() == model->thread();
+        }, Qt::DirectConnection);
+        vlc_dialog_id *id = nullptr;
+        std::thread producer([&] {
+            QByteArray title("Temporary <title>"), text("Temporary message & path");
+            id = vlc_dialog_display_progress(m_intf, false, 0.25f,
+                                             "Cancel", title.constData(), "%s",
+                                             text.constData());
+            // Native callback storage may change as soon as the call returns.
+            title.fill('x');
+            text.fill('y');
+        });
+        producer.join();
+        QVERIFY(id);
+        QCOMPARE(m_progressSpy->count(), 0);
+        QTRY_COMPARE(m_progressSpy->count(), 1);
+        const auto args = m_progressSpy->first();
+        QCOMPARE(args[1].toString(), QStringLiteral("Temporary <title>"));
+        QCOMPARE(args[2].toString(), QStringLiteral("Temporary message & path"));
+        QVERIFY(onGuiThread);
+        m_dialog->dismiss(args[0].value<DialogId>());
+        QVERIFY(vlc_dialog_is_cancelled(m_intf, id));
+        vlc_dialog_release(m_intf, id);
+    }
+
+    void testStaleHandleCannotAnswerReusedAddress() {
+        VLCDialogModel::getInstance<false>()->setProvider(m_dialog);
+        auto *first = vlc_dialog_display_progress(m_intf, false, 0.25f,
+                                                  "Cancel", "First", "Work");
+        QVERIFY(first);
+        const auto oldHandle = m_progressSpy->last()[0].value<DialogId>();
+        m_dialog->dismiss(oldHandle);
+        vlc_dialog_release(m_intf, first);
+        auto *second = vlc_dialog_display_progress(m_intf, false, 0.5f,
+                                                   "Cancel", "Second", "Work");
+        QVERIFY(second);
+        const auto newHandle = m_progressSpy->last()[0].value<DialogId>();
+        QVERIFY(newHandle.m_serial != oldHandle.m_serial);
+        // Model a native allocator reusing a prior address deterministically.
+        m_dialog->dismiss(DialogId(second, oldHandle.m_serial));
+        QVERIFY(!vlc_dialog_is_cancelled(m_intf, second));
+        m_dialog->dismiss(newHandle);
+        QVERIFY(vlc_dialog_is_cancelled(m_intf, second));
+        // A second reply after release must be ignored without dereferencing it.
+        vlc_dialog_release(m_intf, second);
+        m_dialog->dismiss(newHandle);
     }
 
     void testLateBinding() {
