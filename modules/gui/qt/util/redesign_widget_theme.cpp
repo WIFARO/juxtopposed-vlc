@@ -93,7 +93,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QWidget#codecInformation QLineEdit, QWidget#extraMetadata QLineEdit, QWidget#redesignPodcasts QLineEdit, QWidget#redesignConvert QLineEdit, QWidget#redesignStream QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
             "QWidget#redesignMediaInfo QLineEdit, QWidget#redesignMediaInfo QTextEdit, QWidget#redesignMediaInfo QPushButton { border-radius: %16px; }"
             "QWidget#redesignMediaInfo QLineEdit:read-only { background: %3; color: %2; }"
-            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton, QWidget#redesignProgramGuide QPushButton, QWidget#redesignPodcasts QPushButton, QWidget#redesignConvert QPushButton, QWidget#redesignStream QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
+            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton, QWidget#redesignProgramGuide QPushButton, QWidget#redesignPodcasts QPushButton, QWidget#redesignConvert QPushButton, QWidget#redesignStream QPushButton, QWidget#redesignBookmarks QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
             "QWidget#redesignStream QFrame[frameShape=\"HLine\"] { border: none; background: %6; min-height: 1px; max-height: 1px; }"
             "QWidget#redesignProgramGuide QPushButton#guideZoomIn, QWidget#redesignProgramGuide QPushButton#guideZoomOut { padding: %16px 0; }"
             "QWidget#redesignPodcasts QListWidget::item { padding: %14px; }"

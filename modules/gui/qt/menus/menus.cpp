@@ -258,6 +258,8 @@ void VLCMenuBar::ToolsMenu( qt_intf_t *p_intf, QMenu *menu )
     addDPStaticEntry( menu, qfut( I_MENU_CODECINFO ) ,
         ":/menu/info.svg", &DialogsProvider::mediaCodecDialog, "Ctrl+J" );
 
+    addDPStaticEntry(menu, qtr("Bookmark details"), "", &DialogsProvider::bookmarkDetailsDialog);
+
 #ifdef ENABLE_VLM
     addDPStaticEntry( menu, qfut( I_MENU_VLM ), "", &DialogsProvider::vlmDialog,
         "Ctrl+Shift+W" );

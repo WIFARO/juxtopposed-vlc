@@ -25,10 +25,14 @@
 #define QVLC_BOOKMARKS_H_ 1
 
 #include "widgets/native/qvlcframe.hpp"
+#include <QSet>
+#include <QUrl>
 
 class QPushButton;
 class MLBookmarkModel;
 class QTreeView;
+class QLabel;
+class QFrame;
 
 class BookmarksDialog : public QVLCFrame
 {
@@ -46,13 +50,30 @@ private:
     QPushButton *clearButton;
     QPushButton *delButton;
     QPushButton *addButton;
+    QPushButton *goButton, *editButton, *closeButton, *confirmClear, *cancelClear;
+    QLabel *heading, *help, *source, *empty, *feedback, *clearQuestion;
+    QFrame *clearConfirmation;
+    QUrl clearUri, pendingUri;
+    QSet<qint64> pendingTimes;
+    qint64 pendingTime = -1;
+    bool pendingAdd = false;
+    bool timeAvailable = false;
+    void retranslate();
+    void selectAdded();
+
+protected:
+    bool eventFilter(QObject *, QEvent *) override;
+    void keyPressEvent(QKeyEvent *) override;
+    void hideEvent(QHideEvent *) override;
+
     MLBookmarkModel* m_model;
 
 private slots:
     void add();
     void del();
     void clear();
-    void extract();
+    void edit();
+    void cancelClearRequest();
     void activateItem( const QModelIndex& index );
     void updateButtons();
 };

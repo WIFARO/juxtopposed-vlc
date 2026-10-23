@@ -211,6 +211,7 @@ private:
 public slots:
     void playlistsDialog( const QVariantList & listMedia, MLPlaylistListModel::PlaylistType type = MLPlaylistListModel::PLAYLIST_TYPE_ALL);
     void bookmarksDialog();
+    void bookmarkDetailsDialog();
     void addBookmark();
     void mediaInfoDialog( void );
     void mediaInfoDialog( const SharedInputItem& inputItem );

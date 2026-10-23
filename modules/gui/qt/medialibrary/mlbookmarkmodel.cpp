@@ -258,7 +258,14 @@ void MLBookmarkModel::add()
     {
         vlc_player_locker lock{ m_player };
         auto *media = vlc_player_GetCurrentMedia(m_player);
-        currentTime = vlc_player_GetTime( m_player );
+        currentTime = vlc_player_GetTime(m_player);
+        // A paused seek updates the controls before the input clock. Match
+        // the time shown to the user when adding a bookmark at that point.
+        if (m_player_controller && m_player_controller->getPlayingState() == PlayerController::PLAYING_STATE_PAUSED)
+        {
+            if (!media || m_player_controller->getUrl() != QUrl(qfu(media->psz_uri))) return;
+            currentTime = m_player_controller->getTime().toVLCTick();
+        }
         if (!media || currentTime == VLC_TICK_INVALID || currentTime < 0)
             return;
         mediaUri = qfu(media->psz_uri);
@@ -615,7 +622,20 @@ void MLBookmarkModel::onVlcMlEvent(const MLEvent &event){
         case VLC_ML_EVENT_BOOKMARKS_ADDED:
         case VLC_ML_EVENT_BOOKMARKS_DELETED:
         case VLC_ML_EVENT_BOOKMARKS_UPDATED:
-            refresh(MLBOOKMARKMODEL_REFRESH);
+            if (m_currentMediaId == 0)
+            {
+                // Another view can add the first bookmark and create the
+                // external media record after our initial lookup returned 0.
+                QString uri;
+                uint64_t revision;
+                {
+                    vlc::threads::mutex_locker lock{m_mutex};
+                    revision = m_revision;
+                    if (m_currentItem) uri = qfu(m_currentItem->psz_uri);
+                }
+                updateMediaId(revision, uri);
+            }
+            else refresh(MLBOOKMARKMODEL_REFRESH);
         break;
         default:
             break;

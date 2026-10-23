@@ -597,6 +597,11 @@ void DialogsProvider::bookmarksDialog()
         emit showRedesignBookmarks();
         return;
     }
+    bookmarkDetailsDialog();
+}
+
+void DialogsProvider::bookmarkDetailsDialog()
+{
     toggleDialogVisible(m_bookmarkDialog);
 }
 
@@ -607,7 +612,7 @@ MLBookmarkModel* DialogsProvider::bookmarkModel()
     if (!m_bookmarkModel)
     {
         m_bookmarkModel = std::make_unique<MLBookmarkModel>();
-        m_bookmarkModel->setPlayer(p_intf->p_player);
+        m_bookmarkModel->setPlayer(THEMIM);
         m_bookmarkModel->sort(1, Qt::AscendingOrder);
         m_bookmarkModel->setMl(p_intf->p_mi->getMediaLibrary());
     }
