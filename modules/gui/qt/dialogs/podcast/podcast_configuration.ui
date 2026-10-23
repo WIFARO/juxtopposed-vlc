@@ -1,112 +1,32 @@
-<ui version="4.0" >
+<ui version="4.0">
  <class>PodcastConfiguration</class>
- <widget class="QDialog" name="PodcastConfiguration" >
-  <property name="geometry" >
-   <rect>
-    <x>0</x>
-    <y>0</y>
-    <width>547</width>
-    <height>330</height>
-   </rect>
-  </property>
-  <property name="windowTitle" >
-   <string>Dialog</string>
-  </property>
-  <layout class="QGridLayout" >
-   <item row="0" column="0" colspan="2" >
-    <widget class="QLabel" name="label" >
-     <property name="text" >
-      <string>Podcast URLs list</string>
-     </property>
-    </widget>
-   </item>
-   <item row="1" column="0" colspan="4" >
-    <widget class="QListWidget" name="podcastList" >
-     <property name="dragEnabled" >
-      <bool>true</bool>
-     </property>
-     <property name="dragDropMode" >
-      <enum>QAbstractItemView::InternalMove</enum>
-     </property>
-     <property name="alternatingRowColors" >
-      <bool>true</bool>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="0" >
-    <widget class="QLabel" name="label2" >
-     <property name="text" >
-      <string>URL</string>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="1" >
-    <widget class="QLineEdit" name="podcastURL" />
-   </item>
-   <item row="2" column="2" >
-    <widget class="QPushButton" name="podcastAdd" >
-     <property name="text" >
-      <string>Add</string>
-     </property>
-     <property name="icon" >
-      <iconset resource="../vlc.qrc" >:/menu/ic_fluent_play_filled.svg</iconset>
-     </property>
-    </widget>
-   </item>
-   <item row="2" column="3" >
-    <widget class="QPushButton" name="podcastDelete" >
-     <property name="text" >
-      <string>Delete</string>
-     </property>
-     <property name="icon" >
-      <iconset resource="../vlc.qrc" >:/menu/clear.svg</iconset>
-     </property>
-    </widget>
-   </item>
-   <item row="3" column="2" colspan="2" >
-    <widget class="QDialogButtonBox" name="okCancel" >
-     <property name="standardButtons" >
-      <set>QDialogButtonBox::NoButton</set>
-     </property>
-    </widget>
-   </item>
+ <widget class="QDialog" name="PodcastConfiguration">
+  <property name="windowTitle"><string>Podcast subscriptions</string></property>
+  <layout class="QVBoxLayout" name="rootLayout">
+   <item><widget class="QLabel" name="heading"><property name="text"><string>Podcast subscriptions</string></property></widget></item>
+   <item><widget class="QLabel" name="help"><property name="text"><string>Add feed URLs. Select Save to apply your changes.</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><widget class="QListWidget" name="podcastList">
+    <property name="dragEnabled"><bool>true</bool></property>
+    <property name="dragDropMode"><enum>QAbstractItemView::InternalMove</enum></property>
+    <property name="selectionMode"><enum>QAbstractItemView::ExtendedSelection</enum></property>
+    <property name="alternatingRowColors"><bool>true</bool></property>
+   </widget></item>
+   <item><layout class="QHBoxLayout" name="listActions">
+    <item><widget class="QPushButton" name="podcastDelete"><property name="text"><string>Remove</string></property></widget></item>
+    <item><spacer name="actionSpace"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+    <item><widget class="QPushButton" name="podcastUp"><property name="text"><string>Move up</string></property></widget></item>
+    <item><widget class="QPushButton" name="podcastDown"><property name="text"><string>Move down</string></property></widget></item>
+   </layout></item>
+   <item><widget class="QLabel" name="urlLabel"><property name="text"><string>Feed URL</string></property><property name="buddy"><cstring>podcastURL</cstring></property></widget></item>
+   <item><layout class="QHBoxLayout" name="entryLayout">
+    <item><widget class="QLineEdit" name="podcastURL"><property name="clearButtonEnabled"><bool>true</bool></property></widget></item>
+    <item><widget class="QPushButton" name="podcastAdd"><property name="text"><string>Add</string></property></widget></item>
+   </layout></item>
+   <item><widget class="QLabel" name="entryMessage"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><widget class="QLabel" name="draftStatus"><property name="text"><string/></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+   <item><widget class="QDialogButtonBox" name="okCancel"><property name="standardButtons"><set>QDialogButtonBox::NoButton</set></property></widget></item>
   </layout>
  </widget>
- <resources>
-  <include location="../vlc.qrc" />
- </resources>
- <connections>
-  <connection>
-   <sender>okCancel</sender>
-   <signal>accepted()</signal>
-   <receiver>PodcastConfiguration</receiver>
-   <slot>accept()</slot>
-   <hints>
-    <hint type="sourcelabel" >
-     <x>445</x>
-     <y>304</y>
-    </hint>
-    <hint type="destinationlabel" >
-     <x>273</x>
-     <y>164</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
-   <sender>okCancel</sender>
-   <signal>rejected()</signal>
-   <receiver>PodcastConfiguration</receiver>
-   <slot>reject()</slot>
-   <hints>
-    <hint type="sourcelabel" >
-     <x>445</x>
-     <y>304</y>
-    </hint>
-    <hint type="destinationlabel" >
-     <x>273</x>
-     <y>164</y>
-    </hint>
-   </hints>
-  </connection>
- </connections>
+ <resources/>
+ <connections/>
 </ui>

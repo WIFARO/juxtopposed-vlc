@@ -24,7 +24,7 @@
 #define QVLC_PODCAST_CONFIGURATION_DIALOG_H_ 1
 
 #include "widgets/native/qvlcframe.hpp"
-#include "util/singleton.hpp"
+#include <QStringList>
 
 /* Auto-generated from .ui files */
 #include "ui_podcast_configuration.h"
@@ -38,15 +38,30 @@ public:
     virtual ~PodcastConfigDialog();
 
 public slots:
-    void accept();
+    void accept() override;
     void add();
     void remove();
 
 protected:
     void showEvent(QShowEvent* event) override;
+    bool eventFilter(QObject *, QEvent *) override;
+    bool event(QEvent *) override;
+    void keyPressEvent(QKeyEvent *) override;
 
 private:
+    void updateState();
+    void retranslate();
+    void moveSelected(int direction);
+    bool addPendingFeed();
+    bool isDirty() const;
+    QStringList urls() const;
+    void showMessage(const QString &);
     Ui::PodcastConfiguration ui;
+    QPushButton *saveButton;
+    QPushButton *cancelButton;
+    QLabel *emptyMessage;
+    QStringList originalUrls;
+    bool loading = false;
 };
 
 #endif
