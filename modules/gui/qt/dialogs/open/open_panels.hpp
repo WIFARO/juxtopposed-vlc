@@ -194,6 +194,9 @@ public:
     virtual ~CaptureOpenPanel();
     void clear() override;
     QString validationError() const override;
+protected:
+    void resizeEvent(QResizeEvent*) override;
+    bool eventFilter(QObject*, QEvent*) override;
 private:
     Ui::OpenCapture ui;
     bool isInitialized;
@@ -225,6 +228,7 @@ public slots:
     void initialize();
 private slots:
     void updateButtons();
+    void updateLayoutMetrics();
     void enableAdvancedDialog( int );
     void advancedDialog();
 };

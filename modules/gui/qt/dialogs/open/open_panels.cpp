@@ -53,6 +53,7 @@
 #include <QDialogButtonBox>
 #include <QLineEdit>
 #include <QStackedLayout>
+#include <QFormLayout>
 #include <QCompleter>
 #include <QScrollArea>
 #include <QUrl>
@@ -960,10 +961,10 @@ void NetOpenPanel::updateMRL()
 void NetOpenPanel::clearHistory()
 {
     if( !b_recentList ) return;
-    
+
     // Clear the combobox contents
     ui.urlComboBox->clear();
-    
+
     // Clear the stored history
     getSettings()->remove( "OpenDialog/netMRL" );
 }
@@ -1021,28 +1022,35 @@ void CaptureOpenPanel::initialize()
      * DirectShow Stuffs *
      *********************/
     if( module_exists( "dshow" ) ){
-    addModuleAndLayouts( DSHOW_DEVICE, dshow, "DirectShow", QGridLayout );
+    addModuleAndLayouts( DSHOW_DEVICE, dshow, "DirectShow", QFormLayout );
 
     /* dshow Main */
-    int line = 0;
+    const auto addDevice = [dshowDevLayout](StringListConfigControl *control) {
+        QGridLayout row;
+        control->insertInto(&row, 0);
+        auto *labelItem = row.takeAt(0);
+        auto *fieldItem = row.takeAt(0);
+        auto *label = qobject_cast<QLabel*>(labelItem->widget());
+        auto *field = fieldItem->widget();
+        label->setBuddy(field);
+        dshowDevLayout->addRow(label, field);
+        delete labelItem;
+        delete fieldItem;
+    };
     module_config_t *p_config = config_FindConfig( "dshow-vdev" );
     vdevDshowW = new StringListConfigControl( p_config, this );
-    vdevDshowW->insertInto( dshowDevLayout, line );
-    line++;
+    addDevice(vdevDshowW);
 
     p_config = config_FindConfig( "dshow-adev" );
     adevDshowW = new StringListConfigControl( p_config, this );
-    adevDshowW->insertInto( dshowDevLayout, line );
-    line++;
+    addDevice(adevDshowW);
 
     /* dshow Properties */
     QLabel *dshowVSizeLabel = captureText<QLabel>(N_("Video size"), this);
-    dshowPropLayout->addWidget( dshowVSizeLabel, 0, 0 );
 
     dshowVSizeLine = new QLineEdit;
-    dshowPropLayout->addWidget( dshowVSizeLine, 0, 1);
-    dshowPropLayout->addItem( new QSpacerItem( 20, 20, QSizePolicy::Expanding ),
-            1, 0, 3, 1 );
+    dshowVSizeLabel->setBuddy(dshowVSizeLine);
+    dshowPropLayout->addRow(dshowVSizeLabel, dshowVSizeLine);
 
     /* dshow CONNECTs */
     CuMRL( vdevDshowW, &StringListConfigControl::changed );
@@ -1058,19 +1066,18 @@ void CaptureOpenPanel::initialize()
         "video*"
     };
     if( module_exists( "v4l2" ) ){
-    addModuleAndLayouts( V4L2_DEVICE, v4l2, N_("Video camera"), QGridLayout );
+    addModuleAndLayouts( V4L2_DEVICE, v4l2, N_("Video camera"), QFormLayout );
 
     /* V4L2 main panel */
     QLabel *v4l2VideoDeviceLabel = captureText<QLabel>(N_("Video device name"), this);
-    v4l2DevLayout->addWidget( v4l2VideoDeviceLabel, 0, 0 );
 
     v4l2VideoDevice = new QComboBox( this );
     v4l2VideoDevice->setEditable( true );
     POPULATE_WITH_DEVS( ppsz_v4lvdevices, v4l2VideoDevice );
-    v4l2DevLayout->addWidget( v4l2VideoDevice, 0, 1 );
+    v4l2VideoDeviceLabel->setBuddy(v4l2VideoDevice);
+    v4l2DevLayout->addRow(v4l2VideoDeviceLabel, v4l2VideoDevice);
 
     QLabel *v4l2AudioDeviceLabel = captureText<QLabel>(N_("Audio device name"), this);
-    v4l2DevLayout->addWidget( v4l2AudioDeviceLabel, 1, 0 );
 
     v4l2AudioDevice = new QComboBox( this );
     v4l2AudioDevice->setEditable( true );
@@ -1086,17 +1093,16 @@ void CaptureOpenPanel::initialize()
         v4l2AudioDevice->addItems( names );
     }
     v4l2AudioDevice->clearEditText();
-    v4l2DevLayout->addWidget( v4l2AudioDevice, 1, 1 );
+    v4l2AudioDeviceLabel->setBuddy(v4l2AudioDevice);
+    v4l2DevLayout->addRow(v4l2AudioDeviceLabel, v4l2AudioDevice);
 
     /* v4l2 Props panel */
     QLabel *v4l2StdLabel = captureText<QLabel>(N_("Video standard"), this);
-    v4l2PropLayout->addWidget( v4l2StdLabel, 0 , 0 );
 
     v4l2StdBox = new QComboBox;
     setfillVLCConfigCombo( "v4l2-standard", v4l2StdBox );
-    v4l2PropLayout->addWidget( v4l2StdBox, 0 , 1 );
-    v4l2PropLayout->addItem( new QSpacerItem( 20, 20, QSizePolicy::Expanding ),
-            1, 0, 3, 2 );
+    v4l2StdLabel->setBuddy(v4l2StdBox);
+    v4l2PropLayout->addRow(v4l2StdLabel, v4l2StdBox);
 
     /* v4l2 CONNECTs */
     CuMRL( v4l2VideoDevice->lineEdit(), &QLineEdit::textChanged );
@@ -1112,37 +1118,37 @@ void CaptureOpenPanel::initialize()
      *******/
     if( module_exists( "jack" ) ){
     addModuleAndLayouts( JACK_DEVICE, jack, N_("JACK Audio Connection Kit"),
-                         QGridLayout);
+                         QFormLayout);
 
     /* Jack Main panel */
     /* Channels */
     QLabel *jackChannelsLabel = captureText<QLabel>(N_("Channels:"), this);
-    jackDevLayout->addWidget( jackChannelsLabel, 1, 0 );
 
     jackChannels = new QSpinBox;
     setSpinBoxFreq( jackChannels );
     jackChannels->setMaximum(255);
     jackChannels->setValue(2);
     jackChannels->setAlignment( Qt::AlignRight );
-    jackDevLayout->addWidget( jackChannels, 1, 1 );
+    jackChannelsLabel->setBuddy(jackChannels);
+    jackDevLayout->addRow(jackChannelsLabel, jackChannels);
 
     /* Selected ports */
     QLabel *jackPortsLabel = captureText<QLabel>(N_("Selected ports:"), this);
-    jackDevLayout->addWidget( jackPortsLabel, 0 , 0 );
 
     jackPortsSelected = new QLineEdit( qfu( ".*" ) );
     jackPortsSelected->setAlignment( Qt::AlignRight );
-    jackDevLayout->addWidget( jackPortsSelected, 0, 1 );
+    jackPortsLabel->setBuddy(jackPortsSelected);
+    jackDevLayout->addRow(jackPortsLabel, jackPortsSelected);
 
     /* Jack Props panel */
 
     /* Pace */
     jackPace = captureText<QCheckBox>(N_("Use VLC pace"), this);
-    jackPropLayout->addWidget( jackPace, 1, 1 );
+    jackPropLayout->addRow(jackPace);
 
     /* Auto Connect */
     jackConnect = captureText<QCheckBox>(N_("Auto connection"), this);
-    jackPropLayout->addWidget( jackConnect, 1, 2 );
+    jackPropLayout->addRow(jackConnect);
 
     /* Jack CONNECTs */
     CuMRL( jackChannels, QOverload<int>::of(&QSpinBox::valueChanged) );
@@ -1157,19 +1163,20 @@ void CaptureOpenPanel::initialize()
      * DVB Stuff *
      *************/
     if( module_exists( "dtv" ) ){
-    addModuleAndLayouts( DTV_DEVICE, dvb, N_("TV - digital"), QGridLayout );
+    addModuleAndLayouts( DTV_DEVICE, dvb, N_("TV - digital"), QFormLayout );
 
     /* DVB Main */
     QLabel *dvbDeviceLabel = captureText<QLabel>(N_("Tuner card"), this);
     QLabel *dvbTypeLabel = captureText<QLabel>(N_("Delivery system"), this);
 
     dvbCard = new QSpinBox;
+    dvbCard->setObjectName(QStringLiteral("captureTuner"));
     dvbCard->setAlignment( Qt::AlignRight );
 #ifdef __unix__
     dvbCard->setPrefix( "/dev/dvb/adapter" );
 #endif
-    dvbDevLayout->addWidget( dvbDeviceLabel, 0, 0 );
-    dvbDevLayout->addWidget( dvbCard, 0, 1, 1, 2 );
+    dvbDeviceLabel->setBuddy(dvbCard);
+    dvbDevLayout->addRow(dvbDeviceLabel, dvbCard);
 
     dvbc = new QRadioButton( "DVB-C" );
     dvbs = new QRadioButton( "DVB-S" );
@@ -1180,19 +1187,22 @@ void CaptureOpenPanel::initialize()
     cqam = new QRadioButton( "Clear QAM" );
     dvbt->setChecked( true );
 
-    dvbDevLayout->addWidget( dvbTypeLabel, 1, 0, 2, 1 );
-    dvbDevLayout->addWidget( dvbc,  1, 1 );
-    dvbDevLayout->addWidget( dvbs,  1, 2 );
-    dvbDevLayout->addWidget( dvbs2, 2, 2 );
-    dvbDevLayout->addWidget( dvbt,  1, 3 );
-    dvbDevLayout->addWidget( dvbt2, 2, 3 );
-    dvbDevLayout->addWidget( atsc,  1, 4 );
-    dvbDevLayout->addWidget( cqam,  2, 4 );
+    auto *delivery = new QWidget(this);
+    delivery->setObjectName(QStringLiteral("captureDelivery"));
+    auto *deliveryLayout = new QGridLayout(delivery);
+    deliveryLayout->setContentsMargins(0, 0, 0, 0);
+    const QList<QRadioButton*> systems = {dvbc, dvbs, dvbs2, dvbt, dvbt2, atsc, cqam};
+    for (int i = 0; i < systems.size(); ++i)
+    {
+        systems[i]->setParent(delivery);
+        deliveryLayout->addWidget(systems[i], i, 0);
+    }
+    dvbTypeLabel->setBuddy(dvbt);
+    dvbDevLayout->addRow(dvbTypeLabel, delivery);
 
     /* DVB Props panel */
     QLabel *dvbFreqLabel =
-                    captureText<QLabel>(N_("Transponder/multiplex frequency"), this);
-    dvbPropLayout->addWidget( dvbFreqLabel, 0, 0 );
+                    captureText<QLabel>(N_("Frequency"), this);
 
     dvbFreq = new QSpinBox;
     dvbFreq->setObjectName(QStringLiteral("captureFrequency"));
@@ -1201,19 +1211,19 @@ void CaptureOpenPanel::initialize()
     dvbFreq->setSuffix(" kHz");
     dvbFreq->setSingleStep( 1000 );
     setSpinBoxFreq( dvbFreq  );
-    dvbPropLayout->addWidget( dvbFreq, 0, 1 );
+    dvbFreqLabel->setBuddy(dvbFreq);
+    dvbPropLayout->addRow(dvbFreqLabel, dvbFreq);
 
-    dvbSrateLabel = captureText<QLabel>(N_("Transponder symbol rate"), this);
-    dvbPropLayout->addWidget( dvbSrateLabel, 1, 0 );
+    dvbSrateLabel = captureText<QLabel>(N_("Symbol rate"), this);
 
     dvbSrate = new QSpinBox;
     dvbSrate->setAlignment( Qt::AlignRight );
-    dvbSrate->setSuffix(" bauds");
+    dvbSrate->setSuffix(" Bd");
     setSpinBoxFreq( dvbSrate );
-    dvbPropLayout->addWidget( dvbSrate, 1, 1 );
+    dvbSrateLabel->setBuddy(dvbSrate);
+    dvbPropLayout->addRow(dvbSrateLabel, dvbSrate);
 
-    dvbModLabel = captureText<QLabel>(N_("Modulation / Constellation"), this);
-    dvbPropLayout->addWidget( dvbModLabel, 2, 0 );
+    dvbModLabel = captureText<QLabel>(N_("Modulation"), this);
 
     dvbQamBox = new QComboBox;
     dvbQamBox->addItem( qtr( "Automatic" ), qfu("QAM") );
@@ -1222,7 +1232,7 @@ void CaptureOpenPanel::initialize()
     dvbQamBox->addItem( "64-QAM", qfu("64QAM") );
     dvbQamBox->addItem( "32-QAM", qfu("32QAM") );
     dvbQamBox->addItem( "16-QAM", qfu("16QAM") );
-    dvbPropLayout->addWidget( dvbQamBox, 2, 1 );
+    dvbModLabel->setBuddy(dvbQamBox);
 
     dvbPskBox = new QComboBox;
     dvbPskBox->addItem( "QPSK", qfu("QPSK") );
@@ -1230,24 +1240,29 @@ void CaptureOpenPanel::initialize()
     dvbPskBox->addItem( "8-PSK", qfu("8PSK") );
     dvbPskBox->addItem( "16-APSK", qfu("16APSK") );
     dvbPskBox->addItem( "32-APSK", qfu("32APSK") );
-    dvbPropLayout->addWidget( dvbPskBox, 2, 1 );
+    auto *modulations = new QWidget(this);
+    auto *modulationLayout = new QVBoxLayout(modulations);
+    modulationLayout->setContentsMargins(0, 0, 0, 0);
+    modulationLayout->setSpacing(0);
+    modulationLayout->addWidget(dvbQamBox);
+    modulationLayout->addWidget(dvbPskBox);
+    modulations->setObjectName(QStringLiteral("captureModulation"));
+    dvbPropLayout->addRow(dvbModLabel, modulations);
 
     dvbModLabel->hide();
     dvbQamBox->hide();
     dvbPskBox->hide();
 
     dvbBandLabel = captureText<QLabel>(N_("Bandwidth"), this);
-    dvbPropLayout->addWidget( dvbBandLabel, 2, 0 );
 
     dvbBandBox = new QComboBox;
     setfillVLCConfigCombo( "dvb-bandwidth", dvbBandBox );
-    dvbPropLayout->addWidget( dvbBandBox, 2, 1 );
+    dvbBandLabel->setBuddy(dvbBandBox);
+    dvbPropLayout->addRow(dvbBandLabel, dvbBandBox);
 
     dvbBandLabel->hide();
     dvbBandBox->hide();
 
-    dvbPropLayout->addItem( new QSpacerItem( 20, 20, QSizePolicy::Expanding ),
-            2, 0, 2, 1 );
 
     /* DVB CONNECTs */
     CuMRL( dvbCard, QOverload<int>::of(&QSpinBox::valueChanged) );
@@ -1280,20 +1295,19 @@ void CaptureOpenPanel::initialize()
      * PVR      *
      ************/
     if( module_exists( "v4l2" ) ){
-    addModuleAndLayouts( PVR_DEVICE, pvr, N_("TV - analog"), QGridLayout );
+    addModuleAndLayouts( PVR_DEVICE, pvr, N_("TV - analog"), QFormLayout );
 
     /* PVR Main panel */
     QLabel *pvrDeviceLabel = captureText<QLabel>(N_("Device name"), this);
-    pvrDevLayout->addWidget( pvrDeviceLabel, 0, 0 );
 
     pvrDevice = new QComboBox;
     pvrDevice->setEditable( true );
     POPULATE_WITH_DEVS( ppsz_v4lvdevices, pvrDevice );
-    v4l2VideoDevice->clearEditText();
-    pvrDevLayout->addWidget( pvrDevice, 0, 1 );
+    pvrDevice->clearEditText();
+    pvrDeviceLabel->setBuddy(pvrDevice);
+    pvrDevLayout->addRow(pvrDeviceLabel, pvrDevice);
 
     QLabel *pvrAudioDeviceLabel = captureText<QLabel>(N_("Audio device name"), this);
-    pvrDevLayout->addWidget( pvrAudioDeviceLabel, 1, 0 );
 
     pvrAudioDevice = new QComboBox( this );
     pvrAudioDevice->setEditable( true );
@@ -1309,27 +1323,26 @@ void CaptureOpenPanel::initialize()
         pvrAudioDevice->addItems( names );
     }
     pvrAudioDevice->clearEditText();
-    pvrDevLayout->addWidget( pvrAudioDevice, 1, 1 );
+    pvrAudioDeviceLabel->setBuddy(pvrAudioDevice);
+    pvrDevLayout->addRow(pvrAudioDeviceLabel, pvrAudioDevice);
 
     /* PVR props panel */
     QLabel *pvrNormLabel = captureText<QLabel>(N_("Video standard"), this);
-    pvrPropLayout->addWidget( pvrNormLabel, 0, 0 );
 
     pvrNormBox = new QComboBox;
     setfillVLCConfigCombo( "v4l2-standard", pvrNormBox );
-    pvrPropLayout->addWidget( pvrNormBox, 0, 1 );
+    pvrNormLabel->setBuddy(pvrNormBox);
+    pvrPropLayout->addRow(pvrNormLabel, pvrNormBox);
 
     QLabel *pvrFreqLabel = captureText<QLabel>(N_("Frequency"), this);
-    pvrPropLayout->addWidget( pvrFreqLabel, 1, 0 );
 
     pvrFreq = new QSpinBox;
     pvrFreq->setAlignment( Qt::AlignRight );
     pvrFreq->setSuffix(" kHz");
     setSpinBoxFreq( pvrFreq );
-    pvrPropLayout->addWidget( pvrFreq, 1, 1 );
+    pvrFreqLabel->setBuddy(pvrFreq);
+    pvrPropLayout->addRow(pvrFreqLabel, pvrFreq);
 
-    pvrPropLayout->addItem( new QSpacerItem( 20, 20, QSizePolicy::Expanding ),
-                            2, 0, 1, 1 );
 
     /* PVR CONNECTs */
     CuMRL( pvrDevice, &QComboBox::editTextChanged );
@@ -1343,14 +1356,12 @@ void CaptureOpenPanel::initialize()
      * Screen *
      **********/
     if (hasScreenCapture()) {
-    addModuleAndLayouts( SCREEN_DEVICE, screen, N_("Desktop"), QGridLayout );
-    QLabel *screenLabel = captureText<QLabel>(N_("Your display will be "
-            "opened and played in order to stream or save it."), this);
+    addModuleAndLayouts( SCREEN_DEVICE, screen, N_("Desktop"), QFormLayout );
+    QLabel *screenLabel = captureText<QLabel>(N_("Capture your display. You can play, stream, or save the video."), this);
     screenLabel->setWordWrap( true );
-    screenDevLayout->addWidget( screenLabel, 0, 0 );
+    screenDevLayout->addRow(screenLabel);
 
-    QLabel *screenFPSLabel = captureText<QLabel>(N_("Desired frame rate for the capture."), this);
-    screenPropLayout->addWidget( screenFPSLabel, 0, 0 );
+    QLabel *screenFPSLabel = captureText<QLabel>(N_("Frame rate"), this);
 
     screenFPS = new QDoubleSpinBox;
     screenFPS->setObjectName(QStringLiteral("captureFrameRate"));
@@ -1362,11 +1373,21 @@ void CaptureOpenPanel::initialize()
     screenFPS->setAlignment( Qt::AlignRight );
     /* xgettext: frames per second */
     screenFPS->setSuffix( qtr( " f/s" ) );
-    screenPropLayout->addWidget( screenFPS, 0, 1 );
+    screenFPSLabel->setBuddy(screenFPS);
+    screenPropLayout->addRow(screenFPSLabel, screenFPS);
 
     /* Screen connect */
     CuMRL( screenFPS, QOverload<double>::of(&QDoubleSpinBox::valueChanged) );
     }
+
+    for (auto *form : findChildren<QFormLayout*>())
+    {
+        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    }
+    if (p_intf->p_mi)
+        connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &CaptureOpenPanel::updateLayoutMetrics);
+    updateLayoutMetrics();
 
     /* Keep the visible page and source in step for mouse and keyboard changes. */
     connect(ui.deviceCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int index) {
@@ -1549,11 +1570,12 @@ void CaptureOpenPanel::updateButtons()
         dvbBandBox->hide();
         dvbBandLabel->hide();
 
-        if( dvbc->isChecked() )
+        if( dvbc->isChecked() || cqam->isChecked() )
         {
-            dvbSrate->show();
-            dvbSrateLabel->show();
+            dvbSrate->setVisible(dvbc->isChecked());
+            dvbSrateLabel->setVisible(dvbc->isChecked());
             dvbQamBox->show();
+            dvbModLabel->setBuddy(dvbQamBox);
             dvbModLabel->show();
         }
         else if( dvbs->isChecked() )
@@ -1566,6 +1588,7 @@ void CaptureOpenPanel::updateButtons()
             dvbSrate->show();
             dvbSrateLabel->show();
             dvbPskBox->show();
+            dvbModLabel->setBuddy(dvbPskBox);
             dvbModLabel->show();
         }
         else if( dvbt->isChecked() || dvbt2->isChecked() )
@@ -1573,6 +1596,7 @@ void CaptureOpenPanel::updateButtons()
             dvbBandBox->show();
             dvbBandLabel->show();
         }
+        findChild<QWidget*>(QStringLiteral("captureModulation"))->setVisible(dvbc->isChecked() || cqam->isChecked() || dvbs2->isChecked());
         break;
     case SCREEN_DEVICE:
         //ui.optionsBox->hide();
@@ -1580,6 +1604,57 @@ void CaptureOpenPanel::updateButtons()
         break;
     }
 
+}
+
+void CaptureOpenPanel::resizeEvent(QResizeEvent *event)
+{
+    OpenPanel::resizeEvent(event);
+    updateLayoutMetrics();
+}
+
+bool CaptureOpenPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::Resize)
+        QMetaObject::invokeMethod(this, &CaptureOpenPanel::updateLayoutMetrics, Qt::QueuedConnection);
+    return OpenPanel::eventFilter(watched, event);
+}
+
+void CaptureOpenPanel::updateLayoutMetrics()
+{
+    if (!isInitialized) return;
+    const auto scale = p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1;
+    int available = width() - qRound(40 * scale);
+    for (QWidget *parent = parentWidget(); parent; parent = parent->parentWidget())
+        if (auto *scroll = qobject_cast<QScrollArea*>(parent))
+        {
+            scroll->viewport()->installEventFilter(this);
+            available = qMin(available, scroll->viewport()->width() - qRound(40 * scale));
+            break;
+        }
+    const auto policy = available < qRound(500 * scale)
+        ? QFormLayout::WrapAllRows : QFormLayout::WrapLongRows;
+    for (auto *form : findChildren<QFormLayout*>()) form->setRowWrapPolicy(policy);
+
+    auto *delivery = findChild<QWidget*>(QStringLiteral("captureDelivery"));
+    if (!delivery) return;
+    available = qMin(delivery->width(), available - qRound(40 * scale));
+    delivery->installEventFilter(this);
+    auto *grid = qobject_cast<QGridLayout*>(delivery->layout());
+    const QList<QRadioButton*> systems = {dvbc, dvbs, dvbs2, dvbt, dvbt2, atsc, cqam};
+    int choiceWidth = 1;
+    for (auto *system : systems)
+    {
+        system->ensurePolished();
+        system->setMinimumWidth(system->sizeHint().width());
+        choiceWidth = qMax(choiceWidth, system->sizeHint().width());
+    }
+    const int gap = qMax(0, grid->horizontalSpacing());
+    const int columns = qBound(1, (available + gap) / (choiceWidth + gap), int(systems.size()));
+    if (grid->property("columns").toInt() != columns)
+    {
+        for (int i = 0; i < systems.size(); ++i) grid->addWidget(systems[i], i / columns, i % columns);
+        grid->setProperty("columns", columns);
+    }
 }
 
 void CaptureOpenPanel::enableAdvancedDialog( int i_index )
