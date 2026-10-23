@@ -182,6 +182,7 @@ private:
     std::unique_ptr<ExtendedDialog> m_extendedDialog;
     std::unique_ptr<MessagesDialog> m_messagesDialog;
     std::unique_ptr<GotoTimeDialog> m_gotoTimeDialog;
+    bool m_redesignGotoTimeVisible = false;
     std::unique_ptr<VLMDialog> m_vlmDialog;
     std::unique_ptr<HelpDialog> m_helpDialog;
     std::unique_ptr<AboutDialog> m_aboutDialog;
@@ -239,6 +240,7 @@ public slots:
 #endif
     void aboutDialog();
     void gotoTimeDialog();
+    void setRedesignGotoTimeVisible(bool visible);
     void podcastConfigureDialog();
     void pluginDialog();
     void epgDialog();
@@ -328,6 +330,7 @@ signals:
     void prefsDialogVisibleChanged();
     void showRedesignPreferences();
     void showRedesignBookmarks();
+    void showRedesignGotoTime();
     void showRedesignPreferencesPage(const QString& page);
     void showRedesignNetworkStreams();
     void showRedesignNetworkPlaylist(const QStringList& urls, const QString& name);

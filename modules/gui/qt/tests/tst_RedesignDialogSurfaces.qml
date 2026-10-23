@@ -27,6 +27,7 @@ TestCase {
     Component { id: tracks; RedesignTrackAssignmentDialog { } }
     Component { id: shortcuts; RedesignShortcutEditor { } }
     Component { id: confirmation; RedesignConfirmationDialog { title: "Use shortcut"; message: "Use F for this action?" } }
+    Component { id: gotoTime; RedesignGotoTimeDialog { } }
     Component { id: smallHost; Item { width: 260; height: 360 } }
     SignalSpy { id: acceptedSpy; signalName: "accepted" }
     SignalSpy { id: rejectedSpy; signalName: "rejected" }
@@ -35,7 +36,8 @@ TestCase {
         for (const light of [false, true]) {
             for (const spec of [{name: "network", component: network}, {name: "playlist", component: playlist},
                 {name: "add-to-playlist", component: addToPlaylist}, {name: "tracks", component: tracks, fill: "#0e0e0e"},
-                {name: "shortcuts", component: shortcuts}, {name: "confirmation", component: confirmation}])
+                {name: "shortcuts", component: shortcuts}, {name: "confirmation", component: confirmation},
+                {name: "go-to-time", component: gotoTime}])
                 rows.push({tag: spec.name + "-" + light, light, component: spec.component, fill: spec.fill || "#191919"})
         }
         return rows

@@ -2142,6 +2142,22 @@ void PlayerController::jumpSeconds(int seconds)
     vlc_player_JumpTime(d->m_player, vlc_tick_from_sec(seconds));
 }
 
+void PlayerController::jumpToSeconds(int seconds)
+{
+    Q_D(PlayerController);
+    if (seconds < 0)
+        return;
+    vlc_player_locker lock{d->m_player};
+    if (!d->isCurrentItemSynced() || !vlc_player_IsStarted(d->m_player)
+        || !vlc_player_CanSeek(d->m_player))
+        return;
+    const vlc_tick_t time = vlc_tick_from_sec(seconds);
+    const vlc_tick_t length = vlc_player_GetLength(d->m_player);
+    if (length > 0 && time > length)
+        return;
+    vlc_player_SetTime(d->m_player, time);
+}
+
 void PlayerController::jumpTime(VLCTime i_time)
 {
     Q_D(PlayerController);

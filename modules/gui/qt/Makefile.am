@@ -1285,6 +1285,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignSpatializer.qml \
 	player/qml/redesign/RedesignStartupVolume.qml \
 	player/qml/redesign/RedesignConfirmationDialog.qml \
+	player/qml/redesign/RedesignGotoTimeDialog.qml \
 	player/qml/redesign/RedesignNetworkDialog.qml \
 	player/qml/redesign/RedesignPlaylistDialog.qml \
 	player/qml/redesign/RedesignPlaylistProperties.qml \
@@ -2518,6 +2519,8 @@ QML_LOG_COMPILER = $(builddir)/qml_test -input
 if HAVE_QT_QUICK_TEST
 EXTRA_DIST += tests/tst_RedesignCapture.qml
 TESTS += tests/tst_RedesignCapture.qml
+EXTRA_DIST += tests/tst_RedesignGotoTime.qml
+TESTS += tests/tst_RedesignGotoTime.qml
 qml_test_SOURCES = tests/qml_test.cpp tests/qml_test.hpp
 nodist_qml_test_SOURCES = tests/qml_test.moc.cpp
 CLEANFILES += $(nodist_qml_test_SOURCES)

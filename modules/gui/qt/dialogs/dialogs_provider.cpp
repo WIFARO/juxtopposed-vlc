@@ -90,7 +90,6 @@
     X(prefsDialog) \
     X(extendedDialog) \
     X(messagesDialog) \
-    X(gotoTimeDialog) \
     X(vlmDialog) \
     X(helpDialog) \
     X(aboutDialog) \
@@ -292,6 +291,10 @@ bool DialogsProvider::eventFilter(QObject *watched, QEvent *event) {
             emit openDialogVisibleChanged();
             break;
         }
+        if (watched == m_gotoTimeDialog.get()) {
+            emit gotoTimeDialogVisibleChanged();
+            break;
+        }
         ALL_DIALOG(CASE_DIALOG)
         break;
     }
@@ -373,7 +376,24 @@ void DialogsProvider::messagesDialog(int page)
 
 void DialogsProvider::gotoTimeDialog()
 {
+    if (p_intf->p_mi) {
+        emit showRedesignGotoTime();
+        return;
+    }
     toggleDialogVisible(m_gotoTimeDialog);
+}
+
+bool DialogsProvider::gotoTimeDialogVisible() const
+{
+    return m_redesignGotoTimeVisible || (m_gotoTimeDialog && m_gotoTimeDialog->isVisible());
+}
+
+void DialogsProvider::setRedesignGotoTimeVisible(bool visible)
+{
+    if (m_redesignGotoTimeVisible == visible)
+        return;
+    m_redesignGotoTimeVisible = visible;
+    emit gotoTimeDialogVisibleChanged();
 }
 
 #ifdef ENABLE_VLM

@@ -104,10 +104,17 @@ FocusScope {
     }
     Connections {
         target: Player
-        function onInputChanged() { view.refreshSeekPreview() }
+        function onInputChanged() { view.refreshSeekPreview(); gotoTime.reject() }
     }
     Connections {
         target: DialogsProvider
+        function onShowRedesignGotoTime() {
+            if (gotoTime.visible) gotoTime.reject()
+            else {
+                mediaMenu.dismiss(); tracksPopup.close(); customChoice.close()
+                gotoTime.begin(Player.time.toSeconds())
+            }
+        }
         function onShowRedesignBookmarks() {
             rootPlayer.queueTab = 1
             view.settingsPage = ""; view.queueOpen = true
@@ -131,6 +138,18 @@ FocusScope {
         onWheelLeftRight: steps => adjust(steps)
     }
     RedesignSleepTimer { id: sleepTimer; onTriggered: MainPlaylistController.pause() }
+    RedesignGotoTimeDialog {
+        id: gotoTime
+        objectName: "gotoTimeDialog"
+        parent: view
+        scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
+        videoBackdropContent: rootPlayer.menuBackdropContent
+        seekable: Player.isStarted && Player.seekable
+        durationSeconds: Player.length.valid() ? Player.length.toSeconds() : 0
+        onVisibleChanged: DialogsProvider.setRedesignGotoTimeVisible(visible)
+        Component.onDestruction: DialogsProvider.setRedesignGotoTimeVisible(false)
+        onSeekRequested: seconds => Player.jumpToSeconds(seconds)
+    }
     component SurfaceBackdrop: RedesignSurfaceBackdrop {
         sourceItem: view.backdropSource
         scaleFactor: view.scaleFactor
