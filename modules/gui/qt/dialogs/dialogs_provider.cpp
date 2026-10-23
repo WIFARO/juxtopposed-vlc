@@ -581,13 +581,12 @@ QMessageBox::StandardButton DialogsProvider::messageDialog(const QString &text,
 void DialogsProvider::playlistsDialog( const QVariantList & medias, MLPlaylistListModel::PlaylistType type )
 {
     if (medias.isEmpty()) return;
-    if (p_intf->p_mi && p_intf->p_mi->hasMediaLibrary()) {
-        emit showRedesignAddToPlaylist(medias, type);
+    if (!p_intf->p_mi || !p_intf->p_mi->hasMediaLibrary()) {
+        messageDialog(qtr("The media library is not available."), qtr("Add to Playlist"),
+                      QMessageBox::Close, QMessageBox::Close, QMessageBox::Information);
         return;
     }
-    const auto dialog = new PlaylistsDialog(p_intf, medias, type);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->show(); // "Modeless dialogs are displayed using show()"
+    emit showRedesignAddToPlaylist(medias, type);
 }
 
 void DialogsProvider::bookmarksDialog()
