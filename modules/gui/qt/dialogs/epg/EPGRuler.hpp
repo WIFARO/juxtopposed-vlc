@@ -40,11 +40,16 @@ public slots:
     void setScale( double scale );
     void setRange( const QDateTime&, const QDateTime& );
     void setOffset( int offset );
+    void setCurrentTime(const QDateTime &time) { m_currentTime = time; update(); }
+    void setAccent(const QColor &color) { m_accent = color; update(); }
 
 protected:
     void paintEvent( QPaintEvent *event ) override;
+    void changeEvent(QEvent *) override;
 
 private:
+    QColor m_accent;
+    QDateTime m_currentTime;
     qreal m_scale;
     int m_duration;
     int m_offset;

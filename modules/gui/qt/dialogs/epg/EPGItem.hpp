@@ -54,6 +54,7 @@ public:
     void setDuration( uint32_t duration );
     void setRating( uint8_t i_rating );
     void updatePos();
+    void activate();
     bool endsBefore( const QDateTime & ) const;
     bool playsAt( const QDateTime & ) const;
     const QList<QPair<QString, QString>> &descriptionItems() const;

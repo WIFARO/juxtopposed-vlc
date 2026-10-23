@@ -30,6 +30,7 @@ class QTextEdit;
 class QTimer;
 class EPGItem;
 class EPGWidget;
+class QPushButton;
 
 class EpgDialog : public QVLCFrame
 {
@@ -41,17 +42,29 @@ public:
 
 protected:
     void showEvent(QShowEvent * event) override;
+    void hideEvent(QHideEvent * event) override;
 
     EPGWidget *epg;
     QTextEdit *description;
     QLabel *title;
+    QLabel *time;
+    QLabel *heading;
+    QLabel *help;
+    QLabel *zoomLabel;
+    QPushButton *nowButton;
+    QPushButton *zoomOut;
+    QPushButton *zoomIn;
+    QPushButton *switchButton;
+    QPushButton *closeButton;
+    int zoomLevel = 2;
+    EPGItem *displayedItem = nullptr;
     QTimer *timer;
 
 private slots:
     void scheduleUpdate();
     void inputChanged();
     void updateInfos();
-    void timeout();
+    void retranslate();
     void displayEvent( EPGItem * );
 };
 

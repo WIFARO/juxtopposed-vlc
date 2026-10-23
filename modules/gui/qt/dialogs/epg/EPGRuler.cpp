@@ -30,13 +30,14 @@ class QPaintEvent;
 #include <QSize>
 #include <QPalette>
 #include <QColor>
+#include <QEvent>
+#include <QLocale>
 
 EPGRuler::EPGRuler( QWidget* parent )
     : QWidget( parent )
 {
     setContentsMargins( 0, 0, 0, 0 );
-    setMinimumHeight( height() );
-    setMaximumHeight( height() );
+    setFixedHeight(fontMetrics().height() * 2 + 8);
     m_offset = 0;
     m_scale = 1.0;
 }
@@ -67,61 +68,33 @@ void EPGRuler::setOffset( int offset )
     update();
 }
 
-void EPGRuler::paintEvent( QPaintEvent *event )
+void EPGRuler::changeEvent(QEvent *event)
 {
-    Q_UNUSED( event );
-    const QSize margin( 0, contentsMargins().top() );
-    const QSize header( 0, maximumHeight() - contentsMargins().top() );
-    const int spacing = m_scale * 3600;
-    QPainter p( this );
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::FontChange) setFixedHeight(fontMetrics().height() * 2 + 8);
+}
 
-    if( !m_startTime.isValid() )
+void EPGRuler::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    painter.fillRect(rect(), window()->palette().color(QPalette::AlternateBase));
+    if (!m_startTime.isValid() || m_scale <= 0) return;
+    const auto left = m_startTime.addSecs(m_offset / m_scale);
+    auto hour = left;
+    hour.setTime(QTime(left.time().hour(), 0));
+    const QLocale locale;
+    for (qreal x = left.secsTo(hour) * m_scale; x < width(); x += 3600 * m_scale, hour = hour.addSecs(3600))
     {
-        QWidget::paintEvent( event );
-        return;
+        painter.setPen(window()->palette().color(QPalette::Mid));
+        painter.drawLine(QPointF(x, 0), QPointF(x, height()));
+        QString label = locale.toString(hour.time(), QLocale::ShortFormat);
+        if (hour.time().hour() == 0) label += QStringLiteral("  ") + locale.toString(hour.date(), QLocale::ShortFormat);
+        painter.setPen(window()->palette().color(QPalette::Text));
+        const QRectF cell(x + 8, 0, 3600 * m_scale - 16, height());
+        painter.drawText(cell, Qt::AlignVCenter | Qt::AlignLeft, fontMetrics().elidedText(label, Qt::ElideRight, qMax(0, int(cell.width()))));
     }
-
-    QDateTime localStartTime;
-    localStartTime = m_startTime.addSecs( m_offset / m_scale );
-
-    QDateTime diff( localStartTime );
-    diff.setTime( QTime( localStartTime.time().hour(), 0, 0, 0 ) );
-
-    int secondsToHour = localStartTime.secsTo( diff );
-
-    /* draw hour blocks, with right bound being hourmark */
-    QPoint here( secondsToHour * m_scale, margin.height() );
-    QPoint previous( -1, 0 );
-    QDateTime current( localStartTime.addSecs( secondsToHour ) );
-    current = current.addSecs( -3600 );
-
-    QColor fillColor;
-    while ( here.rx() < width() + spacing )
-    {
-        QRect area( QPoint( previous.x() + 1, margin.height() ), here );
-        area.adjust( 0, 0, 0, header.height() );
-        QString timeString = current.toString( "hh'h'" );
-        /* Show Day */
-        if ( current.time().hour() == 0 )
-            timeString += current.date().toString( " ddd dd" );
-
-        if ( m_startTime.date().daysTo( current.date() ) % 2 == 0 )
-            fillColor = palette().color( QPalette::Window );
-        else
-            fillColor = palette().color( QPalette::Dark );
-        p.fillRect( area, fillColor );
-        p.drawLine( area.topRight(), area.bottomRight() );
-        p.drawText( area, Qt::AlignLeft, timeString );
-        previous = here;
-        here.rx() += spacing;
-        current = current.addSecs( 3600 );
-    }
-
-    /* draw current time line */
-    here.rx() = localStartTime.secsTo( QDateTime::currentDateTime() ) * m_scale;
-    if ( here.x() <= width() && here.x() >= 0 )
-    {
-        p.setPen( QPen( QColor( 255, 0 , 0, 128 ) ) );
-        p.drawLine( here, QPoint( here.x(), here.y() + header.height() ) );
-    }
+    const auto now = m_currentTime.isValid() ? m_currentTime : QDateTime::currentDateTime();
+    const qreal x = m_startTime.secsTo(now) * m_scale - m_offset;
+    painter.setPen(m_accent.isValid() ? m_accent : window()->palette().color(QPalette::Highlight));
+    painter.drawLine(QPointF(x, 0), QPointF(x, height()));
 }

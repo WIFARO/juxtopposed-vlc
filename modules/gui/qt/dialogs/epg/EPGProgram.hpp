@@ -48,6 +48,8 @@ class EPGProgram : public QObject
         void activate();
         const EPGItem * getCurrent() const;
         const QString & getName() const;
+        void setName(const QString &value) { name = value; }
+        void clearCurrent() { current = nullptr; }
         static bool lessThan( const EPGProgram *, const EPGProgram * );
 
         QHash<uint32_t, EPGItem *> eventsbyid;

@@ -29,6 +29,8 @@
 #include <QGraphicsSceneHoverEvent>
 #include <QStyle>
 #include <QTimeZone>
+#include <QLocale>
+#include <QtMath>
 
 #include "EPGItem.hpp"
 #include "EPGView.hpp"
@@ -36,13 +38,13 @@
 #include "qt.hpp"
 
 EPGItem::EPGItem( const vlc_epg_event_t *data, EPGView *view, EPGProgram *prog )
-    : QGraphicsItem()
+    : QGraphicsItem(), m_duration(0), m_rating(0)
 {
     m_view = view;
     program = prog;
     m_id = data->i_id;
     setData( data );
-    m_boundingRect.setHeight( TRACKS_HEIGHT );
+    m_boundingRect.setHeight(view->trackHeight());
     setFlags( QGraphicsItem::ItemIsSelectable | QGraphicsItem::ItemIsFocusable);
     setAcceptHoverEvents( true );
 }
@@ -54,80 +56,37 @@ QRectF EPGItem::boundingRect() const
 
 void EPGItem::paint( QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget*)
 {
-    QPen pen;
-    QColor gradientColor;
-
-    // Draw in view's coordinates
-    painter->setWorldMatrixEnabled( false );
-
-    // Draw high-quality items
-    //painter->setRenderHint( QPainter::Antialiasing );
-
-    // Get the transformations required to map the text on the viewport
-    QTransform viewPortTransform = m_view->viewportTransform();
-    QRectF mapped = deviceTransform( viewPortTransform ).mapRect( boundingRect() );
-
-    QLinearGradient gradient( mapped.topLeft(), mapped.bottomLeft() );
-
-    if ( program->getCurrent() == this )
-        gradientColor.setRgb( 244, 125, 0 , 255 );
-    else
-        gradientColor.setRgb( 201, 217, 242 );
-
-    gradient.setColorAt( 0.0, gradientColor.lighter( 120 ) );
-    gradient.setColorAt( 1.0, gradientColor );
-
-    pen.setColor( option->state & QStyle::State_MouseOver || hasFocus()
-                  ? QColor( 0, 0, 0 ) : QColor( 192, 192, 192 ) );
-
-    pen.setStyle( option->state & QStyle::State_MouseOver && !hasFocus()
-                  ? Qt::DashLine : Qt::SolidLine );
-
-    painter->setBrush( QBrush( gradient ) );
-    painter->setPen( pen );
-    mapped.adjust( 1, 2, -1, -2 );
-    painter->drawRoundedRect( mapped, 10, 10 );
-
-    /* Draw text */
-
-    // Setup the font
-    QFont f = painter->font();
-
-    // Get the font metrics
-    QFontMetrics fm = painter->fontMetrics();
-
-    // Adjust the drawing rect
-    mapped.adjust( 6, 6, -6, -6 );
-
-    painter->setPen( Qt::black );
-    /* Draw the title. */
-    painter->drawText( mapped, Qt::AlignTop | Qt::AlignLeft, fm.elidedText( m_name, Qt::ElideRight, mapped.width() ) );
-
-    if ( m_rating > 0 && mapped.width() > 40 )
-    {
-        QRectF iconsRect = QRectF( mapped.bottomRight(), mapped.bottomRight() );
-        iconsRect.adjust( -20, -20, 0, 0 );
-        painter->save();
-        painter->setBrush( Qt::white );
-        f.setPixelSize( 8 );
-        painter->setFont( f );
-        painter->drawRect( iconsRect );
-        painter->drawText( iconsRect, Qt::AlignCenter, QString("%1+").arg( m_rating ) );
-        painter->restore();
-    }
-
-    mapped.adjust( 0, 20, 0, 0 );
-
-    QDateTime m_end = m_start.addSecs( m_duration );
-    f.setPixelSize( 10 );
-    f.setItalic( true );
-    painter->setFont( f );
-
-    /* Draw the hours. */
-    painter->drawText( mapped, Qt::AlignTop | Qt::AlignLeft,
-                       fm.elidedText( start().toString( "hh:mm" ) + " - " +
-                                      m_end.toString( "hh:mm" ),
-                                      Qt::ElideRight, mapped.width() ) );
+    painter->save();
+    painter->setWorldMatrixEnabled(false);
+    painter->setRenderHint(QPainter::Antialiasing);
+    QRectF mapped = deviceTransform(m_view->viewportTransform()).mapRect(boundingRect());
+    const qreal scale = m_view->fontMetrics().height() / 17.;
+    mapped.adjust(scale, 3 * scale, -scale, -3 * scale);
+    if (mapped.width() <= 2) { painter->restore(); return; }
+    const auto colors = m_view->window()->palette();
+    const QColor accent = m_view->accentColor();
+    const bool selected = isSelected() || hasFocus();
+    QColor fill = colors.color(QPalette::AlternateBase);
+    if (selected) { fill = accent; fill.setAlpha(55); }
+    painter->setBrush(fill);
+    painter->setPen(QPen(selected || (option->state & QStyle::State_MouseOver) ? accent : colors.color(QPalette::Mid), scale));
+    painter->drawRoundedRect(mapped, 6 * scale, 6 * scale);
+    if (program->getCurrent() == this)
+        painter->fillRect(QRectF(mapped.left() + 2 * scale, mapped.top() + 7 * scale, 3 * scale, mapped.height() - 14 * scale), accent);
+    mapped.adjust(9 * scale, 7 * scale, -8 * scale, -7 * scale);
+    painter->setFont(m_view->font());
+    const auto metrics = painter->fontMetrics();
+    painter->setPen(colors.color(QPalette::Text));
+    painter->drawText(mapped, Qt::AlignTop | Qt::AlignLeft, metrics.elidedText(m_name, Qt::ElideRight, qMax(0, qFloor(mapped.width()))));
+    mapped.adjust(0, metrics.height() + 4 * scale, 0, 0);
+    painter->setPen(colors.color(QPalette::WindowText));
+    const QLocale locale;
+    const auto hours = locale.toString(start().time(), QLocale::ShortFormat) + QStringLiteral(" – ")
+                     + locale.toString(end().time(), QLocale::ShortFormat);
+    painter->drawText(mapped, Qt::AlignTop | Qt::AlignLeft, metrics.elidedText(hours, Qt::ElideRight, qMax(0, qFloor(mapped.width()))));
+    if (m_rating && mapped.width() > 45 * scale)
+        painter->drawText(mapped, Qt::AlignBottom | Qt::AlignRight, QStringLiteral("%1+").arg(m_rating));
+    painter->restore();
 }
 
 const QDateTime& EPGItem::start() const
@@ -157,7 +116,10 @@ bool EPGItem::setData( const vlc_epg_event_t *data )
     QString newdesc = qfu( data->psz_description );
     QString newshortdesc = qfu( data->psz_short_description );
 
-    if ( m_start != newtime ||
+    QList<QPair<QString, QString>> newItems;
+    for (int i = 0; i < data->i_description_items; ++i)
+        newItems.append({qfu(data->description_items[i].psz_key), qfu(data->description_items[i].psz_value)});
+    if (m_rating != data->i_rating || m_descitems != newItems || m_start != newtime ||
          m_name != newname ||
          m_description != newdesc ||
          m_shortDescription != newshortdesc ||
@@ -165,20 +127,14 @@ bool EPGItem::setData( const vlc_epg_event_t *data )
     {
         m_start = newtime;
         m_name = newname;
-        setToolTip( newname );
+        setToolTip(QStringLiteral("<qt>%1</qt>").arg(newname.toHtmlEscaped()));
         m_description = std::move(newdesc);
         m_shortDescription = std::move(newshortdesc);
         setDuration( data->i_duration );
         setRating( data->i_rating );
-        m_descitems.clear();
-        for( int i=0; i<data->i_description_items; i++ )
-        {
-            m_descitems.append(QPair<QString, QString>(
-                                  QString(data->description_items[i].psz_key),
-                                  QString(data->description_items[i].psz_value)));
-        }
+        m_descitems = std::move(newItems);
         updatePos();
-        prepareGeometryChange();
+        update();
         return true;
     }
     return false;
@@ -186,7 +142,7 @@ bool EPGItem::setData( const vlc_epg_event_t *data )
 
 bool EPGItem::endsBefore( const QDateTime &ref ) const
 {
-    return m_start.addSecs( m_duration ) < ref;
+    return m_start.addSecs( m_duration ) <= ref;
 }
 
 bool EPGItem::playsAt( const QDateTime & ref ) const
@@ -201,6 +157,7 @@ const QList<QPair<QString, QString>> & EPGItem::descriptionItems() const
 
 void EPGItem::setDuration( uint32_t duration )
 {
+    prepareGeometryChange();
     m_duration = duration;
     m_boundingRect.setWidth( duration );
 }
@@ -223,11 +180,16 @@ QString EPGItem::description() const
 
 void EPGItem::updatePos()
 {
+    if (m_boundingRect.height() != m_view->trackHeight())
+    {
+        prepareGeometryChange();
+        m_boundingRect.setHeight(m_view->trackHeight());
+    }
     QDateTime overallmin = m_view->startTime();
     if( overallmin.isValid() )
     {
         int x = m_view->startTime().secsTo( m_start );
-        setPos( x, program->getPosition() * TRACKS_HEIGHT );
+        setPos( x, program->getPosition() * m_view->trackHeight() );
     }
 }
 
@@ -244,7 +206,7 @@ void EPGItem::hoverLeaveEvent ( QGraphicsSceneHoverEvent * event )
 
 void EPGItem::mouseDoubleClickEvent( QGraphicsSceneMouseEvent * )
 {
-    program->activate();
+    activate();
 }
 
 void EPGItem::focusInEvent( QFocusEvent * event )
@@ -253,3 +215,5 @@ void EPGItem::focusInEvent( QFocusEvent * event )
     m_view->focusItem( this );
     update();
 }
+
+void EPGItem::activate() { program->activate(); }

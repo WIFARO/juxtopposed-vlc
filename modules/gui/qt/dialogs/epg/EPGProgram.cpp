@@ -25,7 +25,7 @@
 
 EPGProgram::EPGProgram( EPGView *view_, const vlc_epg_t *p_epg ) : QObject( view_ )
 {
-    name = QString(p_epg->psz_name);
+    name = qfu(p_epg->psz_name);
     id = p_epg->i_id;
     sourceid = p_epg->i_source_id;
     view = view_;
@@ -78,6 +78,8 @@ void EPGProgram::pruneEvents( const QDateTime &date )
         if( item->endsBefore( date ) ) /* Expired item ? */
         {
             EPGItem *modifiableitem = eventsbyid.take( item->eventID() );
+            if (view->selectedItem() == modifiableitem) view->focusItem(nullptr);
+            if (current == modifiableitem) current = nullptr;
             view->scene()->removeItem( modifiableitem );
             delete modifiableitem;
             it = eventsbytime.erase( it );
@@ -128,9 +130,7 @@ void EPGProgram::updateEvents( const vlc_epg_event_t * const * pp_events, size_t
 
             view->scene()->addItem( epgItem );
 
-            /* First Insert, needs to focus by default then */
-            if( !view->hasFocus() )
-                view->focusItem( epgItem );
+
         }
 
         if( p_current == p_event )

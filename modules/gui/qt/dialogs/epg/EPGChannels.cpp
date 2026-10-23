@@ -30,11 +30,14 @@
 
 #include <QPainter>
 #include <QPaintEvent>
+#include <QMouseEvent>
 
 EPGChannels::EPGChannels( QWidget *parent, EPGView *m_epgView )
     : QWidget( parent ), m_epgView( m_epgView ), m_offset( 0 )
 {
-    setContentsMargins( 0, 0, 0, 0 );
+    setContentsMargins(0, 0, 0, 0);
+    setMouseTracking(true);
+    setFixedWidth(fontMetrics().horizontalAdvance(QStringLiteral("A channel name")) + 24);
 }
 
 void EPGChannels::setOffset( int offset )
@@ -59,29 +62,36 @@ void EPGChannels::reset()
     update();
 }
 
-void EPGChannels::paintEvent( QPaintEvent *event )
+void EPGChannels::changeEvent(QEvent *event)
 {
-    Q_UNUSED( event );
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::FontChange)
+        setFixedWidth(fontMetrics().horizontalAdvance(QStringLiteral("A channel name")) + 24);
+}
 
-    QPainter p( this );
+void EPGChannels::mouseMoveEvent(QMouseEvent *event)
+{
+    const int row = (event->position().y() + m_offset) / m_epgView->trackHeight();
+    setToolTip(row >= 0 && row < programsList.size()
+               ? QStringLiteral("<qt>%1</qt>").arg(programsList[row]->getName().toHtmlEscaped()) : QString());
+    QWidget::mouseMoveEvent(event);
+}
 
-    /* Draw the top and the bottom lines. */
-    p.drawLine( 0, 0, width() - 1, 0 );
-
-    unsigned int i=0;
-    foreach( const EPGProgram *program, programsList )
+void EPGChannels::paintEvent(QPaintEvent *)
+{
+    QPainter painter(this);
+    painter.fillRect(rect(), window()->palette().color(QPalette::Base));
+    for (const auto *program : programsList)
     {
-        QString text = program->getName();
-        /* try to remove the " [Program xxx]" end */
-        int i_idx_channel = text.lastIndexOf(" [");
-        if (i_idx_channel > 0)
-            text = text.left( i_idx_channel );
-
-        p.drawText( 0, - m_offset + ( i++ + 0.5 ) * TRACKS_HEIGHT - 4,
-                    width(), height(), Qt::AlignLeft, text );
-
-        int i_width = fontMetrics().horizontalAdvance( text );
-        if( width() < i_width )
-            setMinimumWidth( i_width );
+        QString name = program->getName();
+        const int suffix = name.lastIndexOf(QStringLiteral(" ["));
+        if (suffix > 0) name.truncate(suffix);
+        const QRect row(0, int(program->getPosition()) * m_epgView->trackHeight() - m_offset,
+                        width(), m_epgView->trackHeight());
+        painter.setPen(window()->palette().color(QPalette::Mid));
+        painter.drawLine(row.bottomLeft(), row.bottomRight());
+        painter.setPen(window()->palette().color(QPalette::Text));
+        painter.drawText(row.adjusted(8, 0, -8, 0), Qt::AlignLeft | Qt::AlignVCenter,
+                         fontMetrics().elidedText(name, Qt::ElideRight, width() - 16));
     }
 }

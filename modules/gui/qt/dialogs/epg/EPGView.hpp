@@ -34,7 +34,6 @@
 
 class EPGItem;
 
-#define TRACKS_HEIGHT 60
 
 class EPGGraphicsScene : public QGraphicsScene
 {
@@ -64,6 +63,11 @@ public:
     void            cleanup();
     bool            hasValidData() const;
     void            activateProgram( int );
+    int             trackHeight() const { return fontMetrics().height() * 4 + 12; }
+    EPGItem *       selectedItem() const { return m_selectedItem; }
+    void            goToNow();
+    QColor          accentColor() const { return m_accent.isValid() ? m_accent : palette().color(QPalette::Highlight); }
+    void            setAccent(const QColor &color) { m_accent = color; scene()->update(); }
 
 signals:
     void            rangeChanged( const QDateTime&, const QDateTime& );
@@ -72,18 +76,21 @@ signals:
     void            programActivated( int );
 
 protected:
+    void            changeEvent(QEvent *) override;
+    void            keyPressEvent(QKeyEvent *) override;
+    void            mousePressEvent(QMouseEvent *) override;
     void            walkItems( bool );
     QDateTime       m_epgTime;
     QDateTime       m_startTime;
     QDateTime       m_maxTime;
     QDateTime       m_updtMinTime; /* >= startTime before pruning */
-    int             m_scaleFactor;
-    int             m_duration;
 
 public slots:
     void            focusItem( EPGItem * );
 
 private:
+    QColor m_accent;
+    EPGItem *m_selectedItem = nullptr;
     QHash<uint16_t, EPGProgram*> programs;
 };
 

@@ -31,6 +31,8 @@
 #include <QLabel>
 #include <QDateTime>
 #include <QTimeZone>
+#include <QEvent>
+#include "util/interface_translator.hpp"
 
 #include "EPGWidget.hpp"
 #include "EPGRuler.hpp"
@@ -46,28 +48,43 @@ EPGWidget::EPGWidget( QWidget *parent ) : QWidget( parent )
     m_epgView = new EPGView( this );
     m_channelsWidget = new EPGChannels( this, m_epgView );
 
-    m_channelsWidget->setMinimumWidth( 100 );
+    m_epgView->setObjectName(QStringLiteral("guideTimeline"));
+    m_channelsWidget->setObjectName(QStringLiteral("guideChannels"));
+    m_rulerWidget->setObjectName(QStringLiteral("guideRuler"));
 
     m_epgView->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
-    setZoom( 1 );
+    setZoom(zoomLevel);
 
     rootWidget = new QStackedWidget( this );
 
     QWidget *containerWidget = new QWidget( this );
-    QGridLayout* layout = new QGridLayout( this );
+    QGridLayout* layout = new QGridLayout(containerWidget);
     layout->addWidget( m_rulerWidget, 0, 1 );
     layout->addWidget( m_channelsWidget, 1, 0 );
     layout->addWidget( m_epgView, 1, 1 );
-    layout->setSpacing( 0 );
+    layout->setSpacing(0);
+    layout->setContentsMargins(0, 0, 0, 0);
     containerWidget->setLayout( layout );
     rootWidget->insertWidget( EPGVIEW_WIDGET, containerWidget );
 
-    QLabel *noepgLabel = new QLabel( qtr("No EPG Data Available"), this );
-    noepgLabel->setAlignment( Qt::AlignCenter );
-    rootWidget->insertWidget( NOEPG_WIDGET, noepgLabel );
+    emptyMessage = new QLabel(this);
+    emptyMessage->setObjectName(QStringLiteral("guideEmpty"));
+    emptyMessage->setTextFormat(Qt::PlainText);
+    emptyMessage->setWordWrap(true);
+    emptyMessage->setAlignment(Qt::AlignCenter);
+    rootWidget->insertWidget(NOEPG_WIDGET, emptyMessage);
+    const auto translate = [this] {
+        emptyMessage->setText(qtr("No program guide is available. Open a TV stream that has a program guide."));
+        m_epgView->setAccessibleName(qtr("Program timeline"));
+        m_epgView->setAccessibleDescription(qtr("Use the arrow keys to select a program. Press Enter to switch channels."));
+    };
+    translate();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, translate);
 
     rootWidget->setCurrentIndex( 1 );
     layout = new QGridLayout( this );
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget( rootWidget );
     setLayout( layout );
 
@@ -86,41 +103,79 @@ void EPGWidget::reset()
 {
     m_channelsWidget->reset();
     m_epgView->reset();
-    emit itemSelectionChanged( NULL );
+    currentInput.reset();
+    b_input_type_known = false;
+    rootWidget->setCurrentIndex(NOEPG_WIDGET);
+    emit dataChanged();
 }
 
 void EPGWidget::setZoom( int level )
 {
-    double scale = (double)level / 20;
-    m_epgView->setScale( scale );
-    m_rulerWidget->setScale( scale );
+    zoomLevel = qBound(1, level, 8);
+    const double scale = zoomLevel / 20. * fontMetrics().height() / 17.;
+    m_epgView->setScale(scale);
+    m_rulerWidget->setScale(scale);
 }
 
 void EPGWidget::updateEPG( input_item_t *p_input_item )
 {
-    if( !p_input_item ) return;
+    if (!p_input_item) { reset(); return; }
 
     /* flush our EPG data if input type has changed */
-    if ( b_input_type_known && p_input_item->i_type != i_event_source_type ) m_epgView->reset();
+    if (currentInput.get() != p_input_item ||
+        (b_input_type_known && p_input_item->i_type != i_event_source_type)) reset();
+    currentInput = SharedInputItem(p_input_item);
     i_event_source_type = p_input_item->i_type;
     b_input_type_known = true;
 
-    /* Fixme: input could have disappeared */
-    vlc_mutex_lock(  & p_input_item->lock );
+    vlc_mutex_lock(&p_input_item->lock);
+    bool anyEvents = false;
+    for (int i = 0; i < p_input_item->i_epg; ++i)
+        anyEvents |= p_input_item->pp_epg[i]->i_event > 0;
+    if (!anyEvents)
+    {
+        vlc_mutex_unlock(&p_input_item->lock);
+        reset();
+        return;
+    }
     m_epgView->updateEPG( p_input_item->pp_epg, p_input_item->i_epg );
     m_epgView->setEpgTime( ( p_input_item->i_epg_time ) ?
                            QDateTime::fromSecsSinceEpoch( p_input_item->i_epg_time, QTimeZone::systemTimeZone() ) :
                            QDateTime() );
     vlc_mutex_unlock( & p_input_item->lock );
 
+    m_epgView->cleanup();
     /* toggle our widget view */
     rootWidget->setCurrentIndex(
             m_epgView->hasValidData() ? EPGVIEW_WIDGET : NOEPG_WIDGET );
 
-    m_epgView->cleanup();
+    m_channelsWidget->update();
+    m_rulerWidget->setCurrentTime(m_epgView->epgTime());
+    m_epgView->viewport()->update();
+    emit itemSelectionChanged(m_epgView->selectedItem());
+    emit dataChanged();
 }
 
 void EPGWidget::activateProgram( int id )
 {
     emit programActivated( id );
+}
+
+bool EPGWidget::hasValidData() const { return m_epgView->hasValidData(); }
+EPGItem *EPGWidget::selectedItem() const { return m_epgView->selectedItem(); }
+void EPGWidget::goToNow() { m_epgView->goToNow(); }
+void EPGWidget::activateSelectedProgram()
+{
+    if (auto *item = selectedItem()) item->activate();
+}
+void EPGWidget::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::FontChange) setZoom(zoomLevel);
+}
+
+void EPGWidget::setAccent(const QColor &color)
+{
+    m_epgView->setAccent(color);
+    m_rulerWidget->setAccent(color);
 }

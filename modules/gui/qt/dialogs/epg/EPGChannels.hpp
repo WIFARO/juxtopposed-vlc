@@ -43,6 +43,8 @@ public slots:
 
 protected:
     void paintEvent( QPaintEvent *event ) override;
+    void changeEvent(QEvent *) override;
+    void mouseMoveEvent(QMouseEvent *) override;
 
 private:
     EPGView *m_epgView;

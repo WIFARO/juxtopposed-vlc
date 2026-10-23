@@ -30,162 +30,230 @@
 #include "EPGItem.hpp"
 
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QScrollBar>
 #include <QLabel>
-#include <QGroupBox>
 #include <QPushButton>
 #include <QTextEdit>
-#include <QDialogButtonBox>
+#include <QSplitter>
 #include <QTimer>
 #include <QDateTime>
 #include <QLocale>
+#include <QScreen>
 
 #include "qt.hpp"
 #include "player/player_controller.hpp"
+#include "maininterface/mainctx.hpp"
+#include "util/interface_translator.hpp"
+#include "util/redesign_widget_theme.hpp"
 
-EpgDialog::EpgDialog( qt_intf_t *_p_intf ): QVLCFrame( _p_intf )
+EpgDialog::EpgDialog(qt_intf_t *intf) : QVLCFrame(intf)
 {
-    setWindowTitle( qtr( "Program Guide" ) );
-
-    QVBoxLayout *layout = new QVBoxLayout( this );
-    layout->setContentsMargins(0, 0, 0, 0);
-    epg = new EPGWidget( this );
-
-    QGroupBox *descBox = new QGroupBox( qtr( "Description" ), this );
-
-    QVBoxLayout *boxLayout = new QVBoxLayout( descBox );
-
-    description = new QTextEdit( this );
-    description->setReadOnly( true );
-    description->setFrameStyle( QFrame::Sunken | QFrame::StyledPanel );
-    description->setAutoFillBackground( true );
-    description->setAlignment( Qt::AlignLeft | Qt::AlignTop );
-    description->setFixedHeight( 100 );
-
-    QPalette palette;
-    palette.setBrush(QPalette::Active, QPalette::Window, palette.brush( QPalette::Base ) );
-    description->setPalette( palette );
-
-    title = new QLabel( qtr( "Title" ), this );
-    title->setWordWrap( true );
-
-    boxLayout->addWidget( title );
-    boxLayout->addWidget( description );
-
-    layout->addWidget( epg, 10 );
-    layout->addWidget( descBox );
-
-    connect( epg, &EPGWidget::itemSelectionChanged, this, &EpgDialog::displayEvent );
-    connect( epg, &EPGWidget::programActivated, THEMIM, &PlayerController::changeProgram );
-    connect( THEMIM, &PlayerController::epgChanged, this, &EpgDialog::scheduleUpdate );
-    connect( THEMIM, &PlayerController::inputChanged, this, &EpgDialog::inputChanged );
-
-    QDialogButtonBox *buttonsBox = new QDialogButtonBox( this );
-
-#if 0
-    QPushButton *update = new QPushButton( qtr( "Update" ) ); // Temporary to test
-    buttonsBox->addButton( update, QDialogButtonBox::ActionRole );
-    BUTTONACT( update, &EpgDialog::updateInfos );
-#endif
-
-    buttonsBox->addButton( new QPushButton( qtr( "&Close" ) ),
-                           QDialogButtonBox::RejectRole );
-    boxLayout->addWidget( buttonsBox );
-    connect( buttonsBox, &QDialogButtonBox::rejected, this, &EpgDialog::close );
-
-    timer = new QTimer( this );
-    timer->setSingleShot( true );
-    timer->setInterval( 5000 );
-    connect( timer, &QTimer::timeout, this, &EpgDialog::timeout );
-
+    setObjectName(QStringLiteral("redesignProgramGuide"));
+    setWindowRole("vlc-program-guide");
+    auto *layout = new QVBoxLayout(this);
+    heading = new QLabel(this);
+    heading->setProperty("redesignHeading", true);
+    heading->setTextFormat(Qt::PlainText);
+    layout->addWidget(heading);
+    help = new QLabel(this);
+    help->setTextFormat(Qt::PlainText);
+    help->setWordWrap(true);
+    layout->addWidget(help);
+    auto *tools = new QHBoxLayout;
+    nowButton = new QPushButton(this);
+    nowButton->setObjectName(QStringLiteral("guideNowButton"));
+    zoomLabel = new QLabel(this);
+    zoomOut = new QPushButton(QStringLiteral("−"), this);
+    zoomOut->setObjectName(QStringLiteral("guideZoomOut"));
+    zoomIn = new QPushButton(QStringLiteral("+"), this);
+    zoomIn->setObjectName(QStringLiteral("guideZoomIn"));
+    tools->addWidget(nowButton);
+    tools->addStretch();
+    tools->addWidget(zoomLabel);
+    tools->addWidget(zoomOut);
+    tools->addWidget(zoomIn);
+    layout->addLayout(tools);
+    epg = new EPGWidget(this);
+    epg->setObjectName(QStringLiteral("programGuide"));
+    auto *splitter = new QSplitter(Qt::Vertical, this);
+    splitter->setObjectName(QStringLiteral("guideSplitter"));
+    splitter->setChildrenCollapsible(false);
+    splitter->addWidget(epg);
+    auto *details = new QWidget(splitter);
+    auto *detailLayout = new QVBoxLayout(details);
+    detailLayout->setContentsMargins(0, 0, 0, 0);
+    title = new QLabel(details);
+    title->setObjectName(QStringLiteral("guideProgramTitle"));
+    title->setProperty("redesignSectionHeading", true);
+    title->setTextFormat(Qt::PlainText);
+    title->setWordWrap(true);
+    time = new QLabel(details);
+    time->setObjectName(QStringLiteral("guideProgramTime"));
+    time->setTextFormat(Qt::PlainText);
+    time->setWordWrap(true);
+    description = new QTextEdit(details);
+    description->setObjectName(QStringLiteral("guideProgramDescription"));
+    description->setReadOnly(true);
+    description->setAcceptRichText(false);
+    detailLayout->addWidget(title);
+    detailLayout->addWidget(time);
+    detailLayout->addWidget(description, 1);
+    splitter->addWidget(details);
+    splitter->setStretchFactor(0, 3);
+    splitter->setStretchFactor(1, 1);
+    layout->addWidget(splitter, 1);
+    auto *actions = new QHBoxLayout;
+    actions->addStretch();
+    switchButton = new QPushButton(this);
+    switchButton->setObjectName(QStringLiteral("guideSwitchChannel"));
+    switchButton->setProperty("redesignPrimary", true);
+    closeButton = new QPushButton(this);
+    closeButton->setObjectName(QStringLiteral("closeProgramGuide"));
+    actions->addWidget(switchButton);
+    actions->addWidget(closeButton);
+    layout->addLayout(actions);
+    connect(closeButton, &QPushButton::clicked, this, &EpgDialog::close);
+    connect(nowButton, &QPushButton::clicked, epg, &EPGWidget::goToNow);
+    connect(switchButton, &QPushButton::clicked, epg, &EPGWidget::activateSelectedProgram);
+    const auto zoom = [this](int step) {
+        zoomLevel = qBound(1, zoomLevel + step, 8);
+        if (step) epg->setZoom(zoomLevel);
+        zoomOut->setEnabled(epg->hasValidData() && zoomLevel > 1);
+        zoomIn->setEnabled(epg->hasValidData() && zoomLevel < 8);
+    };
+    connect(zoomOut, &QPushButton::clicked, this, [zoom] { zoom(-1); });
+    connect(zoomIn, &QPushButton::clicked, this, [zoom] { zoom(1); });
+    connect(epg, &EPGWidget::dataChanged, this, [this, zoom] {
+        nowButton->setEnabled(epg->hasValidData());
+        zoom(0);
+    });
+    connect(epg, &EPGWidget::itemSelectionChanged, this, &EpgDialog::displayEvent);
+    connect(epg, &EPGWidget::programActivated, THEMIM, &PlayerController::changeProgram);
+    connect(THEMIM, &PlayerController::epgChanged, this, &EpgDialog::scheduleUpdate);
+    connect(THEMIM, &PlayerController::inputChanged, this, &EpgDialog::inputChanged);
+    timer = new QTimer(this);
+    timer->setObjectName(QStringLiteral("guideUpdateTimer"));
+    timer->setSingleShot(true);
+    timer->setInterval(5000);
+    connect(timer, &QTimer::timeout, this, &EpgDialog::updateInfos);
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, &EpgDialog::retranslate);
+    applyRedesignWidgetTheme(this, p_intf->p_mi);
+    const auto scaleLayout = [this, layout, tools, actions, detailLayout, splitter] {
+        const auto dp = [this](int value) { return qRound(value * p_intf->p_mi->getIntfScaleFactor()); };
+        layout->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
+        layout->setSpacing(dp(12));
+        tools->setSpacing(dp(8));
+        actions->setSpacing(dp(8));
+        detailLayout->setSpacing(dp(8));
+        splitter->setHandleWidth(dp(12));
+        epg->setMinimumHeight(dp(120));
+        description->setMinimumHeight(dp(72));
+        for (auto *button : {nowButton, zoomOut, zoomIn, switchButton, closeButton}) button->setFixedHeight(dp(32));
+        for (auto *button : {zoomOut, zoomIn}) button->setFixedWidth(dp(32));
+        epg->setZoom(zoomLevel);
+    };
+    const auto accent = [this] { epg->setAccent(p_intf->p_mi->redesignAccent()); };
+    accent();
+    connect(p_intf->p_mi, &MainCtx::redesignAccentChanged, this, accent);
+    scaleLayout();
+    connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, scaleLayout);
+    retranslate();
     updateInfos();
-    restoreWidgetPosition( "EPGDialog", QSize( 650, 450 ) );
+    const double factor = p_intf->p_mi->getIntfScaleFactor();
+    QSize initial(qRound(880 * factor), qRound(650 * factor));
+    if (screen()) initial = initial.boundedTo(screen()->availableGeometry().size() - QSize(32, 32));
+    restoreWidgetPosition("EPGDialog", initial);
 }
 
 EpgDialog::~EpgDialog()
 {
-    saveWidgetPosition( "EPGDialog" );
+    saveWidgetPosition("EPGDialog");
 }
 
-void EpgDialog::showEvent(QShowEvent *)
+void EpgDialog::retranslate()
 {
-    scheduleUpdate();
+    setWindowTitle(qtr("Program Guide"));
+    heading->setText(qtr("Program guide"));
+    help->setText(qtr("Select a program to see its details. Double-click to switch channels."));
+    nowButton->setText(qtr("Now"));
+    nowButton->setToolTip(qtr("Show the current time"));
+    zoomLabel->setText(qtr("Zoom"));
+    zoomOut->setAccessibleName(qtr("Zoom out"));
+    zoomOut->setToolTip(qtr("Zoom out"));
+    zoomIn->setAccessibleName(qtr("Zoom in"));
+    zoomIn->setToolTip(qtr("Zoom in"));
+    switchButton->setText(qtr("Switch channel"));
+    closeButton->setText(qtr("&Close"));
+    description->setAccessibleName(qtr("Program description"));
+    displayEvent(epg->selectedItem());
 }
 
-void EpgDialog::timeout()
+void EpgDialog::showEvent(QShowEvent *event)
 {
-    if( !isVisible() )
-        scheduleUpdate();
-    else
-        updateInfos();
+    QVLCFrame::showEvent(event);
+    updateInfos();
+}
+
+void EpgDialog::hideEvent(QHideEvent *event)
+{
+    timer->stop();
+    QVLCFrame::hideEvent(event);
 }
 
 void EpgDialog::inputChanged()
 {
     epg->reset();
-    timeout();
+    if (isVisible()) updateInfos();
 }
 
 void EpgDialog::scheduleUpdate()
 {
-    if( !timer->isActive() )
-        timer->start( 5000 );
+    if (isVisible() && !timer->isActive()) timer->start();
 }
 
-void EpgDialog::displayEvent( EPGItem *epgItem )
+void EpgDialog::displayEvent(EPGItem *item)
 {
-    if( !epgItem )
+    const bool selectionChanged = item != displayedItem;
+    displayedItem = item;
+    switchButton->setEnabled(item != nullptr);
+    title->setText(item ? item->name() : qtr("Select a program"));
+    time->setVisible(item != nullptr);
+    QString details;
+    if (item)
     {
-        title->clear();
-        description->clear();
-        return;
+        const QLocale locale;
+        const auto format = [&locale](const QDateTime &date) {
+            return date.date() == QDate::currentDate() ? locale.toString(date.time(), QLocale::ShortFormat)
+                                                      : locale.toString(date, QLocale::ShortFormat);
+        };
+        QString hours = format(item->start()) + QStringLiteral(" – ") + format(item->end());
+        if (item->rating()) hours += qtr(" (Ages %1 and above)").arg(item->rating());
+        time->setText(hours);
+        details = item->description();
+        for (const auto &entry : item->descriptionItems())
+        {
+            if (!details.isEmpty()) details += QStringLiteral("\n\n");
+            details += entry.first + QStringLiteral(": ") + entry.second;
+        }
     }
-
-    QDateTime now = QDateTime::currentDateTime();
-    QDateTime enddate = epgItem->start().addSecs( epgItem->duration() );
-
-    QString start, end;
-    QLocale locale;
-    if( epgItem->start().daysTo(now) != 0 )
-        start = locale.toString(epgItem->start());
-    else
-        start = locale.toString(epgItem->start().time(), QLocale::ShortFormat);
-
-    end = locale.toString(enddate.time(), QLocale::ShortFormat);
-
-    title->setText( QString("%1 - %2 : %3%4")
-                   .arg( start )
-                   .arg( end )
-                   .arg( epgItem->name() )
-                   .arg( epgItem->rating() ?
-                             qtr(" (%1+ rated)").arg( epgItem->rating() ) :
-                             QString() )
-                   );
-    description->setText( epgItem->description() );
-    const QList<QPair<QString, QString>> items = epgItem->descriptionItems();
-    QList<QPair<QString, QString>>::const_iterator it;
-    for( it=items.begin(); it != items.end(); ++it )
-    {
-        description->append(QString("\n<b>%1:</b> %2")
-                              .arg((*it).first)
-                              .arg((*it).second));
-    }
-    description->verticalScrollBar()->setValue(0);
+    description->setPlaceholderText(item ? qtr("No description is available.") : qtr("Select a program to see its details."));
+    // Keep the reading position when an unchanged broadcast update arrives.
+    if (selectionChanged || description->toPlainText() != details) description->setPlainText(details);
 }
 
 void EpgDialog::updateInfos()
 {
-    input_item_t *media = NULL;
+    input_item_t *media;
     {
-        vlc_player_locker lock{ p_intf->p_player };
-        media = vlc_player_HoldCurrentMedia( p_intf->p_player ); /* w/hold */
+        vlc_player_locker lock{p_intf->p_player};
+        media = vlc_player_HoldCurrentMedia(p_intf->p_player);
     }
-
-    if( media )
+    if (media)
     {
-        epg->updateEPG( media );
-        input_item_Release( media );
+        epg->updateEPG(media);
+        input_item_Release(media);
     }
-    else
-        epg->reset();
+    else epg->reset();
 }

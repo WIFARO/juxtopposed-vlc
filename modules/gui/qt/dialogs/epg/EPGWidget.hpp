@@ -28,8 +28,10 @@
 #include <vlc_input_item.h>
 
 #include <QWidget>
+#include "util/shared_input_item.hpp"
 
 class QStackedWidget;
+class QLabel;
 
 class EPGView;
 class EPGItem;
@@ -42,6 +44,8 @@ class EPGWidget : public QWidget
 public:
     explicit EPGWidget( QWidget* parent = 0 );
     void reset();
+    bool hasValidData() const;
+    EPGItem *selectedItem() const;
     enum
     {
         EPGVIEW_WIDGET = 0,
@@ -52,8 +56,17 @@ public slots:
     void setZoom( int level );
     void updateEPG( input_item_t * );
     void activateProgram( int );
+    void goToNow();
+    void setAccent(const QColor &);
+    void activateSelectedProgram();
+
+protected:
+    void changeEvent(QEvent *) override;
 
 private:
+    int zoomLevel = 2;
+    SharedInputItem currentInput;
+    QLabel *emptyMessage;
     EPGRuler* m_rulerWidget;
     EPGView* m_epgView;
     EPGChannels *m_channelsWidget;
@@ -65,6 +78,7 @@ private:
 signals:
     void itemSelectionChanged( EPGItem * );
     void programActivated( int );
+    void dataChanged();
 };
 
 #endif // EPGWIDGET_H
