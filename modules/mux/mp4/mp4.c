@@ -226,6 +226,8 @@ static void box_send(sout_mux_t *p_mux,  bo_t *box);
 static block_t *ConvertSUBT(block_t *);
 static bool CreateCurrentEdit(mp4_stream_t *, vlc_tick_t, bool);
 static int MuxStream(sout_mux_t *p_mux, sout_input_t *p_input, mp4_stream_t *p_stream, block_t *p_data);
+static int BlockConvert(mp4_stream_t *, block_t **);
+static void LengthLocalFixup(sout_mux_t *, const mp4_stream_t *, block_t *);
 
 static int stream_cmp(const void *a, const void *b, void *priv)
 {
@@ -581,7 +583,7 @@ static void DelStream(sout_mux_t *p_mux, sout_input_t *p_input)
         p_data->p_next = NULL;
         if (fragmented)
             MuxFragBlock(p_mux, p_stream, p_data);
-        else
+        else if (BlockConvert(p_stream, &p_data) == VLC_SUCCESS && p_data != NULL)
             MuxStream(p_mux, p_input, p_stream, p_data);
         p_data = p_next;
     }
@@ -769,6 +771,8 @@ static int MuxStream(sout_mux_t *p_mux, sout_input_t *p_input, mp4_stream_t *p_s
                     p_data->i_length = i_diff;
             }
         }
+        else if (p_data->i_length <= 0)
+            LengthLocalFixup(p_mux, p_stream, p_data);
         if (p_data->i_length <= 0) {
             msg_Warn(p_mux, "i_length <= 0");
             p_stream->i_length_neg += p_data->i_length - 1;

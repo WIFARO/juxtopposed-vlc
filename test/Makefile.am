@@ -140,6 +140,7 @@ check_PROGRAMS = \
 	test_modules_stream_out_transcode \
 	test_modules_stream_out_audio_tail \
 	test_modules_mux_webvtt \
+	test_modules_mux_mp4_drain \
 	test_modules_stream_out_hls_subtitles_segmenter \
 	$(NULL)
 
@@ -929,3 +930,6 @@ endif
 
 test_modules_audio_filter_gain_SOURCES = modules/audio_filter/gain.c
 test_modules_audio_filter_gain_LDADD = $(LIBVLCCORE) $(LIBVLC)
+
+test_modules_mux_mp4_drain_SOURCES = modules/mux/mp4_drain.c
+test_modules_mux_mp4_drain_LDADD = $(LIBVLCCORE) $(LIBVLC)
