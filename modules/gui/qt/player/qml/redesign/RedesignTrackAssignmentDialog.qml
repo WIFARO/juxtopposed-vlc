@@ -39,8 +39,14 @@ C.Dialog {
     property bool providerHasConsumerKey: false
     property bool providerConfigured: false
     property bool searching: false
+    property string searchProgressText: ""
     property int searchRequestId: 0
     property string searchTitle: ""
+    property bool manualSearch: false
+    property var searchDetails: ({})
+    property var searchIdentities: ({})
+    property var parseSearchName: null
+    property var rankOnlineSources: null
     property string searchLanguage: ""
     property var preferredSearchLanguages: []
     property bool manualSearchLanguage: false
@@ -142,6 +148,51 @@ C.Dialog {
     function parentFolder(url) { return String(url).startsWith("file:") ? String(url).substring(0, String(url).lastIndexOf("/") + 1) : "" }
     function same(a, b) { return [...new Set(a || [])].sort().join("\n") === [...new Set(b || [])].sort().join("\n") }
     function tracks(url) { return drafts[url] ? drafts[url].tracks : [] }
+    function identityQuery(identity) {
+        if (!identity || !identity.title) return ""
+        let query = identity.title
+        if (identity.year > 0) query += " (" + identity.year + ")"
+        if (identity.season >= 0) {
+            query += " S" + String(identity.season).padStart(2, "0")
+            for (const episode of identity.episodes || []) query += "E" + String(episode).padStart(2, "0")
+        } else if (identity.absoluteEpisode) query += " - " + identity.absoluteEpisode
+        else if (identity.airDate) query += " " + identity.airDate
+        return query
+    }
+    function searchTargets() {
+        return fileMode ? rows.filter(row => row.url === anchorFile) : rows
+    }
+    function matchRows() {
+        return searchTargets().map(row => Object.assign({}, row,
+            searchIdentities[row.url] ? {identity:searchIdentities[row.url]} : {}))
+    }
+    function editSearchDetails() {
+        const row = rows.find(row => row.url === anchorFile)
+        const identity = manualSearch && parseSearchName ? Object.assign({}, parseSearchName(searchTitle), searchDetails)
+            : row?.identity || {title:searchTitle}
+        detailTitle.text = identity.title || ""
+        detailYear.text = identity.year > 0 ? String(identity.year) : ""
+        detailSeason.text = identity.season >= 0 ? String(identity.season) : ""
+        detailEpisodes.text = (identity.episodes || []).join(", ")
+        detailAbsolute.text = identity.absoluteEpisode || ""
+        detailAirDate.text = identity.airDate || ""
+        detailType.currentIndex = identity.type === "movie" ? 1 : identity.type === "episode" ? 2 : 0
+        searchEditor.open()
+    }
+    function resetSearchDetails() {
+        manualSearch = false; searchDetails = ({}); searchIdentities = ({})
+        const row = rows.find(row => row.url === anchorFile)
+        searchTitle = row?.identity ? identityQuery(row.identity) : fileName(anchorFile).replace(/\.[^.]+$/, "").replace(/[._]/g, " ")
+        requestSearch()
+    }
+    function pickerSources() {
+        if (!onlineMode || !rankOnlineSources) return visibleSources
+        const row = matchRows().find(row => row.url === picker.targetUrl)
+        return row?.identity ? rankOnlineSources(row.identity, visibleSources, picker.targetUrl, searchLanguage) : visibleSources
+    }
+    function sourceDescription(source) {
+        return [source.matchReason, source.language, source.forced ? qsTr("Forced") : "", source.hearingImpaired ? qsTr("SDH") : ""].filter(Boolean).join(" · ")
+    }
     function refreshSearchLanguage() {
         let language = searchLanguage
         if (!manualSearchLanguage)
@@ -154,7 +205,7 @@ C.Dialog {
     function begin(target, subtitleMode) {
         if (visible || saving) return false
         context = target; subtitles = subtitleMode
-        sourceIndex = 0; onlineSources = []; linkSources = []; linkText = ""; sourceMappings = ({}); sourceKinds = ({}); searchTitle = ""; manualSearchLanguage = false; searching = false; cancelableSave = false
+        sourceIndex = 0; onlineSources = []; linkSources = []; linkText = ""; sourceMappings = ({}); sourceKinds = ({}); searchTitle = ""; manualSearch = false; searchDetails = ({}); searchIdentities = ({}); manualSearchLanguage = false; searching = false; cancelableSave = false
         refreshSearchLanguage()
         rows = []; sources = []; drafts = ({}); selectedRows = ({}); errorMessage = ""
         sourceFolderCategory = 0
@@ -177,6 +228,7 @@ C.Dialog {
         target.runtimeUrl = context.runtimeUrl
         target.runtimeTracks = context.runtimeTracks
         target.runtimeCategory = context.runtimeCategory
+        target.runtimeMetadata = context.runtimeMetadata
         target.libraryCategory = context.libraryCategory
         rowsRequested(target, subtitles, requestId)
     }
@@ -204,7 +256,10 @@ C.Dialog {
         if (!anchorFile && rows.length) anchorFile = rows[0].url
         if (!targetFolder) targetFolder = parentFolder(anchorFile)
         if (!sourceFolder && targetFolder) sourceFolder = targetFolder
-        if (!searchTitle && anchorFile) searchTitle = fileName(anchorFile).replace(/\.[^.]+$/, "").replace(/[._]/g, " ")
+        if (!searchTitle && anchorFile) {
+            const anchor = rows.find(row => row.url === anchorFile)
+            searchTitle = anchor?.identity ? identityQuery(anchor.identity) : fileName(anchorFile).replace(/\.[^.]+$/, "").replace(/[._]/g, " ")
+        }
         if (onlineMode) requestSearch()
         else if (linkMode) performMatching()
         else if (sourceFolder) requestSources()
@@ -225,7 +280,7 @@ C.Dialog {
     }
     function performMatching(includeSaved = false) {
         cancelMatching()
-        if (!fileMode && !loading && !loadingSources) {
+        if ((!fileMode || onlineMode) && !loading && !loadingSources) {
             matching = true
             matchRequested(rows.map(row => row.url), activeSources.map(source => source.url), includeSaved, matchRequestId)
         }
@@ -266,6 +321,8 @@ C.Dialog {
         if (!visible || request !== searchRequestId || !onlineMode) return
         searching = false
         if (!result.success) { onlineSources = []; errorMessage = result.error || qsTr("VLC cannot search for subtitles. Try again."); return }
+        searchIdentities = result.identities || ({})
+        errorMessage = result.warning || ""
         onlineSources = (result.sources || []).map(item => Object.assign({}, item, {url: sourceMappings[item.url] || item.url})); performMatching(true)
     }
     function resolveSources(mapping) {
@@ -375,7 +432,7 @@ C.Dialog {
         else errorMessage = (result.error || qsTr("VLC cannot save these tracks. Try again."))
             + (completed.length ? "\n" + qsTr("VLC kept the changes that it saved. Try Save again for the other files.") : "")
     }
-    onClosed: { ++searchRequestId; searching = false; searchDebounce.stop(); searchCanceled(); providerSetup.close(); linkText = ""; linkSources = []; onlineSources = []; sourceMappings = ({}); sourceKinds = ({}); pendingFolderRule = ({}); removeFolderRule = false; folderRuleBaseline = ""; folderRuleLoaded = false; folderRuleTouched = false; saving = false; cancelableSave = false; ++dropRequestId; loadingDrop = false; cancelMatching(); ++requestId; ++sourceRequestId; picker.close(); rows = []; sources = []; drafts = ({}); selectedRows = ({}) }
+    onClosed: { ++searchRequestId; searching = false; searchDebounce.stop(); searchCanceled(); providerSetup.close(); searchEditor.close(); manualSearch = false; searchDetails = ({}); searchIdentities = ({}); linkText = ""; linkSources = []; onlineSources = []; sourceMappings = ({}); sourceKinds = ({}); pendingFolderRule = ({}); removeFolderRule = false; folderRuleBaseline = ""; folderRuleLoaded = false; folderRuleTouched = false; saving = false; cancelableSave = false; ++dropRequestId; loadingDrop = false; cancelMatching(); ++requestId; ++sourceRequestId; picker.close(); rows = []; sources = []; drafts = ({}); selectedRows = ({}) }
     Timer { id: searchDebounce; interval: 600; onTriggered: root.requestSearch() }
     Shortcut { sequence: "Ctrl+O"; enabled: root.visible && !root.saving; onActivated: { root.selectSource(0); root.filesRequested("") } }
     Shortcut { sequences: ["Ctrl+Return", "Ctrl+Enter"]; enabled: root.visible && !root.saving; onActivated: root.submit() }
@@ -404,6 +461,15 @@ C.Dialog {
         Text {
             x: root.theme.dp(19); y: (root.theme.dp(50) - height) / 2 + root.theme.dp(0.5)
             text: root.title; color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
+        }
+        RedesignButton {
+            objectName: "trackAssignmentDetails"
+            visible: root.onlineMode
+            anchors.right: parent.right; anchors.rightMargin: root.theme.dp(52); y: root.theme.dp(7)
+            implicitWidth: root.theme.dp(130); implicitHeight: root.theme.dp(36)
+            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+            caption: qsTr("Search details"); text: caption; enabled: !root.saving && !root.loading
+            onClicked: root.editSearchDetails()
         }
         RedesignButton {
             objectName: "trackAssignmentClose"
@@ -467,7 +533,7 @@ C.Dialog {
                     iconName: "search"; iconSize: root.theme.dp(24); text: qsTr("Search subtitles")
                     onClicked: root.requestSearch()
                 }
-                onTextEdited: { root.searchTitle = text; searchDebounce.restart() }
+                onTextEdited: { root.searchTitle = text; root.manualSearch = true; root.searchDetails = ({}); searchDebounce.restart() }
                 onAccepted: root.requestSearch()
             }
             HeaderComboBox {
@@ -592,6 +658,15 @@ C.Dialog {
                             Layout.minimumWidth: 0; Layout.topMargin: root.fileMode ? 0 : root.theme.dp(4)
                             text: entry.modelData.name; textFormat: Text.PlainText; font.pixelSize: root.theme.dp(14); color: root.theme.playerHeading; elide: Text.ElideMiddle
                         }
+                        Text {
+                            objectName: "trackAssignmentMatchReason_" + entry.index
+                            visible: root.onlineMode && root.fileMode && !!entry.modelData.matchReason
+                            Layout.preferredWidth: Math.min(root.theme.dp(320), root.width * 0.36)
+                            Layout.minimumWidth: 0
+                            text: root.sourceDescription(entry.modelData); textFormat: Text.PlainText; elide: Text.ElideRight
+                            color: root.theme.playerLabel; font.pixelSize: root.theme.dp(12)
+                            Accessible.name: text
+                        }
                         Item {
                             objectName: "trackAssignmentConnector_" + entry.index
                             visible: !root.fileMode
@@ -633,7 +708,7 @@ C.Dialog {
         Text {
             anchors.centerIn: parent; width: parent.width - root.theme.dp(40); horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
             visible: !(root.onlineMode && !root.providerConfigured) && (root.loading || root.loadingSources || root.loadingDrop || root.matching || root.searching || (!list.count && !root.errorMessage))
-            text: root.searching ? qsTr("Searching subtitles…") : root.matching ? qsTr("Matching tracks…") : root.loading || root.loadingSources || root.loadingDrop ? qsTr("Loading files…") : root.onlineMode ? qsTr("No subtitles found. Try another title or language.") : root.linkMode ? qsTr("Paste a direct subtitle file link. Then select Add.") : root.fileMode ? qsTr("Select a folder or select track files from your computer.") : qsTr("There are no media files here.")
+            text: root.searching ? root.searchProgressText || qsTr("Searching subtitles…") : root.matching ? qsTr("Matching tracks…") : root.loading || root.loadingSources || root.loadingDrop ? qsTr("Loading files…") : root.onlineMode ? qsTr("No subtitles found. Try another title or language.") : root.linkMode ? qsTr("Paste a direct subtitle file link. Then select Add.") : root.fileMode ? qsTr("Select a folder or select track files from your computer.") : qsTr("There are no media files here.")
             color: root.theme.foreground; font.pixelSize: root.theme.dp(14)
         }        Column {
             anchors.centerIn: parent; width: Math.max(0, parent.width - root.theme.dp(60))
@@ -715,6 +790,84 @@ C.Dialog {
             onClicked: root.submit()
         }
     }
+    component DetailField: C.TextField {
+        Layout.fillWidth: true; implicitHeight: root.theme.dp(34)
+        color: root.theme.foreground; selectByMouse: true
+        font.pixelSize: root.theme.dp(14)
+        background: Rectangle { radius: root.theme.dp(6); color: root.theme.field; border.color: parent.visualFocus ? root.theme.accent : root.theme.border }
+    }
+    C.Dialog {
+        id: searchEditor
+        objectName: "trackAssignmentSearchDetails"
+        popupType: C.Popup.Item; parent: root.parent; modal: true; dim: true; focus: true
+        x: parent ? (parent.width - width) / 2 : 0; y: parent ? (parent.height - height) / 2 : 0
+        width: Math.min(root.theme.dp(560), root.width - root.theme.dp(32)); padding: root.theme.dp(20)
+        closePolicy: C.Popup.CloseOnEscape
+        C.Overlay.modal: Rectangle { color: "#80000000" }
+        background: RedesignDialogSurface { theme: root.theme; videoBackdropContent: root.nestedBackdropContent }
+        height: Math.min(implicitHeight, parent ? parent.height - root.theme.dp(32) : implicitHeight)
+        contentItem: C.ScrollView {
+            id: searchEditorScroll
+            implicitHeight: searchEditorFields.implicitHeight
+            contentWidth: availableWidth; clip: true
+            ColumnLayout {
+                id: searchEditorFields
+                width: searchEditorScroll.availableWidth
+                spacing: root.theme.dp(10)
+                Text { text: qsTr("Subtitle search details"); color: root.theme.foreground; font.pixelSize: root.theme.dp(18) }
+                Text { text: qsTr("Correct the detected movie or episode for this search."); color: root.theme.playerLabel; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                Text { text: qsTr("Title"); color: root.theme.foreground }
+                DetailField { id: detailTitle; objectName: "subtitleSearchDetailTitle"; Layout.fillWidth: true; Accessible.name: qsTr("Title"); maximumLength: 512 }
+                HeaderComboBox { id: detailType; objectName: "subtitleSearchDetailType"; Layout.fillWidth: true; model: [qsTr("Automatic"), qsTr("Movie"), qsTr("Episode")]; Accessible.name: qsTr("Media type")
+                    onActivated: index => { if (index === 1) { detailSeason.text = ""; detailEpisodes.text = ""; detailAbsolute.text = ""; detailAirDate.text = "" } }
+                }
+                Text { text: detailType.currentIndex === 2 ? qsTr("Series start year (optional)") : qsTr("Release year (optional)"); color: root.theme.foreground }
+                DetailField { id: detailYear; objectName: "subtitleSearchDetailYear"; Layout.fillWidth: true; Accessible.name: qsTr("Year"); validator: IntValidator { bottom: 1880; top: 2099 } }
+                Text { text: qsTr("Season (optional)"); color: root.theme.foreground }
+                DetailField { id: detailSeason; objectName: "subtitleSearchDetailSeason"; Layout.fillWidth: true; Accessible.name: qsTr("Season"); validator: IntValidator { bottom: 0; top: 999 } }
+                Text { text: qsTr("Episodes, separated by commas (optional)"); color: root.theme.foreground }
+                DetailField { id: detailEpisodes; objectName: "subtitleSearchDetailEpisodes"; Layout.fillWidth: true; Accessible.name: qsTr("Episodes"); maximumLength: 512; validator: RegularExpressionValidator { regularExpression: /\s*(?:\d{1,4}(?:\s*,\s*\d{1,4})*)?\s*/ } }
+                Text { text: qsTr("Absolute episode (optional)"); color: root.theme.foreground }
+                DetailField { id: detailAbsolute; objectName: "subtitleSearchDetailAbsolute"; Layout.fillWidth: true; Accessible.name: qsTr("Absolute episode"); validator: RegularExpressionValidator { regularExpression: /(?:\d{1,4}(?:\.\d{1,2})?)?/ } }
+                Text { text: qsTr("Air date, YYYY-MM-DD (optional)"); color: root.theme.foreground }
+                DetailField { id: detailAirDate; objectName: "subtitleSearchDetailAirDate"; Layout.fillWidth: true; Accessible.name: qsTr("Air date"); validator: RegularExpressionValidator { regularExpression: /(?:\d{4}-\d{2}-\d{2})?/ } }
+            }
+        }
+        footer: Item {
+            implicitHeight: root.theme.dp(64)
+            RowLayout {
+                anchors.fill: parent; anchors.margins: root.theme.dp(20); anchors.topMargin: root.theme.dp(10)
+                RedesignButton {
+                    objectName: "subtitleSearchDetailReset"
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    caption: qsTr("Use detected details"); text: caption
+                    onClicked: { searchEditor.close(); root.resetSearchDetails() }
+                }
+                Item { Layout.fillWidth: true }
+                RedesignButton {
+                    objectName: "subtitleSearchDetailCancel"
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    caption: qsTr("Cancel"); text: caption; onClicked: searchEditor.close()
+                }
+                RedesignButton {
+                    objectName: "subtitleSearchDetailApply"
+                    scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    caption: qsTr("Search"); text: caption; primaryAction: true
+                    enabled: detailTitle.text.trim().length > 0 && (!detailYear.text.trim() || detailYear.acceptableInput) && (!detailSeason.text.trim() || detailSeason.acceptableInput) && detailEpisodes.acceptableInput && detailAbsolute.acceptableInput && detailAirDate.acceptableInput
+                    onClicked: {
+                        root.manualSearch = true
+                        root.searchDetails = {year:detailYear.text.trim() ? Number(detailYear.text) : -1,
+                            season:detailSeason.text.trim() ? Number(detailSeason.text) : -1,
+                            episodes:detailEpisodes.text.trim() ? detailEpisodes.text.split(",").map(value => Number(value.trim())) : [],
+                            absoluteEpisode:detailAbsolute.text, airDate:detailAirDate.text,
+                            type:detailType.currentIndex === 1 ? "movie" : detailType.currentIndex === 2 ? "episode" : "unknown"}
+                        root.searchTitle = root.identityQuery(Object.assign({title:detailTitle.text.trim()}, root.searchDetails))
+                        searchEditor.close(); root.requestSearch()
+                    }
+                }
+            }
+        }
+    }
     RedesignSubtitleProviderSetup {
         id: providerSetup
         objectName: "trackAssignmentProviderSetup"
@@ -772,7 +925,7 @@ C.Dialog {
                 objectName: "trackAssignmentPickerList"
                 Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
                 clip: true; spacing: root.theme.dp(4)
-                model: root.visibleSources
+                model: root.pickerSources()
                 activeFocusOnTab: true
                 DropArea {
                     objectName: "trackAssignmentPickerDropArea"
@@ -817,6 +970,12 @@ C.Dialog {
                             Layout.fillWidth: true; Layout.minimumWidth: 0
                             text: pickerEntry.text; textFormat: Text.PlainText; elide: Text.ElideMiddle
                             color: root.theme.playerHeading; font.pixelSize: root.theme.dp(14)
+                        }
+                        Text {
+                            visible: root.onlineMode && !!pickerEntry.modelData.matchReason
+                            Layout.preferredWidth: Math.min(root.theme.dp(240), picker.width * 0.4); Layout.minimumWidth: 0
+                            text: root.sourceDescription(pickerEntry.modelData); textFormat: Text.PlainText; elide: Text.ElideRight
+                            color: root.theme.playerLabel; font.pixelSize: root.theme.dp(12)
                         }
                         RedesignIcon {
                             Layout.preferredWidth: root.theme.dp(20); Layout.preferredHeight: root.theme.dp(20)

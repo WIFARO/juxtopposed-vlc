@@ -45,6 +45,8 @@
 #include <atomic>
 #include <QSignalSpy>
 #include "../util/playlist_cover_store.hpp"
+#include "../util/media_identity_vlc.hpp"
+#include "../util/shared_input_item.hpp"
 
 struct vlc_medialibrary_t;
 
@@ -909,6 +911,39 @@ private slots:
         const QUrl film("file:///movies/The_Wand.mkv"), captions("file:///movies/Subtitles/The.Wand/French.forced.srt");
         QCOMPARE(m_medialib->matchTrackAssignments({film}, {captions}).size(), 1);
         QVERIFY(m_medialib->matchTrackAssignments({file, QUrl("file:///other/The_Wand_S01E04.mkv")}, {track}).isEmpty());
+    }
+
+    void testNativeMediaIdentityEvidence()
+    {
+        SharedInputItem item(input_item_New("file:///Show.S01E03.mkv", "Show.S01E03.mkv"), false);
+        QVERIFY(item);
+        input_item_SetMeta(item.get(), vlc_meta_ShowName, "Show");
+        input_item_SetMeta(item.get(), vlc_meta_Season, "1");
+        input_item_SetMeta(item.get(), vlc_meta_Episode, "3");
+        input_item_SetMeta(item.get(), vlc_meta_Date, "2024-03-15");
+        const auto episode = MediaIdentity::inputMetadata(item.get());
+        QCOMPARE(episode.value("showName").toString(), "Show");
+        QCOMPARE(episode.value("episode").toString(), "3");
+        QVERIFY(!episode.contains("year")); // An episode air year is not a series start year.
+        input_item_SetMeta(item.get(), vlc_meta_ShowName, nullptr);
+        input_item_SetMeta(item.get(), vlc_meta_Episode, nullptr);
+        QCOMPARE(MediaIdentity::inputMetadata(item.get()).value("year").toInt(), 2024);
+    }
+
+    void testSubtitleMatchingUsesProviderFacts()
+    {
+        QQmlEngine engine;
+        QQmlEngine::setObjectOwnership(m_medialib.get(), QQmlEngine::CppOwnership);
+        QQmlEngine::setContextForObject(m_medialib.get(), engine.rootContext());
+        engine.newQObject(m_medialib.get());
+        engine.globalObject().setProperty("answer", QJSValue(QJSValue::NullValue));
+        const QString url = "file:///Show.S01E03.mkv", subtitle = "opensubtitles:/42/unhelpful.srt";
+        const QVariantList media{QVariantMap{{"url", url}}};
+        const QVariantList sources{QVariantMap{{"url", subtitle}, {"name", "unhelpful.srt"}, {"language", "en"},
+            {"feature", QVariantMap{{"feature_type", "Episode"}, {"parent_title", "Show"}, {"season_number", 1}, {"episode_number", 3}}}}};
+        m_medialib->requestSubtitleMatches(media, sources, "en", engine.evaluate("(function(value) { answer = value; })"));
+        QVERIFY(QTest::qWaitFor([&] { return !engine.globalObject().property("answer").isNull(); }));
+        QCOMPARE(engine.globalObject().property("answer").toVariant().toMap().value(url).toStringList(), QStringList{subtitle});
     }
 
     void testTrackMatchingAsync()

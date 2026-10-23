@@ -28,6 +28,10 @@ RedesignTrackAssignmentDialog {
     providerHasCustomKey: SubtitleSources.hasCustomKey
     providerHasConsumerKey: SubtitleSources.hasConsumerKey
     onlineLanguages: SubtitleSources.languages
+    searchProgressText: SubtitleSources.searchTotal > 1
+        ? qsTr("Searching subtitles for file %1 of %2…").arg(Math.min(SubtitleSources.searchCompleted + 1, SubtitleSources.searchTotal)).arg(SubtitleSources.searchTotal) : ""
+    parseSearchName: name => SubtitleSources.parseMediaName(name)
+    rankOnlineSources: (identity, sources, url, language) => SubtitleSources.rankSources(identity, sources, url, language)
     folderRuleDefinition: draftFolderRule()
     function ruleRows(target) {
         return (target.urls || []).map(url => root.drafts[url]).filter(row => row)
@@ -76,7 +80,8 @@ RedesignTrackAssignmentDialog {
     onClosed: { pendingSaveRule = ({}); SubtitleSources.resetSession() }
     onSearchRequested: (query, language, request) => {
         pendingSearchRequest = request
-        pendingSearch = SubtitleSources.search(query, language)
+        pendingSearch = SubtitleSources.searchMedia({query:query, manual:root.manualSearch,
+            details:root.searchDetails, anchor:root.anchorFile, targets:root.searchTargets()}, language)
     }
     onSearchCanceled: SubtitleSources.cancelSearch()
     onLanguagesRequested: SubtitleSources.fetchLanguages()
@@ -86,7 +91,11 @@ RedesignTrackAssignmentDialog {
     onLinksRequested: urls => root.loadLinkedSources(SubtitleSources.addLinks(urls))
     onRowsRequested: (target, subtitles, request) => MediaLib.trackAssignmentRows(target, subtitles, result => root.loadRows(request, result))
     onSourcesRequested: (folder, subtitles, request) => MediaLib.trackAssignmentSources(folder, subtitles, result => root.loadSources(request, result))
-    onMatchRequested: (media, tracks, includeSaved, request) => MediaLib.requestTrackMatches(media, tracks, matches => root.loadMatches(request, matches, includeSaved))
+    onMatchRequested: (media, tracks, includeSaved, request) => {
+        const finish = matches => root.loadMatches(request, matches, includeSaved)
+        if (root.onlineMode) MediaLib.requestSubtitleMatches(root.matchRows(), root.onlineSources, root.searchLanguage, finish)
+        else MediaLib.requestTrackMatches(media, tracks, finish)
+    }
     onMatchingCanceled: MediaLib.cancelTrackMatching()
     onDroppedSourcesRequested: (urls, subtitles, request, target) => {
         const remote = subtitles ? urls.filter(url => /^https?:/i.test(String(url))) : []

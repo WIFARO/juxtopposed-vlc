@@ -517,6 +517,77 @@ TestCase {
         dialog.loadSearch(dialog.searchRequestId,{success:true,sources:[{url:remote,name:"Late"}]})
         compare(dialog.onlineSources.length,0)
     }
+    function test_structuredSearchDetailsCanBeCorrectedAndReset() {
+        const identity={title:"Show",type:"episode",year:2005,season:1,episodes:[1]}
+        dialog.searchTitle="";load([Object.assign({},rows()[0],{identity:identity})])
+        compare(dialog.searchTitle,"Show (2005) S01E01")
+        dialog.providerConfigured=true;dialog.selectSource(1)
+        compare(dialog.searchTargets().length,1);verify(!dialog.manualSearch)
+        mouseClick(findChild(dialog,"trackAssignmentDetails"))
+        const editor=findChild(dialog,"trackAssignmentSearchDetails")
+        tryCompare(editor,"opened",true)
+        const title=findChild(dialog,"subtitleSearchDetailTitle"),year=findChild(dialog,"subtitleSearchDetailYear")
+        const season=findChild(dialog,"subtitleSearchDetailSeason"),episodes=findChild(dialog,"subtitleSearchDetailEpisodes")
+        compare(title.text,"Show");compare(year.text,"2005");compare(season.text,"1");compare(episodes.text,"1")
+        title.text="Corrected Show";year.text="2020";season.text="2";episodes.text="3, 4"
+        mouseClick(findChild(dialog,"subtitleSearchDetailApply"));tryCompare(editor,"visible",false)
+        verify(dialog.manualSearch);compare(dialog.searchTitle,"Corrected Show (2020) S02E03E04")
+        compare(dialog.searchDetails.episodes.length,2);compare(dialog.searchDetails.episodes[1],4)
+        dialog.editSearchDetails();tryCompare(editor,"opened",true)
+        mouseClick(findChild(dialog,"subtitleSearchDetailReset"));tryCompare(editor,"visible",false)
+        verify(!dialog.manualSearch);compare(dialog.searchTitle,"Show (2005) S01E01")
+        compare(Object.keys(dialog.searchDetails).length,0)
+    }
+    function test_searchDetailsAllowUnknownYearAndEpisode() {
+        dialog.rows=[Object.assign({},rows()[0],{identity:{title:"A Movie",type:"unknown",year:-1,season:-1,episodes:[]}})]
+        dialog.providerConfigured=true;dialog.selectSource(1);dialog.editSearchDetails()
+        const editor=findChild(dialog,"trackAssignmentSearchDetails")
+        tryCompare(editor,"opened",true)
+        const apply=findChild(dialog,"subtitleSearchDetailApply")
+        verify(apply.enabled);mouseClick(apply);tryCompare(editor,"visible",false)
+        compare(dialog.searchTitle,"A Movie");compare(dialog.searchDetails.year,-1);compare(dialog.searchDetails.episodes.length,0)
+    }
+    function test_searchDetailsPreserveAbsoluteNumbersAndAirDates_data() {
+        return [{tag:"anime",identity:{title:"Anime",type:"episode",absoluteEpisode:"452",episodes:[]}},
+            {tag:"daily",identity:{title:"Daily Show",type:"episode",airDate:"2024-03-15",episodes:[]}}]
+    }
+    function test_searchDetailsPreserveAbsoluteNumbersAndAirDates(data) {
+        dialog.rows=[Object.assign({},rows()[0],{identity:data.identity})]
+        dialog.providerConfigured=true;dialog.selectSource(1);dialog.editSearchDetails()
+        const editor=findChild(dialog,"trackAssignmentSearchDetails");tryCompare(editor,"opened",true)
+        mouseClick(findChild(dialog,"subtitleSearchDetailApply"));tryCompare(editor,"visible",false)
+        compare(dialog.searchDetails.absoluteEpisode,data.identity.absoluteEpisode || "")
+        compare(dialog.searchDetails.airDate,data.identity.airDate || "")
+    }
+    function test_searchDetailsActionsStayVisibleInSmallScaledWindow() {
+        width=800;height=600;dialog.scaleFactor=1.5
+        dialog.providerConfigured=true;dialog.selectSource(1);dialog.editSearchDetails()
+        const editor=findChild(dialog,"trackAssignmentSearchDetails");tryCompare(editor,"opened",true)
+        const apply=findChild(dialog,"subtitleSearchDetailApply")
+        tryVerify(()=>apply.mapToItem(testCase,0,apply.height).y<=height)
+        verify(apply.mapToItem(testCase,0,0).y>=0)
+        verify(apply.mapToItem(testCase,apply.width,0).x<=width)
+    }
+    function test_onlineBatchKeepsEachIdentityAndWarnings() {
+        dialog.selectScope(1);load(rows());compare(dialog.searchTargets().length,2)
+        dialog.providerConfigured=true;dialog.selectSource(1)
+        const corrected={title:"Show",type:"episode",season:1,episodes:[1]}
+        dialog.loadSearch(dialog.searchRequestId,{success:true,sources:[],identities:{[first]:corrected},warning:"Some results could not be loaded"})
+        compare(dialog.matchRows()[0].identity.title,"Show")
+        compare(dialog.errorMessage,"Some results could not be loaded")
+        dialog.setTracks(first,[english]);dialog.applyMatches({[first]:["opensubtitles:/1"]},true)
+        compare(dialog.tracks(first)[0],english)
+    }
+    function test_onlineMatchReasonIsVisibleAndLiteral() {
+        dialog.providerConfigured=true;dialog.selectSource(1)
+        dialog.loadSearch(dialog.searchRequestId,{success:true,sources:[{url:"opensubtitles:/42",name:"Subtitle",language:"en",matchReason:"<b>Exact file match</b>"}]})
+        const list=findChild(dialog,"trackAssignmentList")
+        tryVerify(()=>!!list.itemAtIndex(0))
+        const reason=findChild(list.itemAtIndex(0),"trackAssignmentMatchReason_0")
+        verify(reason!==null)
+        verify(reason.visible)
+        compare(reason.textFormat,Text.PlainText);verify(reason.text.includes("<b>Exact file match</b>"))
+    }
     function test_downloadResolutionPreservesDraftsForRetry() {
         const remote="opensubtitles:/42/Show_S01E01.en.srt",cached="file:///cache/42/Show_S01E01.en.srt"
         dialog.providerConfigured=true;dialog.selectSource(1)

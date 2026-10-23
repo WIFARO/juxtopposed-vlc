@@ -137,6 +137,19 @@ private slots:
         QCOMPARE(query.queryItemValue("query"),"other show"); QVERIFY(!query.hasQueryItem("parent_imdb_id"));
         QCOMPARE(query.queryItemValue("season_number"),"2"); QCOMPARE(query.queryItemValue("episode_number"),"5");
     }
+    void manualBatchCorrectionBelongsToTheAnchorFile() {
+        QTemporaryDir directory;Server server;
+        server.respond=[](const HttpRequest&,QTcpSocket* socket){Server::send(socket,results());};
+        SubtitleSourceService client(options(server));client.setStorageDirectory(directory.path());QVERIFY(client.setApiKey("unit-secret"));
+        QSignalSpy spy(&client,&SubtitleSourceService::searchFinished);
+        const QString first="https://example.com/Show.S01E01.mkv", anchor="https://example.com/Show.S01E04.mkv";
+        const QVariantList targets{QVariantMap{{"url",first}},QVariantMap{{"url",anchor}}};
+        client.searchMedia({{"targets",targets},{"anchor",anchor},{"manual",true},{"query","Corrected Show S02E05"}},"en");
+        const auto answer=result(spy);QVERIFY(answer.value("success").toBool());QCOMPARE(server.requests.size(),1);
+        const auto identities=answer.value("identities").toMap();QCOMPARE(identities.size(),1);
+        QVERIFY(identities.contains(anchor));QVERIFY(!identities.contains(first));
+        QCOMPARE(identities.value(anchor).toMap().value("title").toString(),"Corrected Show");
+    }
     void hashLookupIsScopedAndCanFallBack() {
         QTemporaryDir directory; QFile video(directory.filePath("Show.S01E04.mkv"));
         QVERIFY(video.open(QIODevice::WriteOnly)); QVERIFY(video.resize(131072)); video.close();

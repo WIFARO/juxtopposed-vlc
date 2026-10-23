@@ -22,6 +22,7 @@
 #include "util/shared_input_item.hpp"
 #include "util/playlist_cover_store.hpp"
 #include "util/track_matching.hpp"
+#include "util/subtitle_matching.hpp"
 #include "util/local_file_url.hpp"
 #include "../../../misc/medialibrary/track_rules.hpp"
 #include <QScopeGuard>
@@ -534,10 +535,42 @@ void MediaLib::trackAssignmentRows(const QVariantMap& target, bool subtitles, QJ
                     initial.append(trackStrings(target.value("runtimeTracks")));
                     initial.removeDuplicates();
                 }
+                QVariantMap metadata;
+                if (media) {
+                    metadata.insert("durationMs", qint64(media->i_duration));
+                    if (media->i_subtype == VLC_ML_MEDIA_SUBTYPE_MOVIE) {
+                        metadata.insert("type", "movie");
+                        if (media->i_year > 0) metadata.insert("year", media->i_year);
+                        metadata.insert("imdbId", qfu(media->movie.psz_imdb_id));
+                        // Filename-derived library titles carry no additional identity evidence.
+                        if (media->psz_title && qfu(media->psz_title) != url.fileName()
+                            && qfu(media->psz_title) != QFileInfo(url.fileName()).completeBaseName())
+                            metadata.insert("title", qfu(media->psz_title));
+                    } else if (media->i_subtype == VLC_ML_MEDIA_SUBTYPE_SHOW_EPISODE) {
+                        metadata.insert("type", "episode");
+                        metadata.insert("season", media->show_episode.i_season_number);
+                        metadata.insert("episode", media->show_episode.i_episode_nb);
+                        metadata.insert("tvdbId", qfu(media->show_episode.psz_tvdb_id));
+                    }
+                    QVariantMap release;
+                    QStringList languages;
+                    if (media->p_tracks) for (const auto& track : ml_range_iterate<vlc_ml_media_track_t>(media->p_tracks)) {
+                        if (track.i_type == VLC_ML_TRACK_TYPE_VIDEO) {
+                            metadata.insert("width", track.v.i_width); metadata.insert("height", track.v.i_height);
+                            if (track.v.i_fpsDen) release.insert("fps", QString::number(double(track.v.i_fpsNum) / track.v.i_fpsDen));
+                        } else if (track.i_type == VLC_ML_TRACK_TYPE_AUDIO && track.psz_language) languages.append(qfu(track.psz_language));
+                    }
+                    languages.removeDuplicates(); metadata.insert("audioLanguages", languages); metadata.insert("release", release);
+                }
+                if (url == target.value("runtimeUrl").toUrl()) {
+                    const auto runtime = target.value("runtimeMetadata").toMap();
+                    for (auto it = runtime.cbegin(); it != runtime.cend(); ++it) metadata.insert(it.key(), it.value());
+                }
+                const auto identity = MediaIdentity::toMap(MediaIdentity::identify(url, metadata));
                 rows.append(QVariantMap{{"url", url.toString(QUrl::FullyEncoded)}, {"name", name},
                     {"location", url.toDisplayString(QUrl::PreferLocalFile)},
                     {"explicitSelection", explicitSelection}, {"inheritedRule", inherited}, {"initialTracks", initial},
-                    {"baseline", baseline}});
+                    {"baseline", baseline}, {"metadata", metadata}, {"identity", identity}});
             }
             const auto category = target.value("libraryCategory").toInt();
             result.insert("folderCategory", category == 1 || category == 2 ? category : std::max(0, commonCategory));
@@ -634,6 +667,22 @@ void MediaLib::requestTrackMatches(const QList<QUrl>& media, const QList<QUrl>& 
             m_trackMatchCancelled.reset();
             if (auto engine = qjsEngine(this)) callback.call({engine->toScriptValue(result)});
         }, "redesign-track-matching");
+}
+
+void MediaLib::requestSubtitleMatches(const QVariantList& media, const QVariantList& sources, const QString& language, QJSValue callback)
+{
+    cancelTrackMatching();
+    if (!callback.isCallable()) return;
+    const auto cancelled = std::make_shared<std::atomic_bool>(false); m_trackMatchCancelled = cancelled;
+    m_trackMatchTask = runOnMLThread<QVariantMap>(this,
+        [media, sources, language, cancelled](vlc_medialibrary_t*, QVariantMap& result) {
+            result = SubtitleMatching::match(media, sources, language, cancelled.get());
+        },
+        [this, callback, cancelled](quint64, const QVariantMap& result) mutable {
+            if (cancelled->load(std::memory_order_relaxed)) return;
+            m_trackMatchTask = 0; m_trackMatchCancelled.reset();
+            if (auto engine = qjsEngine(this)) callback.call({engine->toScriptValue(result)});
+        }, "redesign-subtitle-matching");
 }
 
 void MediaLib::saveTrackAssignments(const QVariantList& rows, bool subtitles, QJSValue callback)

@@ -88,7 +88,7 @@ man1_MANS = \
 	   vlc.1 \
 	   vlc-wrapper.1
 
-EXTRA_DIST = \
+EXTRA_DIST = subtitle-identification.md \
 	$(CHANGELOGS) \
 	$(man1_MANS) \
 	$(LIBVLC_SAMPLES) \

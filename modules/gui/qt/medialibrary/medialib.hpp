@@ -79,6 +79,7 @@ public:
     Q_INVOKABLE void trackAssignmentSources(const QUrl& folder, bool subtitles, QJSValue callback);
     QVariantMap matchTrackAssignments(const QList<QUrl>& media, const QList<QUrl>& tracks) const;
     Q_INVOKABLE void requestTrackMatches(const QList<QUrl>& media, const QList<QUrl>& tracks, QJSValue callback);
+    Q_INVOKABLE void requestSubtitleMatches(const QVariantList& media, const QVariantList& sources, const QString& language, QJSValue callback);
     Q_INVOKABLE void cancelTrackMatching();
     Q_INVOKABLE void saveTrackAssignments(const QVariantList& rows, bool subtitles, QJSValue callback);
     Q_INVOKABLE QString trackFolderRuleDefinition(const QVariantList& rows, const QUrl& folder,

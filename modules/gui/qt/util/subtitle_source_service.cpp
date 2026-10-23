@@ -323,6 +323,14 @@ quint64 SubtitleSourceService::searchMedia(const QVariantMap& input, const QStri
     auto targets = input.value("targets").toList();
     if (targets.isEmpty()) targets.append(input);
     const bool manual = input.value("manual").toBool();
+    if (manual && !input.value("anchor").toUrl().isEmpty()) {
+        const auto anchor = input.value("anchor").toUrl();
+        const auto selected = std::find_if(targets.cbegin(), targets.cend(), [&anchor](const QVariant& value) {
+            return value.toMap().value("url").toUrl() == anchor;
+        });
+        // A correction belongs to the edited file, not whichever batch row sorts first.
+        targets = selected != targets.cend() ? QVariantList{*selected} : QVariantList{QVariantMap{{"url", anchor}}};
+    }
     QString error;
     if (!configured()) error = tr("OpenSubtitles is not set up. Add an API key to use this source.");
     else if (query.size() > 512 || (!language.isEmpty() && !code.match(language).hasMatch())) error = tr("Enter a title and select a subtitle language.");

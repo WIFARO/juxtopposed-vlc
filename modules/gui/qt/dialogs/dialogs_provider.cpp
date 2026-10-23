@@ -37,6 +37,7 @@
 #include "menus/menus.hpp"
 #include "util/qt_dirs.hpp"
 #include "util/local_file_url.hpp"
+#include "util/media_identity_vlc.hpp"
 #include "util/vlchotkeyconverter.hpp"
 #include "maininterface/mainctx.hpp"
 
@@ -1299,6 +1300,22 @@ void DialogsProvider::showTrackAssignments(const QVariantMap& target, bool subti
                 const auto url = vlc::qt::normalizeLocalFileUrl(QUrl(qfu(source)));
                 if (!seen.contains(url)) { seen.insert(url); tracks.append(url.toString(QUrl::FullyEncoded)); }
             }
+            auto metadata = MediaIdentity::inputMetadata(media);
+            QVariantMap release;
+            QStringList audioLanguages;
+            for (size_t i = 0; i < vlc_player_GetTrackCount(p_intf->p_player, VIDEO_ES); ++i) {
+                const auto& video = vlc_player_GetTrackAt(p_intf->p_player, VIDEO_ES, i)->fmt.video;
+                if (!video.i_visible_width || !video.i_visible_height) continue;
+                metadata.insert("width", video.i_visible_width); metadata.insert("height", video.i_visible_height);
+                if (video.i_frame_rate_base) release.insert("fps", QString::number(double(video.i_frame_rate) / video.i_frame_rate_base));
+                break;
+            }
+            for (size_t i = 0; i < vlc_player_GetTrackCount(p_intf->p_player, AUDIO_ES); ++i) {
+                const auto* language = vlc_player_GetTrackAt(p_intf->p_player, AUDIO_ES, i)->fmt.psz_language;
+                if (language && *language) audioLanguages.append(QString::fromUtf8(language));
+            }
+            audioLanguages.removeDuplicates(); metadata.insert("audioLanguages", audioLanguages);
+            metadata.insert("release", release); context.insert("runtimeMetadata", metadata);
             context.insert("runtimeTracks", tracks);
         }
     }
