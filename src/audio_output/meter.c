@@ -99,6 +99,13 @@ vlc_audio_meter_AddPlugin(struct vlc_audio_meter *meter, const char *chain,
     plugin->cfg = NULL;
     plugin->filter = NULL;
 
+    // A NULL chain registers a raw sample observer without a filter module.
+    if (chain == NULL && owner->cbs->on_samples != NULL) {
+        vlc_mutex_lock(&meter->lock);
+        vlc_list_append(&plugin->node, &meter->plugins);
+        vlc_mutex_unlock(&meter->lock);
+        return plugin;
+    }
     free(config_ChainCreate(&plugin->name, &plugin->cfg, chain));
     if (plugin->name == NULL)
         goto error;
@@ -169,7 +176,7 @@ vlc_audio_meter_Reset(struct vlc_audio_meter *meter, const audio_sample_format_t
         }
         plugin->last_date = VLC_TICK_INVALID;
 
-        if (meter->fmt != NULL)
+        if (meter->fmt != NULL && plugin->name != NULL)
         {
             plugin->filter = vlc_audio_meter_CreatePluginFilter(meter, plugin);
             if (plugin->filter == NULL)
@@ -220,5 +227,18 @@ vlc_audio_meter_Flush(struct vlc_audio_meter *meter)
             filter_Flush(filter);
     }
 
+    vlc_mutex_unlock(&meter->lock);
+}
+
+void
+vlc_audio_meter_ProcessSamples(struct vlc_audio_meter *meter, const block_t *block)
+{
+    vlc_mutex_lock(&meter->lock);
+    if (meter->fmt != NULL) {
+        vlc_audio_meter_plugin *plugin;
+        vlc_list_foreach(plugin, &meter->plugins, node)
+            if (plugin->owner.cbs->on_samples != NULL)
+                plugin->owner.cbs->on_samples(meter->fmt, block, plugin->owner.sys);
+    }
     vlc_mutex_unlock(&meter->lock);
 }

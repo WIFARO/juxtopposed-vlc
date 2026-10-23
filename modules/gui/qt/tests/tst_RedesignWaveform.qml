@@ -25,6 +25,13 @@ TestCase {
         seek.playerPosition = .25; seekSpy.clear(); finished.clear()
         wait(20)
     }
+    function test_partialWaveformKeepsUnknownSections() {
+        seek.waveformEnabled = true
+        seek.waveformPeaks = [-1, 0.5, -1, 0]
+        compare(seek.waveformBars, [-1, 0.5, -1, 0])
+        seek.waveformPeaks = []
+        seek.waveformEnabled = false
+    }
     function test_missingDataUsesTheNormalSeekbar() {
         verify(seek.waveformActive)
         seek.waveformPeaks = []

@@ -1047,6 +1047,9 @@ input_thread_Events(input_thread_t *input_thread,
             break;
         case INPUT_EVENT_RATE:
             input->rate = event->rate;
+            vlc_mutex_lock(&player->timer.lock);
+            player->timer.input_rate = input->rate;
+            vlc_mutex_unlock(&player->timer.lock);
             vlc_player_SignalAtoBLoop(player);
             vlc_player_SendEvent(player, on_rate_changed, input->rate);
             break;

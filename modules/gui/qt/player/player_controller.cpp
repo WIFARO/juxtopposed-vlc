@@ -47,6 +47,12 @@
 #include <QThreadPool>
 #include <QImage>
 #include <QBuffer>
+#include <QStandardPaths>
+#include <QSaveFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QCryptographicHash>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -1421,6 +1427,8 @@ PlayerController::PlayerController( qt_intf_t *_p_intf )
     connect(this, &PlayerController::hasVideoOutputChanged, this, updateSamples);
     connect(this, &PlayerController::playingStateChanged, this, updateSamples);
     connect(this, &PlayerController::bufferingChanged, this, updateSamples);
+    d->m_progressiveWaveformTimer.setInterval(500);
+    connect(&d->m_progressiveWaveformTimer, &QTimer::timeout, this, [d] { d->readProgressiveWaveform(); });
     d->m_audioWaveformWorkers.setMaxThreadCount(1);
     d->m_audioWaveformRefresh.setSingleShot(true);
     d->m_audioWaveformRefresh.setInterval(100);
@@ -1670,12 +1678,14 @@ void PlayerControllerPrivate::refreshAudioWaveform()
             duration = vlc_player_GetLength(m_player);
         }
     }
-    m_audioWaveformAutomatic = canScanAudioWaveform(url, duration);
+    m_audioWaveformAutomatic = canScanAudioWaveform(url, duration)
+        || (duration > 0 && (url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https")));
     resetAudioWaveform();
 }
 
 void PlayerControllerPrivate::resetAudioWaveform()
 {
+    stopProgressiveWaveform();
     ++m_audioWaveformGeneration;
     m_audioWaveformRefresh.stop();m_audioWaveformTimeout.stop();
     if (m_audioWaveformRequest) vlc_interrupt_kill(m_audioWaveformRequest->interrupt);
@@ -1714,6 +1724,11 @@ void PlayerControllerPrivate::readAudioWaveform()
         source.duration = vlc_player_GetLength(m_player);
     }
     const auto url = QUrl::fromEncoded(source.uri);
+    // Observe an on-demand HTTP stream without opening another connection.
+    if (source.duration > 0 && (url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https"))) {
+        startProgressiveWaveform(source, media.get(), selectedId.get());
+        return;
+    }
     // Include files on shares, but do not replay streams or capture devices.
     if (!canScanAudioWaveform(url, source.duration)) {
         m_audioWaveformState = QStringLiteral("unavailable");emit q_ptr->audioWaveformChanged();return;
@@ -1763,6 +1778,88 @@ void PlayerControllerPrivate::readAudioWaveform()
             emit q_ptr->audioWaveformChanged();
         });
     });
+}
+
+void PlayerControllerPrivate::startProgressiveWaveform(const AudioWaveformSource& source, input_item_t* media, vlc_es_id_t* track)
+{
+    m_progressiveWaveform = std::make_unique<ProgressiveAudioWaveform>(source.duration, source.bins);
+    const QByteArray key = source.uri + '|' + QByteArray::number(source.audioIndex) + '|' + QByteArray::number(source.duration);
+    const QDir directory(QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + QStringLiteral("/waveforms"));
+    m_progressiveWaveformFile = directory.filePath(QString::fromLatin1(QCryptographicHash::hash(key, QCryptographicHash::Sha256).toHex()) + QStringLiteral(".json"));
+    QFile cached(m_progressiveWaveformFile);
+    const QFileInfo info(cached);
+    if (info.size() <= 128 * 1024 && info.lastModified().secsTo(QDateTime::currentDateTime()) < 7 * 86400 && cached.open(QIODevice::ReadOnly)) {
+        const auto object = QJsonDocument::fromJson(cached.read(128 * 1024)).object();
+        if (object.value("version").toInt() == 1) {
+            QVector<float> peaks;
+            for (const auto value : object.value("peaks").toArray()) peaks.push_back(value.isDouble() ? value.toDouble() : std::numeric_limits<float>::quiet_NaN());
+            m_progressiveWaveform->restore(peaks);
+        }
+    }
+    static const union vlc_player_metadata_cbs callbacks = [] {
+        union vlc_player_metadata_cbs callbacks{};
+        callbacks.on_audio_samples = [](vlc_tick_t time, double rate, const audio_sample_format_t* format, const block_t* block, void* data) {
+            static_cast<ProgressiveAudioWaveform*>(data)->append(time, rate, *format, *block);
+        };
+        return callbacks;
+    }();
+    {
+        vlc_player_locker lock{m_player};
+        const auto* selected = vlc_player_GetTrack(m_player, track);
+        if (vlc_player_GetCurrentMedia(m_player) == media && selected && selected->selected)
+            m_waveformListener = vlc_player_AddMetadataListener(m_player, VLC_PLAYER_METADATA_AUDIO_SAMPLES, &callbacks, m_progressiveWaveform.get());
+    }
+    m_audioWaveformState = m_waveformListener ? QStringLiteral("partial") : QStringLiteral("unavailable");
+    readProgressiveWaveform();
+    if (m_waveformListener) m_progressiveWaveformTimer.start();
+}
+
+void PlayerControllerPrivate::readProgressiveWaveform()
+{
+    if (!m_progressiveWaveform) return;
+    QVariantList peaks;
+    for (float value : m_progressiveWaveform->snapshot()) peaks.push_back(value);
+    if (peaks != m_audioWaveformPeaks) {
+        m_audioWaveformPeaks = std::move(peaks);
+        emit q_ptr->audioWaveformChanged();
+    }
+    if (vlc_tick_now() - m_waveformLastSaved >= VLC_TICK_FROM_SEC(10)) saveProgressiveWaveform();
+}
+
+void PlayerControllerPrivate::saveProgressiveWaveform()
+{
+    if (!m_progressiveWaveform || m_progressiveWaveformFile.isEmpty()) return;
+    m_waveformLastSaved = vlc_tick_now();
+    const auto peaks = m_progressiveWaveform->snapshot();
+    if (std::none_of(peaks.cbegin(), peaks.cend(), [](float peak) { return peak >= 0; })) return;
+    QDir directory = QFileInfo(m_progressiveWaveformFile).dir();
+    if (!directory.mkpath(QStringLiteral("."))) return;
+    QJsonArray values;
+    for (float peak : peaks) values.append(peak);
+    QSaveFile output(m_progressiveWaveformFile);
+    if (!output.open(QIODevice::WriteOnly)) return;
+    const auto bytes = QJsonDocument(QJsonObject{{"version", 1}, {"peaks", values}}).toJson(QJsonDocument::Compact);
+    if (output.write(bytes) != bytes.size() || !output.commit()) return;
+    // Keep at most 256 files and 16 MiB, removing the least recent files first.
+    const auto files = directory.entryInfoList({QStringLiteral("*.json")}, QDir::Files, QDir::Time);
+    qint64 size = 0;
+    for (qsizetype i = 0; i < files.size(); ++i) {
+        size += files[i].size();
+        if (i >= 256 || size > 16 * 1024 * 1024) QFile::remove(files[i].absoluteFilePath());
+    }
+}
+
+void PlayerControllerPrivate::stopProgressiveWaveform()
+{
+    m_progressiveWaveformTimer.stop();
+    if (m_waveformListener) {
+        vlc_player_locker lock{m_player};
+        vlc_player_RemoveMetadataListener(m_player, m_waveformListener);
+        m_waveformListener = nullptr;
+    }
+    saveProgressiveWaveform();
+    m_progressiveWaveform.reset();
+    m_progressiveWaveformFile.clear();
 }
 
 // PLAYBACK

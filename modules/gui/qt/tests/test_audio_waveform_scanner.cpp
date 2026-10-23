@@ -7,6 +7,7 @@
 #include <QtEndian>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <vlc/vlc.h>
 #include "../../../../lib/libvlc_internal.h"
 #include "../player/audio_waveform_scanner.hpp"
@@ -106,6 +107,38 @@ private slots:
             const float expected = i < 4 ? 0 : i < 8 ? .25 : i < 12 ? .8 : .5;
             QVERIFY2(std::abs(result.peaks[i] - expected) < .025, qPrintable(QStringLiteral("bin %1: actual %2, expected %3").arg(i).arg(result.peaks[i]).arg(expected)));
         }
+    }
+    void progressiveCaptureKeepsGapsAndUsesMediaTime() {
+        ProgressiveAudioWaveform waveform(VLC_TICK_FROM_SEC(10), 10);
+        audio_sample_format_t format{};
+        format.i_format = VLC_CODEC_FL32; format.i_channels = 2; format.i_rate = 4;
+        const float samples[] = {0.f, .25f, -.8f, .1f, .5f, .2f, .1f, .4f};
+        block_t block{}; block.p_buffer = (uint8_t*)samples;
+        block.i_buffer = sizeof(samples); block.i_nb_samples = 4;
+        waveform.append(VLC_TICK_FROM_SEC(2), 1., format, block);
+        auto peaks = waveform.snapshot();
+        QCOMPARE(peaks.size(), 10); QCOMPARE(peaks[0], -1.f); QCOMPARE(peaks[1], -1.f);
+        QCOMPARE(peaks[2], .8f); QCOMPARE(peaks[3], -1.f);
+        waveform.append(VLC_TICK_FROM_SEC(8), 1., format, block);
+        peaks = waveform.snapshot();
+        QCOMPARE(peaks[8], .8f); QCOMPARE(peaks[7], -1.f); QCOMPARE(peaks[9], -1.f);
+        ProgressiveAudioWaveform cached(VLC_TICK_FROM_SEC(10), 10);
+        QVERIFY(cached.restore(peaks)); QCOMPARE(cached.snapshot(), peaks);
+        peaks[1] = std::numeric_limits<float>::quiet_NaN(); QVERIFY(!cached.restore(peaks));
+        QCOMPARE(cached.snapshot()[1], -1.f);
+    }
+    void progressiveCaptureHandlesRateSilenceAndUnsupportedAudio() {
+        ProgressiveAudioWaveform waveform(VLC_TICK_FROM_SEC(4), 4);
+        audio_sample_format_t format{};
+        format.i_format = VLC_CODEC_S16N; format.i_channels = 1; format.i_rate = 2;
+        const int16_t samples[] = {0, 16384, -32768, 0};
+        block_t block{}; block.p_buffer = (uint8_t*)samples;
+        block.i_buffer = sizeof(samples); block.i_nb_samples = 4;
+        waveform.append(0, 2., format, block);
+        QCOMPARE(waveform.snapshot(), QVector<float>({0.f, .5f, 1.f, 0.f}));
+        format.i_format = VLC_CODEC_A52;
+        waveform.append(0, 1., format, block);
+        QCOMPARE(waveform.snapshot(), QVector<float>({0.f, .5f, 1.f, 0.f}));
     }
     void missingTrackDoesNotInventPeaks() {
         writeWav(16, 1, false);auto request = source();request.audioIndex = 1;

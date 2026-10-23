@@ -31,10 +31,10 @@ T.Slider {
         for (let i = 0; i < count; ++i) {
             const first = Math.floor(i * waveformPeaks.length / count)
             const last = Math.floor((i + 1) * waveformPeaks.length / count)
-            let peak = 0
+            let peak = -1
             for (let sample = first; sample < last; ++sample) {
                 const value = Number(waveformPeaks[sample])
-                if (Number.isFinite(value)) peak = Math.max(peak, Math.min(1, Math.abs(value)))
+                if (Number.isFinite(value) && value >= 0) peak = Math.max(peak, Math.min(1, value))
             }
             bars.push(peak)
         }
@@ -206,6 +206,7 @@ T.Slider {
             Rectangle {
                 required property int index
                 required property real modelData
+                visible: modelData >= 0
                 // Keep the first samples at the playback start in both directions.
                 readonly property real cell: root.theme.dp(5)
                 readonly property bool played: index / Math.max(1, root.waveformBars.length) < root.position

@@ -32,6 +32,7 @@ vlc_player_ResetTimer(vlc_player_t *player)
     vlc_mutex_lock(&player->timer.lock);
 
     player->timer.input_live = false;
+    player->timer.input_rate = 1.;
     player->timer.input_length = VLC_TICK_INVALID;
     player->timer.input_normal_time = VLC_TICK_0;
     player->timer.last_ts = VLC_TICK_INVALID;
@@ -503,6 +504,7 @@ vlc_player_UpdateTimer(vlc_player_t *player, vlc_es_id_t *es_source,
     bool force_update = false;
     if (!es_source) /* input source */
     {
+        player->timer.input_rate = point->rate;
         /* Only valid for input sources */
         if (normal_time != VLC_TICK_INVALID
          && player->timer.input_normal_time != normal_time)

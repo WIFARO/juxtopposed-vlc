@@ -45,6 +45,9 @@
 typedef struct vlc_preparser_t vlc_preparser_t;
 typedef struct vlc_preparser_req vlc_preparser_req;
 
+struct AudioWaveformSource;
+class ProgressiveAudioWaveform;
+
 class PlayerControllerPrivate {
     Q_DISABLE_COPY(PlayerControllerPrivate)
 public:
@@ -137,6 +140,15 @@ public:
         ~TimelineReadRequest() { if (interrupt) vlc_interrupt_destroy(interrupt); }
     };
     std::shared_ptr<TimelineReadRequest> m_subtitleTimelineRequest;
+    QTimer m_progressiveWaveformTimer;
+    std::unique_ptr<ProgressiveAudioWaveform> m_progressiveWaveform;
+    vlc_player_metadata_listener_id* m_waveformListener = nullptr;
+    QString m_progressiveWaveformFile;
+    vlc_tick_t m_waveformLastSaved = 0;
+    void startProgressiveWaveform(const AudioWaveformSource& source, input_item_t* media, vlc_es_id_t* track);
+    void readProgressiveWaveform();
+    void saveProgressiveWaveform();
+    void stopProgressiveWaveform();
     bool m_audioWaveformEnabled = false;
     bool m_audioWaveformAutomatic = false;
     QVariantList m_audioWaveformPeaks;

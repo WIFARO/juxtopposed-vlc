@@ -244,3 +244,59 @@ AudioWaveformScan scanAudioWaveform(vlc_object_t* parent, const AudioWaveformSou
     vlc_object_delete(context);vlc_interrupt_set(previous);
     return result;
 }
+
+ProgressiveAudioWaveform::ProgressiveAudioWaveform(vlc_tick_t duration, int bins)
+    : m_duration(duration), m_peaks(std::clamp(bins, 1, 16384), -1.f) {}
+
+void ProgressiveAudioWaveform::append(vlc_tick_t time, double rate,
+                                      const audio_sample_format_t& format,
+                                      const block_t& block)
+{
+    if (m_duration <= 0 || !format.i_channels || !format.i_rate || time < 0
+        || !std::isfinite(rate) || rate <= 0) return;
+    unsigned bytes;
+    switch (format.i_format) {
+    case VLC_CODEC_FL64: bytes = 8; break;
+    case VLC_CODEC_FL32: case VLC_CODEC_S32N: bytes = 4; break;
+    case VLC_CODEC_S16N: bytes = 2; break;
+    case VLC_CODEC_U8: case VLC_CODEC_S8: bytes = 1; break;
+    default: return; // Passthrough and non-PCM formats have no waveform.
+    }
+    const size_t frames = std::min<size_t>(block.i_nb_samples, block.i_buffer / bytes / format.i_channels);
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (size_t frame = 0; frame < frames; ++frame) {
+        const long double position = time + (long double)vlc_tick_from_samples(frame, format.i_rate) * rate;
+        if (position >= m_duration) break;
+        const int bin = std::min<int>(m_peaks.size() - 1, position * m_peaks.size() / m_duration);
+        float peak = std::max(0.f, m_peaks[bin]);
+        for (unsigned channel = 0; channel < format.i_channels; ++channel) {
+            const auto* sample = block.p_buffer + (frame * format.i_channels + channel) * bytes;
+            double value;
+            switch (format.i_format) {
+            case VLC_CODEC_FL64: { double v; memcpy(&v, sample, 8); value = v; break; }
+            case VLC_CODEC_FL32: { float v; memcpy(&v, sample, 4); value = v; break; }
+            case VLC_CODEC_S32N: { int32_t v; memcpy(&v, sample, 4); value = v / 2147483648.; break; }
+            case VLC_CODEC_S16N: { int16_t v; memcpy(&v, sample, 2); value = v / 32768.; break; }
+            case VLC_CODEC_S8: value = *(const int8_t*)sample / 128.; break;
+            default: value = (*sample - 128) / 128.; break;
+            }
+            if (std::isfinite(value)) peak = std::max(peak, float(std::min(1., std::abs(value))));
+        }
+        m_peaks[bin] = peak;
+    }
+}
+
+QVector<float> ProgressiveAudioWaveform::snapshot() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_peaks;
+}
+
+bool ProgressiveAudioWaveform::restore(const QVector<float>& peaks)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (peaks.size() != m_peaks.size()) return false;
+    for (float value : peaks) if (!std::isfinite(value) || value < -1.f || value > 1.f) return false;
+    m_peaks = peaks;
+    return true;
+}

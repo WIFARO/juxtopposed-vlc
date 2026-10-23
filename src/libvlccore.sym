@@ -45,6 +45,7 @@ vlc_audio_meter_Reset
 vlc_audio_meter_AddPlugin
 vlc_audio_meter_RemovePlugin
 vlc_audio_meter_Process
+vlc_audio_meter_ProcessSamples
 vlc_audio_meter_Flush
 vlc_fifo_Get
 vlc_fifo_New

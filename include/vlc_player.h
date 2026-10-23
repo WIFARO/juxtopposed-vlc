@@ -2304,6 +2304,8 @@ enum vlc_player_metadata_option
      * @see vlc_player_metadata_cbs.on_loudness_changed
      */
     VLC_PLAYER_METADATA_LOUDNESS_FULL,
+    /** Observe decoded audio without another decoder or network request. */
+    VLC_PLAYER_METADATA_AUDIO_SAMPLES,
 };
 
 /**
@@ -2349,6 +2351,13 @@ union vlc_player_metadata_cbs
     void (*on_loudness_changed)(vlc_tick_t date,
                                 const struct vlc_audio_loudness *loudness,
                                 void *data);
+    /** Read-only decoded audio before volume. time is a media time in ticks,
+     * starting at zero. rate maps output samples to the media timeline.
+     * Called from the audio thread; do not retain format or block.
+     */
+    void (*on_audio_samples)(vlc_tick_t time, double rate,
+                            const audio_sample_format_t *format,
+                            const block_t *block, void *data);
 };
 
 /**

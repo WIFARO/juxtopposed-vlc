@@ -889,6 +889,8 @@ int vlc_aout_stream_Play(vlc_aout_stream *stream, block_t *block)
             play_date = VLC_TICK_INVALID;
     }
 
+    vlc_audio_meter_ProcessSamples(&owner->meter, block);
+
     /* Software volume */
     if (stream->volume != NULL)
         aout_volume_Amplify(stream->volume, block);

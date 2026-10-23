@@ -77,7 +77,7 @@ vlc_player_AddMetadataLoudnessListener(vlc_player_t *player,
         if (other_id->option == listener_id->option)
             has_same_meter_module = true;
 
-        if (other_id->audio_meter != NULL)
+        if (other_id->audio_meter != NULL && other_id->option != VLC_PLAYER_METADATA_AUDIO_SAMPLES)
         {
             assert(audio_meter_listener_id == NULL);
             audio_meter_listener_id = other_id;
@@ -154,6 +154,20 @@ vlc_player_RemoveMetadataLoudnessListener(vlc_player_t *player,
     }
 }
 
+static void
+vlc_player_OnAudioSamples(const audio_sample_format_t *format,
+                           const block_t *block, void *data)
+{
+    vlc_player_metadata_listener_id *listener = data;
+    vlc_player_t *player = listener->player;
+    if (block->i_pts == VLC_TICK_INVALID) return;
+    vlc_mutex_lock(&player->timer.lock);
+    const vlc_tick_t time = block->i_pts - player->timer.input_normal_time - player->timer.start_offset;
+    const double rate = player->timer.input_rate;
+    vlc_mutex_unlock(&player->timer.lock);
+    if (time >= 0 && rate > 0) listener->cbs->on_audio_samples(time, rate, format, block, listener->cbs_data);
+}
+
 vlc_player_metadata_listener_id *
 vlc_player_AddMetadataListener(vlc_player_t *player,
                                enum vlc_player_metadata_option option,
@@ -167,9 +181,25 @@ vlc_player_AddMetadataListener(vlc_player_t *player,
     if (listener_id == NULL)
         return NULL;
 
+    listener_id->player = player;
     listener_id->cbs = cbs;
     listener_id->cbs_data = cbs_data;
     listener_id->option = option;
+
+    if (option == VLC_PLAYER_METADATA_AUDIO_SAMPLES) {
+        static const struct vlc_audio_meter_cbs samples_cbs = {.on_samples = vlc_player_OnAudioSamples};
+        const struct vlc_audio_meter_plugin_owner owner = {.cbs = &samples_cbs, .sys = listener_id};
+        audio_output_t *aout = vlc_player_aout_Hold(player);
+        // Never hold the listener mutex while waiting for an audio callback.
+        // Other meter callbacks can take that mutex from the audio thread.
+        listener_id->audio_meter = aout ? aout_AddMeterPlugin(aout, NULL, &owner) : NULL;
+        if (aout) aout_Release(aout);
+        if (!listener_id->audio_meter) { free(listener_id); return NULL; }
+        vlc_mutex_lock(&player->metadata_listeners_lock);
+        vlc_list_append(&listener_id->node, &player->metadata_listeners);
+        vlc_mutex_unlock(&player->metadata_listeners_lock);
+        return listener_id;
+    }
 
     vlc_mutex_lock(&player->metadata_listeners_lock);
 
@@ -203,6 +233,20 @@ vlc_player_RemoveMetadataListener(vlc_player_t *player,
 {
     vlc_player_assert_locked(player);
     assert(listener_id);
+
+    if (listener_id->option == VLC_PLAYER_METADATA_AUDIO_SAMPLES) {
+        vlc_mutex_lock(&player->metadata_listeners_lock);
+        vlc_list_remove(&listener_id->node);
+        vlc_mutex_unlock(&player->metadata_listeners_lock);
+        audio_output_t *aout = vlc_player_aout_Hold(player);
+        if (aout) {
+            // Removing the observer waits for its last audio callback.
+            aout_RemoveMeterPlugin(aout, listener_id->audio_meter);
+            aout_Release(aout);
+        }
+        free(listener_id);
+        return;
+    }
 
     vlc_mutex_lock(&player->metadata_listeners_lock);
 

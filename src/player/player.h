@@ -146,6 +146,7 @@ struct vlc_player_listener_id
 
 struct vlc_player_metadata_listener_id
 {
+    vlc_player_t *player;
     const union vlc_player_metadata_cbs *cbs;
     void *cbs_data;
 
@@ -231,6 +232,7 @@ struct vlc_player_timer
     vlc_mutex_t lock;
 
     bool input_live;
+    double input_rate;
     vlc_tick_t input_length;
     vlc_tick_t input_normal_time;
     vlc_tick_t last_ts;

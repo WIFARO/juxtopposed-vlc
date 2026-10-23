@@ -672,6 +672,8 @@ struct vlc_audio_meter_cbs
      * @param opaque pointer set by vlc_audio_meter_AddPlugin().
      */
     void (*on_loudness)(vlc_tick_t date, const struct vlc_audio_loudness *loudness, void *data);
+    /** Read-only decoded audio, before software volume. Never retain block. */
+    void (*on_samples)(const audio_sample_format_t *, const block_t *, void *data);
 };
 
 /**
@@ -751,7 +753,8 @@ vlc_audio_meter_Reset(struct vlc_audio_meter *meter, const audio_sample_format_t
  *
  * @param meter audio meter structure
  * @param chain name of the module, can contain specific module options using
- * the following chain convention:"name{option1=a,option2=b}"
+ * the following chain convention:"name{option1=a,option2=b}". NULL registers
+ * a read-only sample observer when owner->cbs->on_samples is set.
  * @param owner pointer to a vlc_audio_meter_plugin_owner  structure, the
  * structure must stay valid during the lifetime of the plugin
  * @return a valid audio meter plugin, or NULL in case of error
@@ -781,6 +784,10 @@ vlc_audio_meter_RemovePlugin(struct vlc_audio_meter *meter, vlc_audio_meter_plug
  */
 VLC_API void
 vlc_audio_meter_Process(struct vlc_audio_meter *meter, block_t *block, vlc_tick_t date);
+
+/** Notify read-only sample observers before software volume. */
+VLC_API void
+vlc_audio_meter_ProcessSamples(struct vlc_audio_meter *meter, const block_t *block);
 
 /**
  * Flush all "audio meter" plugins
