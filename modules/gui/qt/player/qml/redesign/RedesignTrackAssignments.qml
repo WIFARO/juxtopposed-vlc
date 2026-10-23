@@ -8,7 +8,7 @@ import VLC.Style
 
 RedesignTrackAssignmentDialog {
     id: root
-    pickerBackdropContent: Component {
+    nestedBackdropContent: Component {
         RedesignSurfaceBackdrop {
             sourceItem: root.background ? root.background.parent : null
             scaleFactor: root.scaleFactor

@@ -506,6 +506,13 @@ RedesignSettingsDialog {
                     }
                 }
                 RedesignSubtitleSourcePreferences {
+                    videoBackdropContent: Component {
+                        RedesignSurfaceBackdrop {
+                            sourceItem: root.background ? root.background.parent : null
+                            scaleFactor: root.scaleFactor
+                            nativeVideo: false
+                        }
+                    }
                     width: parent.width
                     visible: root.search.length ? [qsTr("Online Subtitles"), "OpenSubtitles", qsTr("API key")].some(text => text.toLowerCase().includes(root.search.toLowerCase())) : root.category === "subtitles"
                     sourceService: SubtitleSources

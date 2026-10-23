@@ -8,6 +8,7 @@ ColumnLayout {
     required property var sourceService
     property real scaleFactor: 1
     property bool lightTheme: false
+    property Component videoBackdropContent
     property color accentColor: "#d37918"
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     spacing: theme.dp(10)
@@ -30,6 +31,7 @@ ColumnLayout {
     RedesignSubtitleProviderSetup {
         id: setup
         objectName: "subtitlePreferencesProviderSetup"
+        videoBackdropContent: root.videoBackdropContent
         parent: root.Window.contentItem
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         hasCustomKey: root.sourceService.hasCustomKey; hasConsumerKey: root.sourceService.hasConsumerKey

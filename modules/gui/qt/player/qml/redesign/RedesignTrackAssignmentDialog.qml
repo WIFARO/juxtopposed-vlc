@@ -10,7 +10,7 @@ C.Dialog {
     property bool lightTheme: false
     property color accentColor: "#d37918"
     property Component videoBackdropContent
-    property Component pickerBackdropContent
+    property Component nestedBackdropContent
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     property bool subtitles: true
     property var context: ({})
@@ -718,6 +718,8 @@ C.Dialog {
     RedesignSubtitleProviderSetup {
         id: providerSetup
         objectName: "trackAssignmentProviderSetup"
+        parent: root.parent
+        videoBackdropContent: root.nestedBackdropContent
         scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
         hasCustomKey: root.providerHasCustomKey; hasConsumerKey: root.providerHasConsumerKey
         busy: root.saving
@@ -742,7 +744,7 @@ C.Dialog {
         C.Overlay.modal: Rectangle { color: "#80000000" }
         background: RedesignDialogSurface {
             theme: root.theme
-            videoBackdropContent: root.pickerBackdropContent
+            videoBackdropContent: root.nestedBackdropContent
         }
         onOpened: { pickerList.currentIndex = pickerList.count ? 0 : -1; pickerList.forceActiveFocus() }
         contentItem: ColumnLayout {

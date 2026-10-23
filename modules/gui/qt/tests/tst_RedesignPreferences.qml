@@ -514,6 +514,7 @@ TestCase {
         mouseClick(findChild(setup,"subtitleProviderSaveKey"))
         tryCompare(setup,"visible",false);compare(field.text,"");verify(subtitleService.hasCustomKey)
         mouseClick(findChild(subtitlePreferences,"subtitleProviderConfigure"));tryCompare(setup,"opened",true)
+        verify(waitForPolish(testCase.Window.window))
         mouseClick(findChild(setup,"subtitleProviderRemoveKey"))
         tryCompare(setup,"visible",false);verify(!subtitleService.hasCustomKey);verify(subtitleService.configured)
         subtitlePreferences.visible=false
@@ -641,6 +642,7 @@ TestCase {
     SignalSpy { id: confirmationAccepted; target: confirmation; signalName: "accepted" }
     SignalSpy { id: confirmationRejected; target: confirmation; signalName: "rejected" }
     function init() {
+        width=900; height=600
         instanceControls.visible = false
         startupRow.visible = false
         startupStore.metadata.restartRequired = false; startupStore.savedValue = true; startupStore.revision++
@@ -955,6 +957,74 @@ TestCase {
         setup.open(); tryCompare(setup, "opened", true)
         verify(findChild(setup, "subtitleProviderApiKey").activeFocus)
         setup.close(); tryCompare(setup, "visible", false)
+    }
+    Component { id: setupSignal; SignalSpy {} }
+    function setupDialog(properties = {}) {
+        const setup=createTemporaryObject(deferredSubtitleSetup,testCase,Object.assign({parent:testCase},properties))
+        verify(setup!==null); setup.open(); tryCompare(setup,"opened",true)
+        verify(waitForPolish(testCase.Window.window))
+        return setup
+    }
+    function test_subtitleSetupGuardsSubmissionAndShowsLiteralError() {
+        const setup=setupDialog(), field=findChild(setup,"subtitleProviderApiKey")
+        const saved=createTemporaryObject(setupSignal,testCase,{target:setup,signalName:"saveRequested"})
+        field.text="   "; field.accepted(); compare(saved.count,0)
+        setup.busy=true; field.text="unit-demo"; field.accepted(); compare(saved.count,0)
+        verify(!field.enabled); verify(!findChild(setup,"subtitleProviderSaveKey").enabled)
+        setup.busy=false; field.forceActiveFocus(); keyClick(Qt.Key_Return)
+        compare(saved.count,1); compare(saved.signalArguments[0][0],"unit-demo")
+        const help=createTemporaryObject(setupSignal,testCase,{target:setup,signalName:"helpRequested"})
+        mouseClick(findChild(setup,"subtitleProviderHelp")); compare(help.count,1)
+        setup.finish(false,"Cannot save <b>demo</b>.")
+        compare(findChild(setup,"subtitleProviderError").textFormat,Text.PlainText)
+        verify(setup.visible); compare(field.text,"unit-demo")
+        setup.finish(true); tryCompare(setup,"visible",false); compare(field.text,"")
+        setup.open(); tryCompare(setup,"opened",true); compare(setup.errorMessage,"")
+    }
+    function test_subtitleSetupCancelClearsInput_data() {
+        return [{tag:"escape",escape:true},{tag:"button",escape:false}]
+    }
+    function test_subtitleSetupCancelClearsInput(data) {
+        const setup=setupDialog(),field=findChild(setup,"subtitleProviderApiKey")
+        const saved=createTemporaryObject(setupSignal,testCase,{target:setup,signalName:"saveRequested"})
+        field.text="unit-demo"; verify(field.echoMode!==TextInput.Normal)
+        if(data.escape) keyClick(Qt.Key_Escape)
+        else mouseClick(findChild(setup,"subtitleProviderCancel"))
+        tryCompare(setup,"visible",false); compare(field.text,""); compare(saved.count,0)
+    }
+    function test_subtitleSetupActionsRemainReachable_data() {
+        return [{tag:"normal",w:900,h:600,scale:1},{tag:"short",w:500,h:350,scale:1},
+            {tag:"narrow",w:280,h:480,scale:1},{tag:"narrow-short",w:280,h:300,scale:1},{tag:"scaled",w:1280,h:900,scale:1.5},
+            {tag:"light",w:900,h:600,scale:1,light:true},{tag:"long-error",w:360,h:420,scale:1,error:true}]
+    }
+    function test_subtitleSetupActionsRemainReachable(data) {
+        width=data.w; height=data.h
+        const setup=setupDialog({scaleFactor:data.scale,lightTheme:!!data.light,hasConsumerKey:true,hasCustomKey:true})
+        const body=findChild(setup,"subtitleProviderBody"), remove=findChild(setup,"subtitleProviderRemoveKey")
+        const removed=createTemporaryObject(setupSignal,testCase,{target:setup,signalName:"removeRequested"})
+        const field=findChild(setup,"subtitleProviderApiKey")
+        tryVerify(()=>{
+            const p=field.mapToItem(body,0,0)
+            return p.y>=-.5 && p.y+field.height<=body.height+.5
+        })
+        if(data.error)setup.errorMessage=Array(12).fill("VLC cannot save this change. Try again.").join(" ")
+        verify(waitForPolish(testCase.Window.window))
+        tryVerify(()=>body.height>0 && body.contentHeight>0)
+        for(const name of ["subtitleProviderCancel","subtitleProviderSaveKey"]) {
+            const button=findChild(setup,name)
+            tryVerify(()=>{
+                const p=button.mapToItem(setup.background,0,0)
+                return p.x>=0 && p.y>=0 && p.x+button.width<=setup.width+.5 && p.y+button.height<=setup.height+.5
+            })
+        }
+        const flick=body.contentItem
+        flick.contentY=Math.max(0,body.contentHeight-body.height)
+        tryVerify(()=>{
+            const p=remove.mapToItem(body,0,0)
+            return p.y>=-.5 && p.y+remove.height<=body.height+.5
+        })
+        mouseClick(remove); compare(removed.count,1)
+        setup.close(); tryCompare(setup,"visible",false)
     }
     function test_spatialModeRetainsChoiceWhileDisabled() {
         spatialModeRow.visible = true
