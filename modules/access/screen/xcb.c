@@ -26,6 +26,7 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <errno.h>
+#include <math.h>
 #include <xcb/xcb.h>
 #include <xcb/composite.h>
 #ifdef HAVE_SYS_SHM_H
@@ -95,14 +96,15 @@ vlc_module_end ()
 /*
  * Local prototypes
  */
-static void Demux (void *);
+static void Capture(void *);
+static int Demux(demux_t *);
 static int Control (demux_t *, int, va_list);
 static es_out_id_t *InitES (demux_t *, uint_fast16_t, uint_fast16_t,
                             uint_fast8_t, uint8_t *);
 
 typedef struct
 {
-    /* All owned by timer thread while timer is armed: */
+    /* Capture state, owned by the input thread. */
     xcb_connection_t *conn; /**< XCB connection */
     es_out_id_t      *es; /**< Window capture stream */
     float             rate; /**< Frame rate */
@@ -117,8 +119,9 @@ typedef struct
     bool              shm; /**< Whether to use MIT-SHM */
     bool              follow_mouse;
     uint16_t          cur_w, cur_h; /**< Actual capture pixel dimensions */
-    /* Timer does not use this, only input thread: */
-    vlc_timer_t       timer;
+    vlc_tick_t        start; /**< Capture start time for elapsed time and limits */
+    vlc_tick_t        next; /**< Next frame deadline */
+    vlc_tick_t        interval; /**< Requested interval between frames */
 } demux_sys_t;
 
 /** Checks MIT-SHM shared memory support */
@@ -237,23 +240,23 @@ static int Open (vlc_object_t *obj)
 
     /* Initializes format */
     p_sys->rate = var_InheritFloat (obj, "screen-fps");
-    if (!p_sys->rate)
+    if (!isfinite(p_sys->rate) || p_sys->rate <= 0)
         goto error;
 
-    vlc_tick_t interval = (float)CLOCK_FREQ / p_sys->rate;
-    if (!interval)
+    const double interval = CLOCK_FREQ / (double)p_sys->rate;
+    if (interval < 1 || interval >= (double)INT64_MAX)
         goto error;
+    p_sys->interval = (vlc_tick_t)interval;
 
     p_sys->cur_w = 0;
     p_sys->cur_h = 0;
     p_sys->bpp = 0;
     p_sys->es = NULL;
-    if (vlc_timer_create (&p_sys->timer, Demux, demux))
-        goto error;
-    vlc_timer_schedule_asap (p_sys->timer, interval);
+    p_sys->start = vlc_tick_now();
+    p_sys->next = p_sys->start;
 
-    /* Initializes demux */
-    demux->pf_demux   = NULL;
+    /* Capture on the input thread so EOF cannot race a frame callback. */
+    demux->pf_demux   = Demux;
     demux->pf_control = Control;
     return VLC_SUCCESS;
 
@@ -272,7 +275,6 @@ static void Close (vlc_object_t *obj)
     demux_t *demux = (demux_t *)obj;
     demux_sys_t *p_sys = demux->p_sys;
 
-    vlc_timer_destroy (p_sys->timer);
     xcb_disconnect (p_sys->conn);
     free (p_sys);
 }
@@ -293,11 +295,12 @@ static int Control (demux_t *demux, int query, va_list args)
         }
 
         case DEMUX_GET_LENGTH:
-        case DEMUX_GET_TIME:
-        {
-            *va_arg (args, vlc_tick_t *) = 0;
+            *va_arg(args, vlc_tick_t *) = 0;
             return VLC_SUCCESS;
-        }
+
+        case DEMUX_GET_TIME:
+            *va_arg(args, vlc_tick_t *) = vlc_tick_now() - ((demux_sys_t *)demux->p_sys)->start;
+            return VLC_SUCCESS;
 
         /* TODO: get title info -> crawl visible windows */
 
@@ -329,7 +332,24 @@ static int Control (demux_t *demux, int query, va_list args)
 /**
  * Processing callback
  */
-static void Demux (void *opaque)
+static int Demux(demux_t *demux)
+{
+    demux_sys_t *sys = demux->p_sys;
+    vlc_tick_t now = vlc_tick_now();
+    if (now < sys->next)
+    {
+        /* Keep Stop and time limits responsive at very low frame rates. */
+        vlc_tick_wait(__MIN(sys->next, now + VLC_TICK_FROM_MS(50)));
+        now = vlc_tick_now();
+        if (now < sys->next) return VLC_DEMUXER_SUCCESS;
+    }
+    const vlc_tick_t delay = sys->interval - (now - sys->next) % sys->interval;
+    sys->next = now > INT64_MAX - delay ? INT64_MAX : now + delay;
+    Capture(demux);
+    return xcb_connection_has_error(sys->conn) ? VLC_DEMUXER_EGENERIC : VLC_DEMUXER_SUCCESS;
+}
+
+static void Capture(void *opaque)
 {
     demux_t *demux = opaque;
     demux_sys_t *sys = demux->p_sys;
