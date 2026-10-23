@@ -33,10 +33,16 @@
 #include "player/player_controller.hpp"  /* Speed control */
 #include "maininterface/mainctx.hpp" /* Interface integration */
 #include "dialogs/mediainfo/info_panels.hpp"
+#include "util/interface_translator.hpp"
+#include "util/colorizedsvgicon.hpp"
 
 #include <QApplication>
+#include <algorithm>
 #include <QAction>
 #include <QUrl>
+#include <QPainter>
+#include <QPainterPath>
+#include <vlc_input_item.h>
 
 #include <math.h>
 #include <cassert>
@@ -46,21 +52,37 @@
 CoverArtLabel::CoverArtLabel( QWidget *parent, qt_intf_t *_p_i )
     : QLabel( parent ), p_intf( _p_i )
 {
-    connect( THEMIM, QOverload<QString>::of(&PlayerController::artChanged),
-             this, QOverload<const QString&>::of(&CoverArtLabel::showArtUpdate) );
-
-    setMinimumHeight( 128 );
-    setMinimumWidth( 128 );
+    // Only refresh this item's cover. A different playing item must not
+    // replace the selected item's art or an unsaved cover choice.
+    connect( THEMIM, QOverload<QString>::of(&PlayerController::artChanged), this, [this] {
+        if (p_item.get() == THEMIM->getInput() && selectedArtPath.isEmpty()) showArtUpdate();
+    } );
+    connect( THEMIM, QOverload<input_item_t *>::of(&PlayerController::artChanged), this, [this](input_item_t *item) {
+        if (item == p_item.get() && selectedArtPath.isEmpty()) showArtUpdate();
+    } );
     setScaledContents( false );
     setAlignment( Qt::AlignCenter );
-
-    QAction *action = new QAction( qtr( "Download cover art" ), this );
-    connect( action, &QAction::triggered, this, &CoverArtLabel::askForUpdate );
-    addAction( action );
-
-    action = new QAction( qtr( "Add cover art from file" ), this );
-    connect( action, &QAction::triggered, this, &CoverArtLabel::setArtFromFile );
-    addAction( action );
+    auto *download = new QAction( qtr("Download cover art"), this );
+    connect( download, &QAction::triggered, this, &CoverArtLabel::askForUpdate );
+    addAction( download );
+    auto *fromFile = new QAction( qtr("Add cover art from file"), this );
+    connect( fromFile, &QAction::triggered, this, &CoverArtLabel::setArtFromFile );
+    addAction( fromFile );
+    const auto translate = [this, download, fromFile] {
+        setAccessibleName(qtr("Cover art"));
+        download->setText(qtr("Download cover art"));
+        fromFile->setText(qtr("Add cover art from file"));
+    };
+    translate();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, translate);
+    const auto scale = [this] {
+        const auto factor = p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.;
+        setFixedSize(qRound(128 * factor), qRound(128 * factor));
+        update();
+    };
+    scale();
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, scale);
 
     setItem( SharedInputItem{ THEMIM->getInput() } );
     if ( !p_item )
@@ -76,12 +98,7 @@ CoverArtLabel::~CoverArtLabel()
 
 void CoverArtLabel::setItem( const SharedInputItem& _p_item )
 {
-    if( _p_item == p_item )
-    {
-        showArtUpdate();
-        return;
-    }
-
+    selectedArtPath.clear();
     p_item = _p_item;
 
     if( p_item )
@@ -103,37 +120,58 @@ void CoverArtLabel::mouseDoubleClickEvent( QMouseEvent *event )
 
 void CoverArtLabel::showArtUpdate( const QString& url )
 {
-    QPixmap pix;
-    if( !url.isEmpty() && pix.load( url ) )
-    {
-        pix = pix.scaled( minimumWidth(), minimumHeight(),
-                          Qt::KeepAspectRatioByExpanding,
-                          Qt::SmoothTransformation );
-    }
-    else
-    {
-        pix = QPixmap( ":/placeholder/noart.png" );
-    }
-    setPixmap( pix );
+    artwork = QPixmap();
+    if (!url.isEmpty()) artwork.load(url);
+    update();
 }
 
-void CoverArtLabel::showArtUpdate( )
+void CoverArtLabel::showArtUpdate()
 {
-    QString url;
-    if ( p_item ) url = THEMIM->decodeArtURL( p_item.get() );
-    showArtUpdate( url );
+    showArtUpdate(p_item ? THEMIM->decodeArtURL(p_item.get()) : QString());
+}
+
+void CoverArtLabel::paintEvent( QPaintEvent * )
+{
+    const auto factor = p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.;
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    QPainterPath shape;
+    shape.addRoundedRect(QRectF(rect()), qRound(6 * factor), qRound(6 * factor));
+    painter.setClipPath(shape);
+    painter.fillRect(rect(), palette().color(QPalette::Window));
+    if (!artwork.isNull())
+    {
+        const qreal side = std::min(artwork.width(), artwork.height());
+        const QRectF source((artwork.width() - side) / 2., (artwork.height() - side) / 2., side, side);
+        painter.drawPixmap(QRectF(rect()), artwork, source);
+        return;
+    }
+    bool video = false;
+    if (p_item)
+    {
+        vlc_mutex_locker lock(&p_item->lock);
+        for (size_t i = 0; i < p_item->es_vec.size; ++i)
+            if (p_item->es_vec.data[i].es.i_cat == VIDEO_ES) { video = true; break; }
+    }
+    const auto color = palette().color(QPalette::WindowText).name();
+    const auto icon = ColorizedSvgIcon(video ? QStringLiteral(":/menu/redesign/video.svg") : QStringLiteral(":/menu/redesign/music.svg"), {}, {}, {},
+        {{QStringLiteral("#8F8F8F"), color}, {QStringLiteral("#D37918"), color}});
+    const auto size = qRound(80 * factor);
+    const auto pixmap = icon.pixmap(QSize(size, size), devicePixelRatioF());
+    painter.drawPixmap(QRect((width() - size) / 2, (height() - size) / 2, size, size), pixmap);
 }
 
 void CoverArtLabel::askForUpdate()
 {
-    assert( p_item );
+    if (!p_item) return;
 
     THEMIM->requestArtUpdate( p_item.get() );
 }
 
 void CoverArtLabel::setArtFromFile()
 {
-    assert( p_item );
+    if (!p_item) return;
 
     QUrl fileUrl = QFileDialog::getOpenFileUrl( this, qtr( "Choose Cover Art" ),
         p_intf->p_mi->getDialogFilePath(), qtr( "Image Files (*.gif *.jpg *.jpeg *.png)" ) );
@@ -141,12 +179,13 @@ void CoverArtLabel::setArtFromFile()
     if( fileUrl.isEmpty() )
         return;
 
-    showArtUpdate( fileUrl.toLocalFile() );
+    selectedArtPath = fileUrl.toLocalFile();
+    showArtUpdate( selectedArtPath );
     emit artSelected( fileUrl.toString() );
     emit editing();
 }
 
 void CoverArtLabel::clear()
 {
-    showArtUpdate( "" );
+    setItem({});
 }

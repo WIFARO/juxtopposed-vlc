@@ -27,6 +27,7 @@
 
 #include "mediainfo.hpp"
 #include "player/player_controller.hpp"
+#include "maininterface/mainctx.hpp"
 #include "util/redesign_widget_theme.hpp"
 #include "util/interface_translator.hpp"
 
@@ -34,6 +35,11 @@
 
 #include <QTabWidget>
 #include <QGridLayout>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QKeyEvent>
+#include <QTabBar>
+#include <QScreen>
 #include <QLineEdit>
 #include <QLabel>
 #include <QPushButton>
@@ -63,9 +69,12 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
 
     /* TabWidgets and Tabs creation */
     infoTabW = new QTabWidget;
+    infoTabW->setObjectName( "mediaInfoTabs" );
+    infoTabW->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
 
     MP = new MetaPanel( infoTabW, p_intf );
     auto *metaScrollArea = new QScrollArea( infoTabW );
+    metaScrollArea->setObjectName( "metadataScrollArea" );
     metaScrollArea->setWidgetResizable( true );
     metaScrollArea->setFrameShape( QFrame::NoFrame );
     metaScrollArea->setWidget( MP );
@@ -80,38 +89,49 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
         infoTabW->insertTab( INPUTSTATS_PANEL, ISP, qtr( "S&tatistics" ) );
     }
 
-    QGridLayout *layout = new QGridLayout( this );
+    auto *layout = new QVBoxLayout( this );
+    auto *heading = new QLabel( qtr("Media information"), this );
+    heading->setProperty( "redesignHeading", true );
+    heading->setObjectName( "mediaInfoHeading" );
+    heading->setWordWrap( true );
+    layout->addWidget( heading );
+    layout->addWidget( infoTabW, 1 );
 
-    /* No need to use a QDialogButtonBox here */
-    saveMetaButton = new QPushButton( qtr( "&Save Metadata" ) );
-    saveMetaButton->setObjectName( "saveMetadataButton" );
-    saveMetaButton->hide();
-    QPushButton *closeButton = new QPushButton( qtr( "&Close" ) );
-    closeButton->setMaximumWidth(closeButton->minimumSizeHint().width());
-    closeButton->setDefault( true );
-
-    QLabel *uriLabel = new QLabel( qtr( "Location:" ) );
-    uriLabel->setSizePolicy( QSizePolicy::Fixed, QSizePolicy::Preferred );
-    uriLine = new QLineEdit;
+    auto *locationLayout = new QHBoxLayout;
+    auto *uriLabel = new QLabel( qtr("Location:"), this );
+    uriLine = new QLineEdit( this );
+    uriLine->setObjectName( "mediaInfoLocation" );
     uriLine->setReadOnly( true );
+    uriLabel->setBuddy( uriLine );
+    locationLayout->addWidget( uriLabel );
+    locationLayout->addWidget( uriLine, 1 );
+    layout->addLayout( locationLayout );
 
-    layout->addWidget( infoTabW, 0, 0, 1, 8 );
-    layout->addWidget( uriLabel, 1, 0, 1, 1 );
-    layout->addWidget( uriLine, 1, 1, 1, 7 );
-    layout->addWidget( saveMetaButton, 2, 6 );
-    layout->addWidget( closeButton, 2, 7 );
-
-    BUTTONACT( closeButton, &MediaInfoDialog::close );
-
-    /* The tabs buttons are shown in the main dialog for space and cosmetics */
-    BUTTONACT( saveMetaButton, &MediaInfoDialog::saveMeta );
-
-    /* Let the MetaData Panel update the URI */
+    auto *actions = new QHBoxLayout;
+    editingStatus = new QLabel( this );
+    editingStatus->setObjectName( "metadataEditStatus" );
+    editingStatus->setWordWrap( true );
+    actions->addWidget( editingStatus, 1 );
+    saveMetaButton = new QPushButton( qtr("&Save"), this );
+    saveMetaButton->setObjectName( "saveMetadataButton" );
+    closeButton = new QPushButton( qtr("&Close"), this );
+    closeButton->setObjectName( "closeMediaInfoButton" );
+    actions->addWidget( saveMetaButton );
+    actions->addWidget( closeButton );
+    layout->addLayout( actions );
+    connect( closeButton, &QPushButton::clicked, this, &MediaInfoDialog::close );
+    connect( saveMetaButton, &QPushButton::clicked, this, &MediaInfoDialog::saveMeta );
     connect( MP, &MetaPanel::uriSet, this, &MediaInfoDialog::updateURI );
-    connect( MP, &MetaPanel::editing, saveMetaButton, &QPushButton::show );
-
-    /* Display the buttonBar according to the Tab selected */
-    connect( infoTabW, &QTabWidget::currentChanged, this, &MediaInfoDialog::updateButtons );
+    connect( MP, &MetaPanel::editModeChanged, this, [this](bool editing) {
+        if (editing && displayedInput)
+        {
+            IP->update(displayedInput.get());
+            EMP->update(displayedInput.get());
+        }
+        else if (!editing)
+            refreshCurrentInput();
+        updateButtons();
+    } );
 
     /* If using the General Mode */
     if( isMainInputInfo )
@@ -121,16 +141,21 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
          * Connects on the various signals of input_Manager
          * For the currently playing element
          **/
-        connect( THEMIM, &PlayerController::infoChanged,
-                  IP, &InfoPanel::update, Qt::DirectConnection  );
-        connect( THEMIM, &PlayerController::inputChanged,
-            MP, [this]() {
-                MP->update( SharedInputItem { THEMIM->getInput() } );
-            }, Qt::DirectConnection  );
-        connect( THEMIM, &PlayerController::currentMetaChanged,
-                  EMP, &ExtraMetaPanel::update, Qt::DirectConnection );
-        connect( THEMIM, &PlayerController::statisticsUpdated,
-                  ISP, &InputStatsPanel::update, Qt::DirectConnection);
+        connect( THEMIM, &PlayerController::infoChanged, this, [this](input_item_t *item) {
+            if (!MP->isInEditMode() && item == displayedInput.get()) IP->update(item);
+        } );
+        connect( THEMIM, &PlayerController::inputChanged, this, [this] {
+            refreshCurrentInput();
+            updateButtons();
+        } );
+        connect( THEMIM, &PlayerController::currentMetaChanged, this, [this](input_item_t *item) {
+            if (MP->isInEditMode() || item != displayedInput.get()) return;
+            MP->update(displayedInput);
+            EMP->update(item);
+        } );
+        connect( THEMIM, &PlayerController::statisticsUpdated, this, [this](const input_stats_t &stats) {
+            if (!MP->isInEditMode() && THEMIM->getInput() == displayedInput.get()) ISP->update(stats);
+        } );
 
         p_item = SharedInputItem{ THEMIM->getInput() };
     }
@@ -140,22 +165,46 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
     /* Call update at start, so info is filled up at beginning */
     if( p_item )
         updateAllTabs( p_item );
+    else
+        clearAllTabs();
 
-    if (auto* translator = InterfaceTranslator::instance())
-        connect(translator, &InterfaceTranslator::languageChanged, this, [this, closeButton, uriLabel] {
-            setWindowTitle(isMainInputInfo ? qtr("Current Media Information") : qtr("Media Information"));
-            infoTabW->setTabText(META_PANEL, qtr("&General"));
-            infoTabW->setTabText(EXTRAMETA_PANEL, qtr("&Metadata"));
-            infoTabW->setTabText(INFO_PANEL, qtr("Co&dec"));
-            if (ISP) infoTabW->setTabText(INPUTSTATS_PANEL, qtr("S&tatistics"));
-            saveMetaButton->setText(qtr("&Save Metadata"));
-            closeButton->setText(qtr("&Close"));
-            closeButton->setMaximumWidth(closeButton->minimumSizeHint().width());
-            uriLabel->setText(qtr("Location:"));
-        });
+    const auto translate = [this, heading, uriLabel, metaScrollArea] {
+        heading->setText(qtr("Media information"));
+        infoTabW->setTabText(META_PANEL, qtr("&General"));
+        infoTabW->setTabText(EXTRAMETA_PANEL, qtr("&Metadata"));
+        infoTabW->setTabText(INFO_PANEL, qtr("Co&dec"));
+        if (ISP) infoTabW->setTabText(INPUTSTATS_PANEL, qtr("S&tatistics"));
+        saveMetaButton->setText(qtr("&Save"));
+        uriLabel->setText(qtr("Location:"));
+        metaScrollArea->setAccessibleName(qtr("General"));
+        updateButtons();
+    };
+    translate();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, translate);
 
     applyRedesignWidgetTheme(this, p_intf->p_mi);
-    restoreWidgetPosition( "Mediainfo", QSize( 720 , 720 ) );
+    const auto scaleLayout = [this, layout, locationLayout, actions] {
+        const auto dp = [this](int value) { return qRound(value * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.)); };
+        layout->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
+        layout->setSpacing(dp(16));
+        locationLayout->setSpacing(dp(8));
+        actions->setSpacing(dp(8));
+        uriLine->setFixedHeight(dp(37));
+        for (auto *button : {saveMetaButton, closeButton})
+        {
+            button->setFixedHeight(dp(32));
+            button->setMinimumWidth(dp(100));
+        }
+        for (auto *panel : {static_cast<QWidget *>(EMP), static_cast<QWidget *>(IP), static_cast<QWidget *>(ISP)})
+            if (panel && panel->layout()) panel->layout()->setContentsMargins(0, dp(16), 0, 0);
+    };
+    scaleLayout();
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, scaleLayout);
+    const double factor = p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.;
+    QSize initial(qRound(760 * factor), qRound(860 * factor));
+    if (screen()) initial = initial.boundedTo(screen()->availableGeometry().size() - QSize(32, 32));
+    restoreWidgetPosition( "Mediainfo", initial );
 }
 
 MediaInfoDialog::~MediaInfoDialog()
@@ -174,6 +223,7 @@ void MediaInfoDialog::showTab( panel i_tab = META_PANEL )
             clearAllTabs();
     }
     infoTabW->setCurrentIndex( i_tab );
+    updateButtons();
     show();
 }
 
@@ -184,16 +234,14 @@ int MediaInfoDialog::currentTab()
 
 void MediaInfoDialog::saveMeta()
 {
-    bool success = MP->saveMeta();
-    if (success)
-        saveMetaButton->hide();
+    if (MP->isInEditMode()) MP->saveMeta();
+    updateButtons();
 }
 
 void MediaInfoDialog::updateAllTabs( const SharedInputItem& p_item )
 {
-    if (! p_item)
-        return;
-
+    if (!p_item || MP->isInEditMode()) return;
+    displayedInput = p_item;
     IP->update( p_item.get() );
     MP->update( p_item );
     EMP->update( p_item.get() );
@@ -203,6 +251,8 @@ void MediaInfoDialog::updateAllTabs( const SharedInputItem& p_item )
 
 void MediaInfoDialog::clearAllTabs()
 {
+    if (MP->isInEditMode()) return;
+    displayedInput.reset();
     IP->clear();
     MP->clear();
     EMP->clear();
@@ -220,16 +270,69 @@ void MediaInfoDialog::close()
 void MediaInfoDialog::hideEvent( QHideEvent *event )
 {
     MP->discardEdits();
-    updateButtons( infoTabW->currentIndex() );
+    updateButtons();
     QVLCFrame::hideEvent( event );
 }
 
-void MediaInfoDialog::updateButtons( int i_tab )
+void MediaInfoDialog::refreshCurrentInput()
 {
-    if( MP->isInEditMode() && i_tab == 0 )
-        saveMetaButton->show();
-    else
-        saveMetaButton->hide();
+    if (!isMainInputInfo || MP->isInEditMode()) return;
+    const SharedInputItem input { THEMIM->getInput() };
+    if (input) updateAllTabs(input);
+    else clearAllTabs();
+}
+
+void MediaInfoDialog::updateButtons()
+{
+    const bool editing = MP->isInEditMode();
+    const bool pendingInput = isMainInputInfo && displayedInput.get() != THEMIM->getInput();
+    saveMetaButton->setEnabled(editing);
+    saveMetaButton->setDefault(editing);
+    closeButton->setText(editing ? qtr("&Cancel") : qtr("&Close"));
+    closeButton->setDefault(!editing);
+    const auto help = !displayedInput ? qtr("Open a file to view its information.")
+        : pendingInput ? qtr("Save or cancel these changes to show the current media.")
+        : editing ? qtr("Changes are not saved.") : QString();
+    editingStatus->setText(!displayedInput ? qtr("No media")
+        : !editing ? QString() : pendingInput ? qtr("Previous media") : qtr("Not saved"));
+    editingStatus->setToolTip(help);
+    editingStatus->setAccessibleDescription(help);
+    setWindowTitle(isMainInputInfo && !pendingInput ? qtr("Current Media Information") : qtr("Media Information"));
+}
+
+bool MediaInfoDialog::event( QEvent *event )
+{
+    // The main interface has an application-wide Ctrl+S streaming shortcut.
+    // Let this editor own the platform's Save key while its window has focus.
+    if (event->type() == QEvent::ShortcutOverride
+        && static_cast<QKeyEvent *>(event)->matches(QKeySequence::Save))
+    {
+        event->accept();
+        return true;
+    }
+    return QVLCFrame::event(event);
+}
+
+void MediaInfoDialog::keyPressEvent( QKeyEvent *event )
+{
+    if (event->matches(QKeySequence::Save))
+    {
+        saveMeta();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+    {
+        if (auto *button = qobject_cast<QPushButton *>(focusWidget()); button && button->isEnabled())
+            button->click();
+        else if (MP->isInEditMode())
+            saveMeta();
+        else
+            close();
+        event->accept();
+        return;
+    }
+    QVLCFrame::keyPressEvent(event);
 }
 
 void MediaInfoDialog::updateURI( const QString& uri )

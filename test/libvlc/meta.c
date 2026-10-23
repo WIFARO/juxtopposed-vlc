@@ -27,18 +27,14 @@
 #include "media_utils.h"
 
 #include <vlc_modules.h>
+#include <vlc_fs.h>
 #ifdef __linux__
 # include <sys/resource.h>
 #endif
 
-#ifdef __linux__
-static void test_write_failure(libvlc_instance_t *vlc)
+static void copy_file(const char *source_path, const char *path)
 {
-    char directory[] = "meta-write-XXXXXX";
-    assert(mkdtemp(directory) != NULL);
-    char path[sizeof(directory) + sizeof("/copy.mp3")];
-    snprintf(path, sizeof(path), "%s/copy.mp3", directory);
-    FILE *source = fopen(SRCDIR "/samples/meta.mp3", "rb");
+    FILE *source = fopen(source_path, "rb");
     FILE *destination = fopen(path, "wb");
     assert(source && destination);
     char block[4096];
@@ -48,6 +44,88 @@ static void test_write_failure(libvlc_instance_t *vlc)
     assert(!ferror(source));
     assert(fclose(source) == 0);
     assert(fclose(destination) == 0);
+}
+
+static libvlc_media_t *open_parsed(libvlc_instance_t *vlc, const char *path)
+{
+    libvlc_media_t *media = libvlc_media_new_path(path);
+    assert(media);
+    libvlc_media_parse_sync(vlc, media, libvlc_media_parse, -1);
+    return media;
+}
+
+static void check_meta(libvlc_media_t *media, libvlc_meta_t type,
+                       const char *expected)
+{
+    char *value = libvlc_media_get_meta(media, type);
+    if (expected)
+        assert(value && !strcmp(value, expected));
+    else
+        assert(!value || !*value);
+    free(value);
+}
+
+static void test_dates(libvlc_instance_t *vlc, const char *path)
+{
+    test_log("Testing complete date round trips in %s\n", path);
+    libvlc_media_t *media = open_parsed(vlc, path);
+    libvlc_media_set_meta(media, libvlc_meta_Date, "2026-10-23");
+    assert(libvlc_media_save_meta(vlc, media));
+    libvlc_media_release(media);
+
+    media = open_parsed(vlc, path);
+    check_meta(media, libvlc_meta_Date, "2026-10-23");
+    libvlc_media_set_meta(media, libvlc_meta_Title, "saved title");
+    assert(libvlc_media_save_meta(vlc, media));
+    libvlc_media_release(media);
+
+    media = open_parsed(vlc, path);
+    check_meta(media, libvlc_meta_Date, "2026-10-23");
+    check_meta(media, libvlc_meta_Title, "saved title");
+    libvlc_media_set_meta(media, libvlc_meta_Date, "2025-12-31");
+    assert(libvlc_media_save_meta(vlc, media));
+    libvlc_media_release(media);
+
+    media = open_parsed(vlc, path);
+    check_meta(media, libvlc_meta_Date, "2025-12-31");
+    libvlc_media_set_meta(media, libvlc_meta_Date, "1999");
+    assert(libvlc_media_save_meta(vlc, media));
+    libvlc_media_release(media);
+
+    media = open_parsed(vlc, path);
+    check_meta(media, libvlc_meta_Date, "1999");
+    libvlc_media_set_meta(media, libvlc_meta_Date, "");
+    assert(libvlc_media_save_meta(vlc, media));
+    libvlc_media_release(media);
+
+    media = open_parsed(vlc, path);
+    check_meta(media, libvlc_meta_Date, NULL);
+    check_meta(media, libvlc_meta_Title, "saved title");
+    libvlc_media_release(media);
+}
+
+static void test_date_roundtrip(libvlc_instance_t *vlc)
+{
+    char temporary[] = "meta-date-XXXXXX";
+    int fd = vlc_mkstemp(temporary);
+    assert(fd >= 0);
+    assert(close(fd) == 0);
+    char path[sizeof(temporary) + sizeof(".mp3")];
+    snprintf(path, sizeof(path), "%s.mp3", temporary);
+    assert(rename(temporary, path) == 0);
+    copy_file(SRCDIR "/samples/meta.mp3", path);
+    test_dates(vlc, path);
+    assert(unlink(path) == 0);
+}
+
+#ifdef __linux__
+static void test_write_failure(libvlc_instance_t *vlc)
+{
+    char directory[] = "meta-write-XXXXXX";
+    assert(mkdtemp(directory) != NULL);
+    char path[sizeof(directory) + sizeof("/copy.mp3")];
+    snprintf(path, sizeof(path), "%s/copy.mp3", directory);
+    copy_file(SRCDIR "/samples/meta.mp3", path);
 
     libvlc_media_t *media = libvlc_media_new_path(path);
     assert(media);
@@ -118,6 +196,7 @@ static int test_meta (const char ** argv, int argc)
 
     free (artist);
     libvlc_media_release (media);
+    test_date_roundtrip(vlc);
 #ifdef __linux__
     test_write_failure(vlc);
 #endif

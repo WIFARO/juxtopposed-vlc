@@ -34,7 +34,11 @@
 
 #include <vlc_common.h>
 #include <QWidget>
+#include <QVector>
+#include <QPair>
 
+class QGridLayout;
+class QResizeEvent;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QTableWidget;
@@ -59,8 +63,17 @@ public:
 private:
     SharedInputItem p_input;
     qt_intf_t *p_intf;
-    bool b_inEditMode;
+    bool b_inEditMode = false;
+    QGridLayout *metaLayout;
+    QVector<QPair<QWidget *, QWidget *>> fieldRows;
+    QWidget *commentsBlock;
+    QPushButton *changeCoverButton;
+    void updateLayout();
 
+protected:
+    void resizeEvent( QResizeEvent * ) override;
+
+private:
     QLineEdit *title_text;
     QLineEdit *artist_text;
     QLineEdit *genre_text;
@@ -92,7 +105,7 @@ private slots:
 
 signals:
     void uriSet( const QString& );
-    void editing();
+    void editModeChanged( bool );
 };
 
 class ExtraMetaPanel: public QWidget

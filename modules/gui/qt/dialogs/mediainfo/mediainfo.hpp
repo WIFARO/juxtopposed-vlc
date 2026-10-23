@@ -54,10 +54,14 @@ public:
 
 protected:
     void hideEvent( QHideEvent * ) override;
+    void keyPressEvent( QKeyEvent * ) override;
+    bool event( QEvent * ) override;
 
 private:
     void cancel() override { close(); }
     bool isMainInputInfo;
+    SharedInputItem displayedInput;
+    void refreshCurrentInput();
 
     QTabWidget *infoTabW;
 
@@ -67,6 +71,8 @@ private:
     ExtraMetaPanel *EMP;
 
     QPushButton *saveMetaButton;
+    QPushButton *closeButton;
+    QLabel *editingStatus;
     QLineEdit   *uriLine;
 
 private slots:
@@ -76,7 +82,7 @@ private slots:
     void close() override;
 
     void saveMeta();
-    void updateButtons( int i_tab );
+    void updateButtons();
     void updateURI( const QString& );
 };
 

@@ -29,6 +29,7 @@
 #include "qt.hpp"
 #include "info_panels.hpp"
 #include "player/player_controller.hpp"
+#include "maininterface/mainctx.hpp"
 #include "widgets/native/interface_widgets.hpp"
 #include "info_widgets.hpp"
 #include "dialogs/fingerprint/fingerprintdialog.hpp"
@@ -47,6 +48,9 @@
 #include <QHeaderView>
 #include <QStringList>
 #include <QGridLayout>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QResizeEvent>
 #include <QLineEdit>
 #include <QLabel>
 #include <QTextEdit>
@@ -79,128 +83,145 @@ MetaPanel::MetaPanel( QWidget *parent,
                       qt_intf_t *_p_intf )
                       : QWidget( parent ), p_intf( _p_intf )
 {
-    QGridLayout *metaLayout = new QGridLayout( this );
-    metaLayout->setVerticalSpacing( 0 );
+    setObjectName( "metadataForm" );
+    metaLayout = new QGridLayout( this );
+    const auto addField = [this](const char *source, const char *name, QLineEdit *&field) {
+        auto *block = new QWidget( this );
+        auto *layout = new QVBoxLayout( block );
+        layout->setContentsMargins( 0, 0, 0, 0 );
+        auto *label = translatedLabel( source, block );
+        field = new QLineEdit( block );
+        field->setObjectName( QLatin1String(name) );
+        label->setBuddy( field );
+        label->setWordWrap( true );
+        layout->addWidget( label );
+        layout->addWidget( field );
+        connect( field, &QLineEdit::textEdited, this, &MetaPanel::enterEditMode );
+        return block;
+    };
+    const auto field = [&](vlc_meta_type_t type, const char *name, QLineEdit *&edit) {
+        return addField(vlc_meta_TypeToString(type), name, edit);
+    };
+    auto *title = field( vlc_meta_Title, "metadataTitle", title_text );
+    auto *artist = field( vlc_meta_Artist, "metadataArtist", artist_text );
+    auto *album = field( vlc_meta_Album, "metadataAlbum", collection_text );
+    auto *date = field( vlc_meta_Date, "metadataDate", date_text );
+    // Tags can contain a year or a full release date. A year mask loses data
+    // even when the user only changes a different field.
+    auto *genre = field( vlc_meta_Genre, "metadataGenre", genre_text );
 
-    QFont smallFont = QApplication::font();
-    smallFont.setPointSize( smallFont.pointSize() - 1 );
-    smallFont.setBold( true );
-
-    int line = 0; /* Counter for GridLayout */
-    p_input = NULL;
-    QLabel *label;
-
-#define ADD_META( type, widget, col, colspan ) {                           \
-    label = translatedLabel( vlc_meta_TypeToString( type ), this );        \
-    label->setFont( smallFont );                                          \
-    label->setContentsMargins( 3, 2, 0, 0 );                              \
-    metaLayout->addWidget( label, line++, col, 1, colspan );              \
-    widget = new QLineEdit;                                               \
-    metaLayout->addWidget( widget, line, col, 1, colspan );               \
-    connect( widget, &QLineEdit::textEdited, this, &MetaPanel::enterEditMode );      \
-}
-
-    /* Title, artist and album*/
-    ADD_META( vlc_meta_Title, title_text, 0, 10 ); line++;
-    ADD_META( vlc_meta_Artist, artist_text, 0, 10 ); line++;
-    ADD_META( vlc_meta_Album, collection_text, 0, 7 );
-
-    /* Date */
-    label = translatedLabel( vlc_meta_TypeToString( vlc_meta_Date ), this );
-    label->setFont( smallFont ); label->setContentsMargins( 3, 2, 0, 0 );
-    metaLayout->addWidget( label, line - 1, 7, 1, 2 );
-
-    /* Date (Should be in years) */
-    date_text = new QLineEdit;
-    date_text->setAlignment( Qt::AlignRight );
-    date_text->setInputMask("0000");
-    date_text->setMaximumWidth( 140 );
-    metaLayout->addWidget( date_text, line, 7, 1, -1 );
-    line++;
-
-    /* Genre Name */
-    /* TODO List id3genres.h is not includable yet ? */
-    ADD_META( vlc_meta_Genre, genre_text, 0, 7 );
-
-    /* Number - on the same line */
-    label = translatedLabel( vlc_meta_TypeToString( vlc_meta_TrackNumber ), this );
-    label->setFont( smallFont ); label->setContentsMargins( 3, 2, 0, 0 );
-    metaLayout->addWidget( label, line - 1, 7, 1, 3  );
-
-    seqnum_text = new QLineEdit;
-    seqnum_text->setMaximumWidth( 64 );
-    seqnum_text->setAlignment( Qt::AlignRight );
-    metaLayout->addWidget( seqnum_text, line, 7, 1, 1 );
-
-    label = new QLabel( "/" ); label->setFont( smallFont );
-    metaLayout->addWidget( label, line, 8, 1, 1 );
-
-    seqtot_text = new QLineEdit;
-    seqtot_text->setMaximumWidth( 64 );
-    seqtot_text->setAlignment( Qt::AlignRight );
-    metaLayout->addWidget( seqtot_text, line, 9, 1, 1 );
-    line++;
-
-    /* Now Playing - Useful for live feeds (HTTP, DVB, ETC...) */
-    ADD_META( vlc_meta_NowPlaying, nowplaying_text, 0, 7 );
-    nowplaying_text->setReadOnly( true ); line--;
-
-    /* Language on the same line */
-    ADD_META( vlc_meta_Language, language_text, 7, -1 ); line++;
-    ADD_META( vlc_meta_Publisher, publisher_text, 0, 7 );
-
-    /* Fingerprint button on the same line */
-    fingerprintButton = new QPushButton( qtr("&Fingerprint") );
-    fingerprintButton->setToolTip( qtr( "Find meta data using audio fingerprinting" ) );
-    fingerprintButton->setEnabled( false );
-    metaLayout->addWidget( fingerprintButton, line++, 7 , 1, -1, Qt::AlignCenter );
-    connect( fingerprintButton, &QPushButton::clicked, this, &MetaPanel::fingerprint );
-
-    /* ART_URL */
-    art_cover = new CoverArtLabel( this, p_intf );
-    metaLayout->addWidget( art_cover, line, 7, 6, 3, Qt::AlignCenter );
-    connect( art_cover, &CoverArtLabel::editing, this, &MetaPanel::enterEditMode );
-    connect( art_cover, &CoverArtLabel::artSelected, this, [this]( const QString& url ) {
-        currentURL = url;
-    } );
-
-    ADD_META( vlc_meta_Copyright, copyright_text, 0,  7 ); line++;
-
-    fingerprintButton->setMinimumWidth( std::max( fingerprintButton->minimumSizeHint().width(),
-                                                  art_cover->minimumSizeHint().width() ) );
-
-    ADD_META( vlc_meta_EncodedBy, encodedby_text, 0, 7 ); line++;
-
-    label = translatedLabel( N_("Comments"), this ); label->setFont( smallFont );
-    label->setContentsMargins( 3, 2, 0, 0 );
-    metaLayout->addWidget( label, line++, 0, 1, 7 );
-    description_text = new QTextEdit;
-    description_text->setAcceptRichText( false );
-    metaLayout->addWidget( description_text, line, 0, 1, 7 );
-    connect( description_text, &QTextEdit::textChanged, this, &MetaPanel::enterEditMode );
-
-    /* VLC_META_SETTING: Useless */
-    /* ADD_META( TRACKID )  Useless ? */
-    /* ADD_URI - Do not show it, done outside */
-
-    metaLayout->setColumnStretch( 1, 20 );
-    metaLayout->setColumnMinimumWidth ( 1, 80 );
-    metaLayout->setRowStretch( line, 10 );
-#undef ADD_META
-
+    auto *track = new QWidget( this );
+    auto *trackLayout = new QVBoxLayout( track );
+    trackLayout->setContentsMargins( 0, 0, 0, 0 );
+    auto *trackLabel = translatedLabel( vlc_meta_TypeToString(vlc_meta_TrackNumber), track );
+    auto *trackFields = new QHBoxLayout;
+    seqnum_text = new QLineEdit( track );
+    seqnum_text->setObjectName( "metadataTrackNumber" );
+    seqtot_text = new QLineEdit( track );
+    seqtot_text->setObjectName( "metadataTrackTotal" );
+    trackLabel->setBuddy( seqnum_text );
+    trackFields->addWidget( seqnum_text );
+    trackFields->addWidget( new QLabel( QStringLiteral("/"), track ) );
+    trackFields->addWidget( seqtot_text );
+    trackLayout->addWidget( trackLabel );
+    trackLayout->addLayout( trackFields );
     connect( seqnum_text, &QLineEdit::textEdited, this, &MetaPanel::enterEditMode );
     connect( seqtot_text, &QLineEdit::textEdited, this, &MetaPanel::enterEditMode );
 
-    connect( date_text, &QLineEdit::textEdited, this, &MetaPanel::enterEditMode );
-    if (auto* translator = InterfaceTranslator::instance())
-        connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
-            fingerprintButton->setText(qtr("&Fingerprint"));
-            fingerprintButton->setToolTip(qtr("Find meta data using audio fingerprinting"));
-            fingerprintButton->setMinimumWidth(std::max(fingerprintButton->minimumSizeHint().width(),
-                                                       art_cover->minimumSizeHint().width()));
-        });
-    /* We are not yet in Edit Mode */
-    b_inEditMode = false;
+    auto *language = field( vlc_meta_Language, "metadataLanguage", language_text );
+    auto *publisher = field( vlc_meta_Publisher, "metadataPublisher", publisher_text );
+    auto *copyright = field( vlc_meta_Copyright, "metadataCopyright", copyright_text );
+    auto *encodedBy = field( vlc_meta_EncodedBy, "metadataEncodedBy", encodedby_text );
+    auto *nowPlaying = field( vlc_meta_NowPlaying, "metadataNowPlaying", nowplaying_text );
+    nowplaying_text->setReadOnly( true );
+
+    commentsBlock = new QWidget( this );
+    auto *commentsLayout = new QVBoxLayout( commentsBlock );
+    commentsLayout->setContentsMargins( 0, 0, 0, 0 );
+    auto *commentsLabel = translatedLabel( N_("Comments"), commentsBlock );
+    description_text = new QTextEdit( commentsBlock );
+    description_text->setObjectName( "metadataComments" );
+    description_text->setAcceptRichText( false );
+    commentsLabel->setBuddy( description_text );
+    commentsLayout->addWidget( commentsLabel );
+    commentsLayout->addWidget( description_text );
+    connect( description_text, &QTextEdit::textChanged, this, &MetaPanel::enterEditMode );
+
+    auto *cover = new QWidget( this );
+    auto *coverLayout = new QVBoxLayout( cover );
+    coverLayout->setContentsMargins( 0, 0, 0, 0 );
+    coverLayout->addWidget( translatedLabel(N_("Cover art"), cover) );
+    art_cover = new CoverArtLabel( cover, p_intf );
+    art_cover->setObjectName( "metadataCover" );
+    coverLayout->addWidget( art_cover, 0, Qt::AlignHCenter );
+    changeCoverButton = new QPushButton( qtr("Change cover"), cover );
+    changeCoverButton->setObjectName( "metadataChangeCover" );
+    coverLayout->addWidget( changeCoverButton, 0, Qt::AlignHCenter );
+    connect( changeCoverButton, &QPushButton::clicked, art_cover, &CoverArtLabel::setArtFromFile );
+    fingerprintButton = new QPushButton( qtr("Find tags"), cover );
+    fingerprintButton->setObjectName( "metadataFingerprint" );
+    fingerprintButton->setToolTip( qtr("Find tags for this audio file.") );
+    fingerprintButton->setEnabled( false );
+    coverLayout->addWidget( fingerprintButton, 0, Qt::AlignHCenter );
+    coverLayout->addStretch();
+    connect( fingerprintButton, &QPushButton::clicked, this, &MetaPanel::fingerprint );
+    connect( art_cover, &CoverArtLabel::editing, this, &MetaPanel::enterEditMode );
+    connect( art_cover, &CoverArtLabel::artSelected, this, [this](const QString &url) { currentURL = url; } );
+
+    fieldRows = {{title, artist}, {album, date}, {genre, track}, {language, publisher},
+                 {copyright, encodedBy}, {nowPlaying, nullptr}, {commentsBlock, cover}};
+    const auto translate = [this] {
+        seqtot_text->setAccessibleName( qtr(vlc_meta_TypeToString(vlc_meta_TrackTotal)) );
+        changeCoverButton->setText( qtr("Change cover") );
+        fingerprintButton->setText( qtr("Find tags") );
+        fingerprintButton->setToolTip( qtr("Find tags for this audio file.") );
+    };
+    translate();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, translate);
+    if (p_intf->p_mi)
+        connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &MetaPanel::updateLayout);
+    updateLayout();
+    setEnabled( false );
+}
+
+void MetaPanel::resizeEvent( QResizeEvent *event )
+{
+    QWidget::resizeEvent( event );
+    updateLayout();
+}
+
+void MetaPanel::updateLayout()
+{
+    const auto dp = [this](int value) { return qRound(value * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.)); };
+    const bool compact = width() < dp(560);
+    while (auto *item = metaLayout->takeAt(0)) delete item;
+    for (int row = 0; row < metaLayout->rowCount(); ++row) metaLayout->setRowStretch(row, 0);
+    metaLayout->setContentsMargins(0, dp(16), 0, 0);
+    metaLayout->setHorizontalSpacing(dp(16));
+    metaLayout->setVerticalSpacing(dp(16));
+    metaLayout->setColumnStretch(0, compact ? 1 : 3);
+    metaLayout->setColumnStretch(1, compact ? 0 : 2);
+    int row = 0;
+    for (const auto &fields : fieldRows)
+    {
+        if (!fields.first->isHidden())
+        {
+            metaLayout->addWidget(fields.first, row, 0, 1, compact || !fields.second ? 2 : 1);
+            if (fields.first == commentsBlock) metaLayout->setRowStretch(row, 1);
+            if (compact || !fields.second) ++row;
+        }
+        if (fields.second) metaLayout->addWidget(fields.second, row++, compact ? 0 : 1, 1, compact ? 2 : 1);
+    }
+    for (auto *layout : findChildren<QLayout *>())
+        if (layout != metaLayout) layout->setSpacing(dp(6));
+    for (auto *edit : findChildren<QLineEdit *>()) edit->setFixedHeight(dp(37));
+    description_text->setMinimumHeight(dp(120));
+    changeCoverButton->setFixedHeight(dp(32));
+    fingerprintButton->setFixedHeight(dp(32));
+    changeCoverButton->setMinimumWidth(dp(128));
+    fingerprintButton->setMinimumWidth(dp(128));
+
 }
 
 /**
@@ -219,6 +240,7 @@ void MetaPanel::update( const SharedInputItem& p_item )
     /* Don't update if you are in edit mode */
     if( b_inEditMode ) return;
     p_input = p_item;
+    setEnabled( true );
 
     char *psz_meta;
 #define UPDATE_META( meta, widget ) {                                   \
@@ -255,7 +277,9 @@ void MetaPanel::update( const SharedInputItem& p_item )
     UPDATE_META( Copyright, copyright_text );
     UPDATE_META( Album, collection_text );
     disconnect( description_text, &QTextEdit::textChanged, this, &MetaPanel::enterEditMode );
-    UPDATE_META( Description, description_text );
+    psz_meta = input_item_GetDescription( inputItem );
+    description_text->setPlainText( !EMPTY_STR(psz_meta) ? qfu(psz_meta) : QString() );
+    free( psz_meta );
     connect( description_text, &QTextEdit::textChanged, this, &MetaPanel::enterEditMode );
     UPDATE_META( Language, language_text );
     UPDATE_META( Publisher, publisher_text );
@@ -272,6 +296,8 @@ void MetaPanel::update( const SharedInputItem& p_item )
     else
         nowplaying_text->clear();
     free( psz_meta );
+    nowplaying_text->parentWidget()->setVisible( !nowplaying_text->text().isEmpty() );
+    updateLayout();
 
 #undef UPDATE_META_INT
 #undef UPDATE_META
@@ -324,11 +350,11 @@ bool MetaPanel::saveMeta()
         return false;
     }
     applyEdits( input );
-    b_inEditMode = false;
     art_cover->setItem( p_input );
     /* Refresh the player controller caches for the currently playing item so
      * the Qt UI sees the new artwork and metadata without reopening. */
     THEMIM->refreshMediaMeta( input );
+    setEditMode( false );
     return true;
 }
 
@@ -349,12 +375,14 @@ void MetaPanel::discardEdits()
         return;
     b_inEditMode = false;
     update( p_input );
+    emit editModeChanged( false );
 }
 
 void MetaPanel::setEditMode( bool b_editing )
 {
+    if( b_inEditMode == b_editing ) return;
     b_inEditMode = b_editing;
-    if( b_editing )emit editing();
+    emit editModeChanged( b_editing );
 }
 
 /*
@@ -363,6 +391,7 @@ void MetaPanel::setEditMode( bool b_editing )
 void MetaPanel::clear()
 {
     p_input.reset();
+    setEnabled( false );
     title_text->clear();
     artist_text->clear();
     genre_text->clear();
@@ -382,6 +411,8 @@ void MetaPanel::clear()
     currentURL.clear();
     fingerprintButton->setEnabled( false );
 
+    nowplaying_text->parentWidget()->hide();
+    updateLayout();
     setEditMode( false );
     emit uriSet( "" );
 }
@@ -407,12 +438,8 @@ ExtraMetaPanel::ExtraMetaPanel( QWidget *parent ) : QWidget( parent )
 {
      QGridLayout *layout = new QGridLayout(this);
 
-     QLabel *topLabel = translatedLabel( N_("Extra metadata and other information"
-                 " are shown in this panel.\n"), this );
-     topLabel->setWordWrap( true );
-     layout->addWidget( topLabel, 0, 0 );
-
      extraMeta = new QTableWidget( this );
+     extraMeta->setAccessibleName( qtr("Metadata") );
      extraMeta->verticalHeader()->hide();
      extraMeta->setAlternatingRowColors( true );
 
@@ -430,10 +457,11 @@ ExtraMetaPanel::ExtraMetaPanel( QWidget *parent ) : QWidget( parent )
      extraMeta->setEditTriggers( QAbstractItemView::NoEditTriggers );
      extraMeta->setSelectionMode( QAbstractItemView::SingleSelection );
 
-     layout->addWidget( extraMeta, 1, 0 );
+     layout->addWidget( extraMeta, 0, 0 );
      if (auto* translator = InterfaceTranslator::instance())
          connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
              extraMeta->setHorizontalHeaderLabels({qtr("Property"), qtr("Value")});
+             extraMeta->setAccessibleName(qtr("Metadata"));
          });
 }
 
@@ -513,7 +541,7 @@ void ExtraMetaPanel::update( input_item_t *p_item )
  **/
 void ExtraMetaPanel::clear()
 {
-    extraMeta->clear();
+    extraMeta->setRowCount(0);
 }
 
 /**
@@ -524,17 +552,16 @@ InfoPanel::InfoPanel( QWidget *parent ) : QWidget( parent )
 {
      QGridLayout *layout = new QGridLayout(this);
 
-     QLabel *topLabel = translatedLabel( N_("Information about what your media or"
-              " stream is made of.\nMuxer, Audio and Video Codecs, Subtitles "
-              "are shown."), this );
-     topLabel->setWordWrap( true );
-     layout->addWidget( topLabel, 0, 0 );
-
      InfoTree = new QTreeWidget(this);
+     InfoTree->setAccessibleName( qtr("Codec") );
      InfoTree->setColumnCount( 1 );
      InfoTree->header()->hide();
      InfoTree->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
-     layout->addWidget(InfoTree, 1, 0 );
+     layout->addWidget(InfoTree, 0, 0 );
+     if (auto *translator = InterfaceTranslator::instance())
+         connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
+             InfoTree->setAccessibleName(qtr("Codec"));
+         });
 }
 
 /**

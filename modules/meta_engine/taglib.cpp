@@ -61,6 +61,7 @@
 
 #include <fileref.h>
 #include <tag.h>
+#include <tpropertymap.h>
 #include <tbytevector.h>
 
 /* Support for stream-based metadata */
@@ -506,6 +507,9 @@ static void ReadMetaFromASF( ASF::Tag* tag, demux_meta_t* p_demux_meta, vlc_meta
         vlc_meta_SetExtra( p_meta, metaName, list.front().toString().toCString( true ) ); \
     }
 
+    SET("WM/Year", Date );
+    if (EMPTY_STR(vlc_meta_Get(p_meta, vlc_meta_Date))) { SET("date", Date ); }
+    if (EMPTY_STR(vlc_meta_Get(p_meta, vlc_meta_Description))) { SET("Description", Description ); }
     SET("MusicBrainz/Track Id", TrackID );
     SET_EXTRA("MusicBrainz/Album Id", VLC_META_EXTRA_MB_ALBUMID );
 
@@ -934,6 +938,16 @@ static bool isSchemeCompatible( const char *psz_uri )
     return false;
 }
 
+// Tag::year() only exposes the year. The property interface retains the
+// full recording/release date in formats such as ID3v2 and MP4.
+static void ReadDateProperty( const TagLib::File *file, vlc_meta_t *meta )
+{
+    const auto properties = file->properties();
+    const auto date = properties.find("DATE");
+    if (date != properties.end() && !date->second.isEmpty())
+        vlc_meta_SetDate(meta, date->second.front().toCString(true));
+}
+
 static int ReadWAVMeta( const RIFF::WAV::File *wav, demux_meta_t *demux_meta )
 {
     if( !wav->hasID3v2Tag() && !wav->hasInfoTag() )
@@ -953,6 +967,24 @@ static int ReadWAVMeta( const RIFF::WAV::File *wav, demux_meta_t *demux_meta )
         ReadMetaFromBasicTag( wav->ID3v2Tag(), demux_meta->p_meta );
         ReadMetaFromId3v2( wav->ID3v2Tag(), demux_meta, demux_meta->p_meta );
     }
+    // Older TagLib versions export ICRD through the year-only getter.
+    // Prefer the modern ID3 date when both tag formats are present.
+    String date;
+    if (wav->hasInfoTag()) date = wav->InfoTag()->fieldText("ICRD");
+    if (wav->hasID3v2Tag())
+    {
+        const auto properties = wav->ID3v2Tag()->properties();
+        const auto id3Date = properties.find("DATE");
+        if (id3Date != properties.end() && !id3Date->second.isEmpty())
+        {
+            const auto &modern = id3Date->second.front();
+            // A legacy save can leave only a year in ID3 while INFO retains
+            // the full date for that same year. Keep its extra precision.
+            if (modern.size() != 4 || date.size() <= 4 || date.substr(0, 4) != modern)
+                date = modern;
+        }
+    }
+    if (!date.isEmpty()) vlc_meta_SetDate(demux_meta->p_meta, date.toCString(true));
     return VLC_SUCCESS;
 }
 
@@ -1016,6 +1048,7 @@ static int ReadMeta( vlc_object_t* p_this)
 
     // Read the tags from the file
     ReadMetaFromBasicTag(f.tag(), p_meta);
+    ReadDateProperty(f.file(), p_meta);
 
     TAB_INIT( p_demux_meta->i_attachments, p_demux_meta->attachments );
 
@@ -1341,8 +1374,15 @@ static int WriteMeta( vlc_object_t *p_this )
 #undef SET
 
     psz_meta = input_item_GetDate( p_item );
-    if( !EMPTY_STR(psz_meta) ) p_tag->setYear( atoi( psz_meta ) );
-    else p_tag->setYear( 0 );
+    unsigned year = 0;
+    if (!EMPTY_STR(psz_meta) && psz_meta[0] >= '0' && psz_meta[0] <= '9')
+    {
+        errno = 0;
+        const unsigned long value = strtoul(psz_meta, nullptr, 10);
+        if (errno == 0 && value <= std::numeric_limits<unsigned>::max())
+            year = static_cast<unsigned>(value);
+    }
+    p_tag->setYear(year);
     free( psz_meta );
 
     psz_meta = input_item_GetTrackNum( p_item );
@@ -1356,6 +1396,15 @@ static int WriteMeta( vlc_object_t *p_this )
     {
         if( ape->APETag() )
             WriteMetaToAPE( ape->APETag(), p_item );
+    }
+    else if (auto *asf = dynamic_cast<ASF::File *>(f.file()))
+    {
+        // Keep extended aliases used by common encoders in sync with the
+        // standard content-description fields.
+        if (asf->tag()->contains("title"))
+            asf->tag()->setAttribute("title", ASF::Attribute(p_tag->title()));
+        if (asf->tag()->contains("Description"))
+            asf->tag()->setAttribute("Description", ASF::Attribute(p_tag->comment()));
     }
     else
     if( FLAC::File* flac = dynamic_cast<FLAC::File*>(f.file()) )
@@ -1410,6 +1459,59 @@ static int WriteMeta( vlc_object_t *p_this )
     {
         if( wavpack->APETag() )
             WriteMetaToAPE( wavpack->APETag(), p_item );
+    }
+
+    // Restore the complete date after the generic year-only setters. Keep
+    // all other mapped properties and unsupported tag data in place.
+    psz_meta = input_item_GetDate(p_item);
+    if (psz_meta)
+    {
+        auto properties = f.file()->properties();
+        if (*psz_meta)
+            properties.replace("DATE", StringList(String(psz_meta, String::UTF8)));
+        else
+            properties.erase("DATE");
+        const auto unsupported = f.file()->setProperties(properties);
+        bool explicitDate = false;
+        if (auto *asf = dynamic_cast<ASF::File *>(f.file()))
+        {
+            if (*psz_meta)
+            {
+                asf->tag()->setAttribute("WM/Year", ASF::Attribute(String(psz_meta, String::UTF8)));
+                if (asf->tag()->contains("date"))
+                    asf->tag()->setAttribute("date", ASF::Attribute(String(psz_meta, String::UTF8)));
+            }
+            else
+            {
+                asf->tag()->removeItem("WM/Year");
+                asf->tag()->removeItem("date");
+            }
+            explicitDate = true;
+        }
+        // Keep RIFF INFO in sync with ID3v2, including its complete ICRD.
+        // Other players can prefer INFO tags even when ID3v2 is present.
+        if (auto *wav = dynamic_cast<RIFF::WAV::File *>(f.file()); wav && wav->hasInfoTag())
+        {
+            auto *info = wav->InfoTag();
+            info->setTitle(p_tag->title());
+            info->setArtist(p_tag->artist());
+            info->setAlbum(p_tag->album());
+            info->setComment(p_tag->comment());
+            info->setGenre(p_tag->genre());
+            info->setTrack(p_tag->track());
+            info->setFieldText("ICRD", String(psz_meta, String::UTF8));
+            explicitDate = true;
+        }
+        const size_t dateLength = strlen(psz_meta);
+        const bool yearOnly = dateLength == 4 && std::all_of(psz_meta, psz_meta + dateLength,
+            [](unsigned char c) { return c >= '0' && c <= '9'; });
+        const bool unsupportedDate = dateLength && !yearOnly && !explicitDate && unsupported.contains("DATE");
+        free(psz_meta);
+        if (unsupportedDate)
+        {
+            msg_Err(p_this, "This tag format cannot store the complete date");
+            return VLC_EGENERIC;
+        }
     }
 
     // Save the meta data

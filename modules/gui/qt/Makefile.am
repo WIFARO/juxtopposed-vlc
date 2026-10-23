@@ -984,6 +984,7 @@ libqt_plugin_la_RES = \
 	pixmaps/menu/redesign/playback.svg \
 	pixmaps/menu/redesign/video.svg \
 	pixmaps/menu/redesign/audio.svg \
+	pixmaps/menu/redesign/music.svg \
 	pixmaps/menu/redesign/subtitle.svg \
 	pixmaps/menu/redesign/settings.svg \
 	pixmaps/menu/redesign/playlist.svg \

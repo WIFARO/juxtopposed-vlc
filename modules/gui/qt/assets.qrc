@@ -46,6 +46,7 @@
         <file alias="playback.svg">pixmaps/menu/redesign/playback.svg</file>
         <file alias="video.svg">pixmaps/menu/redesign/video.svg</file>
         <file alias="audio.svg">pixmaps/menu/redesign/audio.svg</file>
+        <file alias="music.svg">pixmaps/menu/redesign/music.svg</file>
         <file alias="subtitle.svg">pixmaps/menu/redesign/subtitle.svg</file>
         <file alias="settings.svg">pixmaps/menu/redesign/settings.svg</file>
         <file alias="playlist.svg">pixmaps/menu/redesign/playlist.svg</file>

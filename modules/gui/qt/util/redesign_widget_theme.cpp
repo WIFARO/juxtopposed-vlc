@@ -8,6 +8,7 @@
 #include "color_scheme_model.hpp"
 #include "colorizedsvgicon.hpp"
 #include <QApplication>
+#include <algorithm>
 #include <QStyleHints>
 #include <QWidget>
 #include <QPointer>
@@ -39,6 +40,8 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
         const QString hover = light ? "#d5d5d5" : "#292929";
         const auto accent = ctx->redesignAccent().name();
         const auto dp = [ctx](int value) { return qRound(value * ctx->getIntfScaleFactor()); };
+        // Stylesheet heights exclude padding and the two one-pixel borders.
+        const int mediaInfoButtonContentHeight = std::max(0, dp(32) - 2 * dp(6) - 2);
         QPalette colors = widget->palette();
         colors.setColor(QPalette::Window, QColor(background));
         colors.setColor(QPalette::WindowText, QColor(foreground));
@@ -79,6 +82,12 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QWidget[redesignDialog=\"true\"], QDialog, QTabWidget::pane { background: %3; border: none; }"
             "QWidget#aboutWidget QFrame#footer { background: %4; }"
             "QWidget#aboutWidget QLabel#title { color: %5; }"
+            "QLabel#metadataCover { background: %4; color: %2; border-radius: %16px; }"
+            "QLabel[redesignHeading=\"true\"] { color: %5; font-size: %13px; }"
+            "QWidget#redesignMediaInfo QTabBar::tab { padding: %14px %15px; }"
+            "QWidget#redesignMediaInfo QLineEdit, QWidget#redesignMediaInfo QTextEdit, QWidget#redesignMediaInfo QPushButton { border-radius: %16px; }"
+            "QWidget#redesignMediaInfo QLineEdit:read-only { background: %3; color: %2; }"
+            "QWidget#redesignMediaInfo QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; }"
             "QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QAbstractSpinBox, QAbstractItemView { background: %4; alternate-background-color: %3; color: %5; border: 1px solid %6; border-radius: 4px; padding: 5px; selection-background-color: %7; selection-color: #161616; }"
             "QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QAbstractSpinBox:focus { border-color: %7; }"
             "QAbstractSpinBox { min-height: %9px; }"
@@ -106,7 +115,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QPushButton:pressed { background: %7; color: #161616; }"
             "QPushButton#saveMetadataButton, QPushButton[redesignPrimary=\"true\"] { background: %7; color: #161616; }"
             "QPushButton#saveMetadataButton:hover { border-color: %5; }"
-            "QPushButton[redesignPrimary=\"true\"]:disabled { background: %8; color: %2; }"
+            "QPushButton#saveMetadataButton:disabled, QPushButton[redesignPrimary=\"true\"]:disabled { background: %8; color: %2; }"
             "QWidget:disabled { color: %6; }"
             "QTabBar::tab { background: %4; padding: 10px 16px; border-bottom: 2px solid transparent; }"
             "QTabBar::tab:selected { color: %5; border-bottom-color: %7; }"
@@ -124,7 +133,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }"
             "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }")
             .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover)
-            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark"));
+            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(mediaInfoButtonContentHeight));
     };
     applyTheme();
     if (ctx) {

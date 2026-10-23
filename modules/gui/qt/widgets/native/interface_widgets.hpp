@@ -32,6 +32,7 @@
 #include "util/shared_input_item.hpp"
 
 #include <QLabel>
+#include <QPixmap>
 
 class QWidget;
 class QMouseEvent;
@@ -50,10 +51,13 @@ public:
 
 protected:
     void mouseDoubleClickEvent( QMouseEvent *event ) override;
+    void paintEvent( QPaintEvent *event ) override;
 
 private:
     qt_intf_t *p_intf;
     SharedInputItem p_item;
+    QPixmap artwork;
+    QString selectedArtPath;
 
     void showArtUpdate( const QString& );
     void showArtUpdate( );
