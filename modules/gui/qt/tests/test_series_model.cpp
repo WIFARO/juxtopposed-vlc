@@ -75,6 +75,21 @@ private slots:
         QVERIFY(model.get(0).value("current").toBool());
         model.setSelectedSeason(1); QVERIFY(!model.get(0).value("current").toBool());
     }
+    void refreshRetriesPartialScansWithTheLargerScope() {
+        QTemporaryDir base;
+        const auto current = QUrl::fromLocalFile(base.path() + "/Show.S01E01.mkv");
+        const auto deep = base.path() + "/a/b/c/d/e/Show.S01E02.mkv";
+        QVERIFY(QDir().mkpath(QFileInfo(deep).absolutePath()));
+        for (const auto& path : {current.toLocalFile(), deep}) {
+            QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly));
+        }
+        SeriesModel model; model.setCurrent(current, {});
+        QTRY_VERIFY(!model.loading()); QVERIFY(model.limited()); QCOMPARE(model.rowCount(), 1);
+        model.refresh();
+        QTRY_VERIFY(!model.loading()); QVERIFY(!model.limited()); QCOMPARE(model.rowCount(), 2);
+        model.refresh();
+        QTRY_VERIFY(!model.loading()); QCOMPARE(model.rowCount(), 2);
+    }
     void destructionDuringScanIsSafe() {
         QTemporaryDir base;
         const auto url = QUrl::fromLocalFile(base.path() + "/Show.S01E01.mkv");

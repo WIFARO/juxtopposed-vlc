@@ -52,7 +52,6 @@ public:
     QHash<int, QByteArray> roleNames() const override;
     Q_INVOKABLE void setCurrent(const QUrl& url, const QVariantMap& metadata);
     Q_INVOKABLE void refresh(const QUrl& folder = {});
-    Q_INVOKABLE void searchFurther();
     Q_INVOKABLE void setFeedEpisodes(const QUrl& feed, const QVariantList& episodes);
     Q_INVOKABLE void setFeedStatus(bool loading, bool failed);
     Q_INVOKABLE void setProgress(const QUrl& url, qreal progress);
@@ -80,6 +79,7 @@ private:
     };
     struct State { qreal progress = 0; bool played = false; QString artwork; };
     void cancel();
+    void scan(const QUrl& folder = {});
     void project(bool resetting = false);
     void publish(const SeriesDiscovery::Result& result, bool complete);
     void requestStates();

@@ -17,6 +17,7 @@ T.Button {
     property bool accent: false
     property bool primaryAction: false
     property bool filled: false
+    property real cornerRadius: 6
     property bool selected: false
     property bool highlightSelection: true
     // Media rows use selection on click and a separate activation gesture.
@@ -63,7 +64,7 @@ T.Button {
     }
 
     background: Rectangle {
-        radius: theme.dp(6)
+        radius: theme.dp(root.cornerRadius)
         color: root.primaryAction ? !root.enabled ? theme.hover : root.hovered ? theme.hover : theme.progress
             : root.accent ? theme.accent : (root.down || (root.selected && root.highlightSelection)) ? theme.selected : root.hovered ? theme.hover : root.filled ? theme.background : "transparent"
         border.width: root.visualFocus ? theme.dp(root.primaryAction ? 1 : 2) : 0

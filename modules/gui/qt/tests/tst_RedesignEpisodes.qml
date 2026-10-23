@@ -25,6 +25,7 @@ TestCase {
     SignalSpy { id: played; target: view; signalName: "episodeRequested" }
     SignalSpy { id: season; target: view; signalName: "seasonRequested" }
     SignalSpy { id: closed; target: view; signalName: "closeRequested" }
+    SignalSpy { id: refreshed; target: view; signalName: "refreshRequested" }
     function item(name) { return findChild(view, name) }
     function init() {
         view.showingSeasons = false; view.expandedKey = ""; view.loading = false
@@ -35,7 +36,7 @@ TestCase {
             description: "Episode notes", thumbnail: "", urls: ["file:///Show.S123E01.mkv"], feedIndex: -1})
         rows.append({title: "Episode 2", number: "2", current: false, progress: .25, played: false,
             description: "", thumbnail: "", urls: ["file:///Show.S123E02.mkv"], feedIndex: -1})
-        played.clear(); season.clear(); closed.clear(); wait(30)
+        played.clear(); season.clear(); closed.clear(); refreshed.clear(); wait(30)
     }
     function test_currentEpisodeExpandsAndRestartIsExplicit() {
         verify(item("episodeRow_0").expanded)
@@ -65,11 +66,42 @@ TestCase {
         verify(!view.showingSeasons); compare(closed.count, 0)
         keyClick(Qt.Key_Escape); compare(closed.count, 1)
     }
+    function test_titleAndSeasonLabelsShareTheCaretButton() {
+        mouseClick(item("episodeShowTitle"))
+        verify(view.showingSeasons)
+        mouseClick(item("episodeSeasonsButton"))
+        verify(!view.showingSeasons)
+        mouseClick(item("episodeSeasonLabel"))
+        verify(view.showingSeasons)
+    }
+    function test_squareHighlightsAndRowsWithoutDividers() {
+        view.expandedKey = "collapsed"
+        rows.values = rows.values.map(row => Object.assign({}, row, {progress: 0}))
+        wait(30)
+        const first = item("episodeTitle_0"), second = item("episodeTitle_1")
+        compare(first.background.radius, 0)
+        mouseMove(second)
+        tryCompare(second, "hovered", true)
+        compare(second.background.radius, 0)
+        compare(item("episodeRow_0").height, first.height)
+        compare(item("episodeRow_1").height, second.height)
+        const end = first.mapToItem(view, 0, first.height)
+        compare(second.mapToItem(view, 0, 0).y, end.y)
+    }
+    function test_refreshRemainsInOptionsForPartialScans() {
+        view.limited = true
+        compare(item("episodeSearchFurther"), null)
+        mouseClick(item("episodeOptionsButton"))
+        const refresh = item("libraryAction_refresh")
+        verify(refresh !== null)
+        mouseClick(refresh)
+        compare(refreshed.count, 1)
+    }
     function test_narrowScaledLayoutAndPartialState() {
         view.width = 300; view.scaleFactor = 1.25; view.lightTheme = true
         view.limited = true
         wait(30)
-        verify(item("episodeSearchFurther").visible)
+        compare(item("episodeSearchFurther"), null)
         verify(item("episodeList").width <= view.width)
         verify(item("episodeRestart_0").width > 0)
     }

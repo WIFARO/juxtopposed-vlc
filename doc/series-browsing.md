@@ -3,7 +3,8 @@
 The redesigned player offers an Episodes control when the playing item has a
 recognizable local episode identity or a known podcast feed. It opens at the
 current season, highlights the playing episode, shows saved playback progress,
-and expands episode details. A back button opens the season selector. Specials
+and expands episode details. The caret, show title and season label share one
+button that opens the season selector. Specials
 use season zero; episodes without season metadata remain a separate group.
 The control is also available in player toolbar customization. Existing saved
 toolbar layouts retain their controls and can add Episodes from the palette.
@@ -42,7 +43,8 @@ are throttled; playback never waits for the scan.
 The initial limits are four levels below the series folder, 128 directories,
 16,384 entries in total, 2,048 entries per directory and approximately two seconds
 between filesystem operations. A blocked filesystem call itself cannot be
-interrupted by that elapsed-time limit. Search further raises the depth to eight,
+interrupted by that elapsed-time limit. Refresh after a partial scan also retries
+with a larger search scope, raising the depth to eight,
 the directory count to 256, the total entry count to 32,768 and the elapsed-time
 budget to five seconds. The per-directory limit remains unchanged. Partial
 results remain usable and are labeled. Choose series folder can narrow or correct

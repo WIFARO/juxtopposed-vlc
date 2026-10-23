@@ -593,7 +593,6 @@ FocusScope {
                     if (rootPlayer.seriesFeedUrl) { seriesFeed.setSources([]); seriesFeed.setSources([{mrl: rootPlayer.seriesFeedUrl}]) }
                     else seriesModel.refresh()
                 }
-                onSearchFurtherRequested: seriesModel.searchFurther()
                 onFolderRequested: {
                     const folder = DialogsProvider.selectLibraryFolder(seriesModel.folder)
                     if (folder.toString()) seriesModel.refresh(folder)

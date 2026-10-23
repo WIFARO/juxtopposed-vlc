@@ -11,7 +11,7 @@ SeriesModel::SeriesModel(QObject* parent) : QAbstractListModel(parent), m_result
     }, Qt::QueuedConnection);
     m_refreshTimer.setInterval(300); m_refreshTimer.setSingleShot(true);
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_refreshTimer, qOverload<>(&QTimer::start));
-    connect(&m_refreshTimer, &QTimer::timeout, this, [this] { refresh(); });
+    connect(&m_refreshTimer, &QTimer::timeout, this, [this] { scan(); });
 }
 
 SeriesModel::~SeriesModel() { cancel(); }
@@ -99,10 +99,18 @@ void SeriesModel::setCurrent(const QUrl& url, const QVariantMap& metadata)
     project(true);
     if (!same) emit resetRequested();
     emit contextChanged(); emit statusChanged(); emit selectedSeasonChanged();
-    if (!retained && available() && target.feedUrl.isEmpty()) refresh();
+    if (!retained && available() && target.feedUrl.isEmpty()) scan();
 }
 
 void SeriesModel::refresh(const QUrl& folder)
+{
+    // A manual retry also searches deeper when the previous scan was partial.
+    // Keep the larger bounded scope for subsequent directory updates.
+    if (folder.isEmpty() && m_limited) m_extended = true;
+    scan(folder);
+}
+
+void SeriesModel::scan(const QUrl& folder)
 {
     if (!available() || !feed().isEmpty()) return;
     cancel();
@@ -130,7 +138,6 @@ void SeriesModel::refresh(const QUrl& folder)
         if (!cancelled->load()) emit results->ready(serial, result, true);
     });
 }
-void SeriesModel::searchFurther() { m_extended = true; refresh(); }
 
 void SeriesModel::publish(const SeriesDiscovery::Result& result, bool complete)
 {

@@ -25,7 +25,6 @@ FocusScope {
     signal detailsRequested(int row)
     signal closeRequested()
     signal refreshRequested()
-    signal searchFurtherRequested()
     signal folderRequested()
     Accessible.role: Accessible.Pane
     Accessible.name: qsTr("Episodes")
@@ -59,27 +58,40 @@ FocusScope {
             spacing: theme.dp(4)
             RedesignButton {
                 objectName: "episodeSeasonsButton"
-                visible: !root.showingSeasons && root.seasons.length > 1
+                Layout.fillWidth: true; Layout.preferredHeight: theme.dp(44)
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                iconName: LayoutMirroring.enabled ? "chevron-right" : "chevron-left"
-                text: qsTr("Seasons")
-                onClicked: root.showingSeasons = true
-            }
-            ColumnLayout {
-                Layout.fillWidth: true; spacing: theme.dp(3)
-                Text {
-                    Layout.fillWidth: true
-                    text: root.showTitle || qsTr("Episodes")
-                    textFormat: Text.PlainText; elide: Text.ElideRight
-                    color: theme.foreground; font.pixelSize: theme.dp(16); font.weight: Font.Medium
-                }
-                Text {
-                    Layout.fillWidth: true; visible: !root.showingSeasons
-                    text: root.seasonLabel(root.selectedSeason)
-                    color: theme.playerLabel; font.pixelSize: theme.dp(12)
+                text: [root.showTitle, root.seasonLabel(root.selectedSeason), qsTr("Seasons")].filter(value => !!value).join(", ")
+                enabled: root.seasons.length > 1
+                onClicked: root.showingSeasons = !root.showingSeasons
+                contentItem: RowLayout {
+                    spacing: theme.dp(8)
+                    RedesignIcon {
+                        Layout.leftMargin: theme.dp(4)
+                        Layout.preferredWidth: theme.dp(24); Layout.preferredHeight: theme.dp(24)
+                        visible: root.seasons.length > 1
+                        name: root.showingSeasons ? "chevron-down" : LayoutMirroring.enabled ? "chevron-right" : "chevron-left"
+                        color: theme.foreground
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true; spacing: theme.dp(3)
+                        Text {
+                            objectName: "episodeShowTitle"
+                            Layout.fillWidth: true
+                            text: root.showTitle || qsTr("Episodes")
+                            textFormat: Text.PlainText; elide: Text.ElideRight
+                            color: theme.foreground; font.pixelSize: theme.dp(16); font.weight: Font.Medium
+                        }
+                        Text {
+                            objectName: "episodeSeasonLabel"
+                            Layout.fillWidth: true; visible: !root.showingSeasons
+                            text: root.seasonLabel(root.selectedSeason)
+                            color: theme.playerLabel; font.pixelSize: theme.dp(12)
+                        }
+                    }
                 }
             }
             RedesignButton {
+                objectName: "episodeOptionsButton"
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 iconName: "more"; text: qsTr("Episode options")
                 onClicked: options.toggleFrom(this)
@@ -101,17 +113,9 @@ FocusScope {
         Text {
             Layout.fillWidth: true; Layout.margins: theme.dp(12)
             visible: root.loading || root.message.length > 0 || root.limited
-            text: root.message || (root.loading ? qsTr("Finding episodes…") : qsTr("Showing the episodes found so far. Search further or choose the series folder for more."))
+            text: root.message || (root.loading ? qsTr("Finding episodes…") : qsTr("Some folders could not be fully searched. Refresh to try again, or choose the series folder."))
             color: theme.playerLabel; font.pixelSize: theme.dp(12); wrapMode: Text.WordWrap
             textFormat: Text.PlainText
-        }
-        RedesignButton {
-            objectName: "episodeSearchFurther"
-            Layout.leftMargin: theme.dp(12); Layout.bottomMargin: theme.dp(8)
-            visible: root.limited && !root.loading && !root.podcast
-            scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-            caption: qsTr("Search further"); text: caption
-            onClicked: root.searchFurtherRequested()
         }
         ListView {
             id: seasonList
@@ -127,6 +131,7 @@ FocusScope {
                 objectName: "episodeSeason_" + modelData
                 width: seasonList.width; height: theme.dp(48)
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                cornerRadius: 0
                 text: root.seasonLabel(modelData)
                 selected: modelData === root.currentSeason
                 onClicked: { root.seasonRequested(modelData); root.showingSeasons = false; episodes.forceActiveFocus() }
@@ -154,7 +159,7 @@ FocusScope {
                 required property int index
                 required property var model
                 readonly property var entry: model.modelData || model
-                readonly property bool expanded: root.expandedKey === String(model.urls[0]) || (!root.expandedKey && model.current)
+                readonly property bool expanded: root.expandedKey === String(entry.urls[0]) || (!root.expandedKey && entry.current)
                 property int version: Number(entry.currentVersion || 0)
                 objectName: "episodeRow_" + index
                 function toggle() {
@@ -170,6 +175,7 @@ FocusScope {
                     objectName: "episodeTitle_" + row.index
                     Layout.fillWidth: true; Layout.preferredHeight: theme.dp(60)
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                    cornerRadius: 0
                     text: row.entry.title + (row.entry.current ? ", " + qsTr("Now playing") : "")
                     selected: row.entry.current
                     onClicked: row.toggle()
@@ -190,7 +196,8 @@ FocusScope {
                 }
                 Rectangle {
                     Layout.fillWidth: true; Layout.leftMargin: theme.dp(12); Layout.rightMargin: theme.dp(12)
-                    height: theme.dp(2); color: theme.field
+                    visible: row.entry.progress > 0
+                    height: theme.dp(2); color: "transparent"
                     Rectangle { width: parent.width * Math.max(0, Math.min(1, row.entry.progress)); height: parent.height; color: theme.accent }
                 }
                 ColumnLayout {
@@ -247,7 +254,6 @@ FocusScope {
                         onClicked: root.episodeRequested(row.index, 1, false)
                     }
                 }
-                Rectangle { Layout.fillWidth: true; height: theme.dp(1); color: theme.border }
             }
             Text {
                 anchors.fill: parent; anchors.margins: theme.dp(16)
