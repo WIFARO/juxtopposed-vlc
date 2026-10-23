@@ -359,8 +359,7 @@ void VLMDialog::selectOutput()
     SoutDialog s( parentWindow, p_intf );
     if( s.exec() == QDialog::Accepted )
     {
-        int i = s.getChain().indexOf( " " );
-        ui.outputLedit->setText( s.getChain().left( i ) );
+        ui.outputLedit->setText(QLatin1Char(':') + s.getOptions().value(0));
     }
 }
 

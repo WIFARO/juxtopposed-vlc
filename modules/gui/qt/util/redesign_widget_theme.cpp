@@ -17,6 +17,7 @@
 #include <QAbstractButton>
 #include <QToolTip>
 #include <QFont>
+#include <QWizard>
 
 void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
 {
@@ -89,10 +90,11 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QLabel[redesignValue=\"true\"] { color: %5; }"
             "QWidget#redesignMediaInfo QTabBar::tab { padding: %14px %15px; }"
             "QTreeWidget#codecInformationTree::item { padding: %16px; }"
-            "QWidget#codecInformation QLineEdit, QWidget#extraMetadata QLineEdit, QWidget#redesignPodcasts QLineEdit, QWidget#redesignConvert QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
+            "QWidget#codecInformation QLineEdit, QWidget#extraMetadata QLineEdit, QWidget#redesignPodcasts QLineEdit, QWidget#redesignConvert QLineEdit, QWidget#redesignStream QLineEdit { min-height: %17px; max-height: %17px; padding: %16px %14px; }"
             "QWidget#redesignMediaInfo QLineEdit, QWidget#redesignMediaInfo QTextEdit, QWidget#redesignMediaInfo QPushButton { border-radius: %16px; }"
             "QWidget#redesignMediaInfo QLineEdit:read-only { background: %3; color: %2; }"
-            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton, QWidget#redesignProgramGuide QPushButton, QWidget#redesignPodcasts QPushButton, QWidget#redesignConvert QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
+            "QWidget#redesignMediaInfo QPushButton, QWidget#redesignFingerprint QPushButton, QWidget#redesignProgramGuide QPushButton, QWidget#redesignPodcasts QPushButton, QWidget#redesignConvert QPushButton, QWidget#redesignStream QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
+            "QWidget#redesignStream QFrame[frameShape=\"HLine\"] { border: none; background: %6; min-height: 1px; max-height: 1px; }"
             "QWidget#redesignProgramGuide QPushButton#guideZoomIn, QWidget#redesignProgramGuide QPushButton#guideZoomOut { padding: %16px 0; }"
             "QWidget#redesignPodcasts QListWidget::item { padding: %14px; }"
             "QWidget#redesignFingerprint QListWidget::item { padding: %14px; border-radius: %16px; }"
@@ -145,8 +147,14 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }")
             .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover)
             .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)).arg(dp(16)));
+        // Wizard headers and rulers paint with their palette rather than QSS.
+        if (widget->objectName() == QStringLiteral("redesignStream"))
+            for (auto *child : widget->findChildren<QWidget *>())
+                if (child->metaObject() == &QWidget::staticMetaObject) child->setPalette(colors);
     };
     applyTheme();
+    if (auto *wizard = qobject_cast<QWizard *>(widget))
+        QObject::connect(wizard, &QWizard::currentIdChanged, widget, applyTheme);
     if (ctx) {
         QObject::connect(ctx, &MainCtx::redesignAccentChanged, widget, applyTheme);
         QObject::connect(ctx, &MainCtx::intfScaleFactorChanged, widget, applyTheme);

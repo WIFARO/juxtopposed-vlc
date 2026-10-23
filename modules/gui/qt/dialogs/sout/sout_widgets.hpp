@@ -26,11 +26,27 @@
 #include "qt.hpp"
 
 #include <QGroupBox>
+#include <QWizardPage>
 
 class QLineEdit;
 class QLabel;
 class QSpinBox;
 class QGridLayout;
+
+class SoutWizardPage : public QWizardPage
+{
+public:
+    using QWizardPage::QWizardPage;
+    bool isComplete() const override { return complete; }
+    void setComplete(bool value)
+    {
+        if (complete == value) return;
+        complete = value;
+        emit completeChanged();
+    }
+private:
+    bool complete = true;
+};
 
 class SoutInputBox : public QGroupBox
 {
@@ -39,7 +55,7 @@ class SoutInputBox : public QGroupBox
 
         void setMRL( const QString& );
     private:
-        QLineEdit *sourceLine;
+        QLabel *sourceLine;
         QLabel *sourceValueLabel;
         bool localFileType = false;
 
@@ -51,6 +67,8 @@ class VirtualDestBox : public QWidget
     public:
         VirtualDestBox( QWidget *_parent = NULL );
         virtual QString getMRL( const QString& ) = 0;
+        virtual QString validationError(const QString &mux);
+        virtual QString summary(const QString &mux);
         virtual ~VirtualDestBox();
     protected:
         QString mrl;
@@ -67,6 +85,9 @@ class FileDestBox: public VirtualDestBox
     public:
         FileDestBox( QWidget *_parent = NULL, qt_intf_t * = NULL );
         QString getMRL( const QString& ) override;
+        QString outputPath(const QString &mux) const;
+        QString validationError(const QString &mux) override;
+        QString summary(const QString &mux) override;
     private:
         QLineEdit *fileEdit;
         qt_intf_t *p_intf;

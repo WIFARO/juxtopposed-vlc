@@ -47,16 +47,24 @@ public:
     SoutDialog( QWindow* parent, qt_intf_t *, const QString& chain = "");
     virtual ~SoutDialog(){}
 
-    QString getChain(){ return chain; }
+    QStringList getOptions() const { return acceptedOptions; }
 
 protected:
-    virtual void done( int );
+    void done(int) override;
+    bool validateCurrentPage() override;
 private:
     Ui::Sout ui;
     void retranslate();
 
     QString chain;
-    QPushButton *okButton;
+    QString sourceMRL;
+    QStringList generatedOptions, acceptedOptions;
+    QLabel *review;
+    QCheckBox *customOptions;
+    QList<QLabel *> feedback;
+    QString settingsError();
+    void updateStatus();
+    QStringList parseOptions(QString *error) const;
 
     qt_intf_t* p_intf;
 

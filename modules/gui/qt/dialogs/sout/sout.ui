@@ -23,7 +23,7 @@
   <property name="wizardStyle">
    <enum>QWizard::ClassicStyle</enum>
   </property>
-  <widget class="QWizardPage" name="sourceWizardPage">
+  <widget class="SoutWizardPage" name="sourceWizardPage">
    <property name="title">
     <string>Source</string>
    </property>
@@ -34,8 +34,8 @@
     <item row="0" column="0">
      <layout class="QVBoxLayout" name="verticalLayout">
       <item>
-       <widget class="QPlainTextEdit" name="helpEdit">
-        <property name="readOnly">
+       <widget class="QLabel" name="helpEdit">
+        <property name="wordWrap">
          <bool>true</bool>
         </property>
        </widget>
@@ -43,7 +43,7 @@
       <item>
        <widget class="SoutInputBox" name="inputBox">
         <property name="title">
-         <string/>
+         <string />
         </property>
         <property name="flat">
          <bool>true</bool>
@@ -57,7 +57,7 @@
     </item>
    </layout>
   </widget>
-  <widget class="QWizardPage" name="destinationWizardPage">
+  <widget class="SoutWizardPage" name="destinationWizardPage">
    <property name="title">
     <string>Destination Setup</string>
    </property>
@@ -72,7 +72,7 @@
       </property>
       <widget class="QWidget" name="tab">
        <attribute name="title">
-        <string/>
+        <string />
        </attribute>
        <layout class="QGridLayout" name="gridLayout_11">
         <item row="0" column="0" colspan="3">
@@ -96,7 +96,7 @@
          </widget>
         </item>
         <item row="1" column="1">
-         <widget class="QComboBox" name="destBox"/>
+         <widget class="QComboBox" name="destBox" />
         </item>
         <item row="1" column="2">
          <widget class="QPushButton" name="addButton">
@@ -124,7 +124,7 @@
     </item>
    </layout>
   </widget>
-  <widget class="QWizardPage" name="wizardPage">
+  <widget class="SoutWizardPage" name="wizardPage">
    <property name="title">
     <string>Transcoding Options</string>
    </property>
@@ -143,11 +143,11 @@
      </widget>
     </item>
     <item>
-     <widget class="VLCProfileSelector" name="profileSelect" native="true"/>
+     <widget class="VLCProfileSelector" name="profileSelect" native="true" />
     </item>
    </layout>
   </widget>
-  <widget class="QWizardPage" name="optionsWizardPage">
+  <widget class="SoutWizardPage" name="optionsWizardPage">
    <property name="title">
     <string>Option Setup</string>
    </property>
@@ -203,7 +203,13 @@
    <header>dialogs/sout/sout_widgets.hpp</header>
    <container>1</container>
   </customwidget>
+  <customwidget>
+   <class>SoutWizardPage</class>
+   <extends>QWizardPage</extends>
+   <header>dialogs/sout/sout_widgets.hpp</header>
+   <container>1</container>
+  </customwidget>
  </customwidgets>
- <resources/>
- <connections/>
+ <resources />
+ <connections />
 </ui>

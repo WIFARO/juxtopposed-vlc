@@ -1157,7 +1157,7 @@ void DialogsProvider::streamingDialog( QWindow *parent,
         s->setAttribute( Qt::WA_QuitOnClose, false ); // See #4883
         if( s->exec() == QDialog::Accepted )
         {
-            outputOptions.append(s->getChain().split(" :"));
+            outputOptions.append(s->getOptions());
             delete s;
         }
         else
