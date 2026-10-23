@@ -48,6 +48,7 @@ public:
         MEDIA_PLAYCOUNT,
         MEDIA_LAST_PLAYED_DATE,
         MEDIA_IS_DELETABLE_FILE,
+        MEDIA_PODCAST,
         MEDIA_ROLES_COUNT,
     };
 

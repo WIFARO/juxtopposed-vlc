@@ -45,7 +45,13 @@ vlc_player_input_RestoreMlStates(struct vlc_player_input* input, bool force_pos)
     if (!ml)
         return;
     input_item_t* item = input_GetItem(input->thread);
-    vlc_ml_media_t* media = vlc_ml_get_media_by_mrl( ml, item->psz_uri);
+    vlc_ml_media_t* media = NULL;
+    char *feed = input_item_GetMetaExtra(item, "podcast:feed");
+    input->ml.podcast = feed != NULL && *feed;
+    free(feed);
+    if (input->ml.podcast)
+        if (vlc_ml_control(ml, VLC_ML_REGISTER_PODCAST, item, &media) != VLC_SUCCESS) media = NULL;
+    if (!media) media = vlc_ml_get_media_by_mrl( ml, item->psz_uri);
     if (!media)
         return;
     if (media->b_subtitle_track_selection)
@@ -124,8 +130,7 @@ vlc_player_input_RestoreMlStates(struct vlc_player_input* input, bool force_pos)
         }
     }
     vlc_mutex_unlock(&item->lock);
-    if (media->i_type != VLC_ML_MEDIA_TYPE_VIDEO ||
-        vlc_ml_media_get_all_playback_pref(ml, media->i_id,
+    if (vlc_ml_media_get_all_playback_pref(ml, media->i_id,
                                            &input->ml.states) != VLC_SUCCESS)
     {
         vlc_ml_release(media);
@@ -244,6 +249,23 @@ vlc_player_CompareAssignState(char **target_ptr, char **input_ptr)
     }
 }
 
+void
+vlc_player_input_SavePodcastProgress(struct vlc_player_input* input)
+{
+    if (!input->ml.podcast || !var_GetBool(input->thread, "save-recentplay")) return;
+    const vlc_tick_t now = vlc_tick_now();
+    if (now - input->ml.last_progress_save < VLC_TICK_FROM_SEC(15) && input->state != VLC_PLAYER_STATE_PAUSED) return;
+    input->ml.last_progress_save = now;
+    vlc_medialibrary_t* ml = vlc_ml_instance_get(input->player);
+    if (!ml) return;
+    input_item_t* item = input_GetItem(input->thread);
+    vlc_ml_media_t* media = vlc_ml_get_media_by_mrl(ml, item->psz_uri);
+    if (!media) return;
+    if (vlc_ml_control(ml, VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS, media->i_id, (double) input->position, 0) != VLC_SUCCESS)
+        msg_Warn(input->player, "could not save podcast progress");
+    vlc_ml_release(media);
+}
+
 /* Same start/end margins as the media library's
  * Media::computePositionType(), which only applies them when it knows the
  * media duration. */
@@ -317,7 +339,13 @@ vlc_player_UpdateMLStates(vlc_player_t *player, struct vlc_player_input* input)
             if (position < margin || position > 1.f - margin)
                 position = -1.f;
         }
-        vlc_ml_media_update_progress( ml, media->i_id, position );
+        if (input->ml.podcast) {
+            const double saved = input->ml.stop_position >= 0.f ? input->ml.stop_position : input->position;
+            if (vlc_ml_control(ml, VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS, media->i_id,
+                               input->ml.completed ? 0. : saved, (int) input->ml.completed) != VLC_SUCCESS)
+                msg_Warn(player, "could not save podcast progress");
+        }
+        else vlc_ml_media_update_progress( ml, media->i_id, position );
     }
 
     /* If the value changed during the playback, update it in the medialibrary.

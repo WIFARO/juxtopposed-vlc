@@ -18,6 +18,11 @@ RedesignLibraryView {
     playlistEditing: !!selectedPlaylist && playlistEditKey === playlistKey && sortState.selection.id === "original" && !searchText.length && !grid
     playlistBusy: playlistMedia.transactionPending
     onGridChanged: if (grid) playlistEditKey = ""
+    podcastView: {
+        if (category !== 3 || network.count < 1) return false
+        const first = network.dataAt(0)
+        return !!first && !!first.podcast && !!first.podcast.feed
+    }
     singleClickActivate: !!MainCtx.redesignPlayerPreferences.singleClickActivate
     addLabel: selectedPlaylist ? qsTr("Add files") : category === 4 ? qsTr("Create playlist") : category === 3 ? network.podcast ? qsTr("Add podcast") : qsTr("Add Network Stream") : qsTr("Add")
     onPlaylistEditRequested: {
@@ -75,6 +80,14 @@ RedesignLibraryView {
     menuForItem: (index, section) => {
         const target = targetForItem(index, section || homeSection)
         if (!target) return null
+        if (target.podcast && target.podcast.feed) return {target: target, entries: [
+            {action: "play", label: target.progress > 0 ? qsTr("Resume") : qsTr("Play"), icon: "play-outline"},
+            {action: "restart", label: qsTr("Play from the start"), icon: "play-outline"},
+            {action: "queue", label: qsTr("Add to queue"), icon: "queue"},
+            {action: "podcast-played", label: target.played ? qsTr("Mark as not listened") : qsTr("Mark as listened"), icon: "watched"},
+            {action: "episode-info", label: qsTr("Episode details"), icon: "info-two-tone"},
+            {action: "podcast-playlist", label: qsTr("Add to playlist"), icon: "playlist"}
+        ].concat(target.podcast.video ? [{action: "podcast-video", label: qsTr("Play video"), icon: "video"}] : [])}
         if (["network-entry", "linked-channel"].includes(target.kind)) return {target: target, entries: [
             {action: target.branch ? "open" : "play", label: target.branch ? qsTr("Open") : qsTr("Play"), icon: target.branch ? "folder" : "play-outline"},
             {action: "queue", label: qsTr("Add to queue"), icon: "queue"}
@@ -119,7 +132,25 @@ RedesignLibraryView {
             ] : [])}
     }
     onItemActionRequested: (target, action) => {
-        if (action === "choose-artwork" || action === "reset-artwork") {
+        if (action === "play" && target.podcast && target.podcast.feed) {
+            if (target.kind === "network-entry") network.playEpisode(network.indexForUrl(target.key, target.channelKey || ""), false, false)
+            else if (target.kind === "linked-channel") linkedPlaylist.playEpisode(linkedPlaylist.indexForKey(target.channelKey), false, false)
+            else MediaLib.playPodcast(Qt.resolvedUrl(target.url || target.key), false, false)
+        } else if (action === "episode-info") {
+            episodeInfo.info = target; episodeInfo.open()
+        } else if (action === "podcast-playlist") {
+            MediaLib.mediaState(Qt.resolvedUrl(target.url || target.key), true, result => {
+                if (result.success) DialogsProvider.playlistsDialog([MediaLib.deserializeMlItemIdFromString(result.id)])
+            })
+        } else if (action === "podcast-played") {
+            MediaLib.setMediaState(Qt.resolvedUrl(target.url || target.key), "played", !target.played, result => {
+                if (!result.success) DialogsProvider.messageDialog(result.error, qsTr("VLC Media Player"))
+            })
+        } else if (action === "restart" || action === "podcast-video") {
+            if (target.kind === "linked-channel") linkedPlaylist.playEpisode(linkedPlaylist.indexForKey(target.channelKey), action === "podcast-video", action === "restart")
+            else if (target.kind === "network-entry") network.playEpisode(network.indexForUrl(target.key, target.channelKey || ""), action === "podcast-video", action === "restart")
+            else MediaLib.playPodcast(Qt.resolvedUrl(target.url || target.key), action === "podcast-video", action === "restart")
+        } else if (action === "choose-artwork" || action === "reset-artwork") {
             const url = Qt.resolvedUrl(target.url || target.key)
             if (action === "reset-artwork") folderArtwork.setSelectedArtwork(url, "")
             else {
@@ -214,7 +245,14 @@ RedesignLibraryView {
             return musicSection === "Albums" ? ["title", "main_artist"] : ["title"]
         return ["played", "insertion", "title", "main_artist", "album_title", "track_number", "uri", "disc_number"]
     }
-    extraSortOptions: ["folders", "playlists", "artists"].includes(homeSection)
+    extraSortOptions: podcastView ? [
+        {id: "published-desc", field: "published", descending: true, label: qsTr("Newest first")},
+        {id: "published-asc", field: "published", descending: false, label: qsTr("Oldest first")},
+        {id: "episode-asc", field: "episode", descending: false, label: qsTr("Episode order")},
+        {id: "episode-desc", field: "episode", descending: true, label: qsTr("Reverse episode order")},
+        {id: "duration-asc", field: "duration", descending: false, label: qsTr("Shortest first")},
+        {id: "duration-desc", field: "duration", descending: true, label: qsTr("Longest first")}
+    ] : ["folders", "playlists", "artists"].includes(homeSection)
         ? [{id: "frequency", field: "frequency", descending: true, label: homeSection === "artists" ? qsTr("Most played first") : qsTr("Most visited first")}]
         : selectedPlaylist || category === 3 && network.linked ? [{id: "original", field: "", descending: false, label: qsTr("Playlist order")}] : []
     defaultSortChoice: extraSortOptions.length ? extraSortOptions[0].id
@@ -225,11 +263,11 @@ RedesignLibraryView {
         : sortField === "title" && (homeSection === "artists" || category === 2 && !selectedCollection && ["Artists", "Genres"].includes(musicSection)) ? "name" : sortField
     readonly property int mediaSortOrder: descending ? Qt.DescendingOrder : Qt.AscendingOrder
     readonly property var homeModels: ({watching: recentVideo, listening: recentAudio, folders: frequentFolders, playlists: frequentPlaylists, artists: playedArtists})
-    readonly property var homeTitles: ({watching: qsTr("Continue Watching"), listening: qsTr("Listen Again"), folders: qsTr("Frequently Visited Folders"), playlists: qsTr("Frequently Visited Playlists"), artists: qsTr("Frequently Listened Artists")})
+    readonly property var homeTitles: ({watching: qsTr("Continue Watching"), listening: qsTr("Continue listening"), folders: qsTr("Frequently Visited Folders"), playlists: qsTr("Frequently Visited Playlists"), artists: qsTr("Frequently Listened Artists")})
     homeSectionsVisible: category === 0 && !homeSection
     homeSections: [
         {key: "watching", title: homeTitles.watching, model: recentVideo, icon: "video", emptyText: qsTr("No videos in your history.")},
-        {key: "listening", title: homeTitles.listening, model: recentAudio, icon: "music", emptyText: qsTr("No music in your history.")},
+        {key: "listening", title: homeTitles.listening, model: recentAudio, icon: "music", emptyText: qsTr("No audio in your history.")},
         {key: "folders", title: homeTitles.folders, model: frequentFolders, icon: "folder", emptyText: qsTr("Open a library folder to see it here.")},
         {key: "playlists", title: homeTitles.playlists, model: frequentPlaylists, icon: "playlist", emptyText: qsTr("Open a playlist to see it here.")},
         {key: "artists", title: homeTitles.artists, model: playedArtists, icon: "artist", emptyText: qsTr("Play music to see artists here.")}
@@ -264,7 +302,7 @@ RedesignLibraryView {
     property var resolvedArtwork: ({})
     function resolveArtwork(model) {
         const fallback = category === 2 && musicSection === "Genres" && !selectedCollection && !currentFolder
-            ? model.coverNonBlur || "" : model.thumbnail || model.small_cover || model.cover || ""
+            ? model.coverNonBlur || "" : model.thumbnail || model.artwork || model.small_cover || model.cover || ""
         const url = String(model.fileUrl || model.mrl || model.url || (model.fileIsDir ? model.key : "") || "")
         if (!url || !/^(file|https?):/i.test(url)) return fallback
         const key = url.startsWith("file:") ? folderPath.location(url) : url
@@ -318,6 +356,11 @@ RedesignLibraryView {
         for (const pin of pinStore.entries)
             if (["file", "folder"].includes(pin.kind)) folderArtwork.request(Qt.resolvedUrl(pin.key), pin.category !== 2)
     }
+    RedesignPodcastInfo {
+        id: episodeInfo
+        parent: C.Overlay.overlay
+        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+    }
     RedesignLibraryPins { id: pinStore; ctx: MainCtx; onEntriesChanged: root.refreshPinArtwork() }
     function pinTarget(kind, key, name, category, icon, artwork, section) {
         return pinStore.normalize({kind: kind, key: key, name: name, category: category, icon: icon, artwork: artwork ? artwork.toString() : "", section: section})
@@ -330,18 +373,22 @@ RedesignLibraryView {
             item.title || item.name || nameFromUrl(url), category, category === 3 ? "network" : category === 2 ? "music" : "video",
             item.thumbnail || item.small_cover || item.cover || "", "")
         target.url = url
+        target.podcast = item.podcast
+        target.progress = Number(item.progress || 0)
+        target.played = Number(item.playcount || 0) > 0
+        target.id = item.id
         return target
     }
     function targetForItem(index, section) {
         if (!section && linkedChannels) {
             const item = linkedPlaylist.getDataAt(index)
-            return item.channelKey ? {kind: "linked-channel", key: item.mrl, channelKey: item.channelKey, name: item.title, branch: false} : null
+            return item.channelKey ? {kind: "linked-channel", key: item.mrl, channelKey: item.channelKey, name: item.title, branch: false, podcast: item.podcast, progress: item.progress, played: item.played} : null
         }
         if (!section && category === 3) {
             const item = network.dataAt(index)
             if (!item) return null
             if (network.atRoot) return pinTarget("network-source", item.sourceName, item.title, 3, "network", "", "")
-            return {kind: "network-entry", key: String(item.mrl || item.url || ""), name: item.name || item.title, branch: network.branch(item), channelKey: item.channelKey || "", playable: network.saved}
+            return {kind: "network-entry", key: String(item.mrl || item.url || ""), name: item.name || item.title, branch: network.branch(item), channelKey: item.channelKey || "", playable: network.saved, podcast: item.podcast, progress: item.progress, played: item.played}
         }
         if (section) {
             const item = homeItem(section, index)

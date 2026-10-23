@@ -26,6 +26,10 @@ MLAudio::MLAudio(vlc_medialibrary_t* _ml, const vlc_ml_media_t *_data)
 {
     assert( _data );
     assert( _data->i_type == VLC_ML_MEDIA_TYPE_AUDIO );
+    if (!m_podcast.isEmpty()) {
+        m_artist = m_podcast.value("author").toString();
+        m_albumTitle = m_podcast.value("show").toString();
+    }
 
     if ( _data->album_track.i_album_id != 0 )
     {

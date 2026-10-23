@@ -2,6 +2,8 @@
 #include "networkplaylistmodel.hpp"
 #include "maininterface/mainctx.hpp"
 #include "medialibrary/medialib.hpp"
+#include "medialibrary/mlmediastore.hpp"
+#include "util/podcast_metadata.hpp"
 #include "playlist/media.hpp"
 #include "playlist/playlist_controller.hpp"
 #include <vlc_preparser.h>
@@ -40,7 +42,8 @@ int NetworkPlaylistModel::rowCount(const QModelIndex& parent) const
 QHash<int, QByteArray> NetworkPlaylistModel::roleNames() const
 {
     return {{TitleRole, "title"}, {MrlRole, "mrl"}, {ThumbnailRole, "thumbnail"},
-            {IconRole, "iconName"}, {KeyRole, "channelKey"}};
+            {IconRole, "iconName"}, {KeyRole, "channelKey"}, {PodcastRole, "podcast"},
+            {DurationRole, "duration"}, {ProgressRole, "progress"}, {PlayedRole, "played"}};
 }
 
 QVariant NetworkPlaylistModel::data(const QModelIndex& index, int role) const
@@ -60,8 +63,12 @@ QVariant NetworkPlaylistModel::data(const QModelIndex& index, int role) const
         const auto artwork = vlc::wrap_cptr(input_item_GetArtworkURL(row.item.get()));
         return QString::fromUtf8(artwork.get() ? artwork.get() : "");
     }
+    case PodcastRole: return row.podcast;
+    case DurationRole: return QVariant::fromValue(VLCDuration(input_item_GetDuration(row.item.get())));
+    case ProgressRole: return m_media.value(QString::fromUtf8(row.item->psz_uri)).progress();
+    case PlayedRole: return m_media.value(QString::fromUtf8(row.item->psz_uri)).playCount() > 0;
     case IconRole:
-        return QStringLiteral("nav-video");
+        return row.podcast.isEmpty() ? QStringLiteral("nav-video") : QStringLiteral("music");
     case KeyRole:
         return row.key;
     default:
@@ -126,6 +133,8 @@ void NetworkPlaylistModel::setSources(const QVariantList& sources)
 void NetworkPlaylistModel::cancel()
 {
     ++m_generation;
+    if (m_store) m_store->clear();
+    m_media.clear();
     for (auto& source : m_work) {
         if (!source.request)
             continue;
@@ -229,6 +238,24 @@ void NetworkPlaylistModel::finished(quint64 generation, size_t index, bool playl
     if (playlist && work.remember && m_ctx->getMediaLibrary())
         m_ctx->getMediaLibrary()->recordNetworkPlaylistAccess(QUrl::fromEncoded(work.item->psz_uri));
     work.children = playlist ? std::move(children) : std::vector<SharedInputItem>{};
+    if (m_ctx && m_ctx->getMediaLibrary()) {
+        if (!m_store) {
+            m_store = std::make_unique<MLMediaStore>(m_ctx->getMediaLibrary());
+            connect(m_store.get(), &MLMediaStore::updated, this, [this](const QString& uri, const MLMedia& media) {
+                m_media[uri] = media;
+                for (int row = 0; row < int(m_rows.size()); ++row)
+                    if (QString::fromUtf8(m_rows[row].item->psz_uri) == uri) emit dataChanged(this->index(row), this->index(row));
+            });
+        }
+        QStringList urls;
+        QHash<QString, SharedInputItem> podcasts;
+        for (const auto& source : m_work) for (const auto& child : source.children) {
+            const auto uri = QString::fromUtf8(child->psz_uri);
+            urls.push_back(uri);
+            if (!podcastMetadata(child.get()).isEmpty()) podcasts.insert(uri, child);
+        }
+        m_store->insertMany(urls, {}, podcasts);
+    }
     --m_pending;
     rebuild();
     emit loadingChanged();
@@ -246,7 +273,7 @@ void NetworkPlaylistModel::rebuild()
             const auto name = vlc::wrap_cptr(input_item_GetName(item.get()));
             if (m_search.isEmpty() || QString::fromUtf8(name.get() ? name.get() : "").contains(m_search, Qt::CaseInsensitive)) {
                 m_rows.push_back({item, QString::number(m_generation) + QLatin1Char('/')
-                    + QString::number(i) + QLatin1Char('/') + QString::number(child), mediaId});
+                    + QString::number(i) + QLatin1Char('/') + QString::number(child), mediaId, podcastMetadata(item.get())});
             }
         };
         if (!work.playlist)
@@ -255,10 +282,21 @@ void NetworkPlaylistModel::rebuild()
             for (size_t n = 0; n < work.children.size(); ++n)
                 add(work.children[n], n, {});
     }
-    if (m_sort == QLatin1String("title") || m_sort == QLatin1String("uri")) {
+    if (m_sort == QLatin1String("title") || m_sort == QLatin1String("uri") || m_sort == QLatin1String("published") || m_sort == QLatin1String("episode") || m_sort == QLatin1String("duration")) {
         std::stable_sort(m_rows.begin(), m_rows.end(), [&](const Row& a, const Row& b) {
             int result;
-            if (m_sort == QLatin1String("uri")) {
+            if (m_sort == QLatin1String("published")) {
+                const auto left = QDateTime::fromString(a.podcast.value("date").toString(), Qt::RFC2822Date);
+                const auto right = QDateTime::fromString(b.podcast.value("date").toString(), Qt::RFC2822Date);
+                result = left == right ? 0 : left < right ? -1 : 1;
+            } else if (m_sort == QLatin1String("episode")) {
+                const auto left = std::make_pair(a.podcast.value("season").toInt(), a.podcast.value("episode").toDouble());
+                const auto right = std::make_pair(b.podcast.value("season").toInt(), b.podcast.value("episode").toDouble());
+                result = left == right ? 0 : left < right ? -1 : 1;
+            } else if (m_sort == QLatin1String("duration")) {
+                const auto left = input_item_GetDuration(a.item.get()), right = input_item_GetDuration(b.item.get());
+                result = left == right ? 0 : left < right ? -1 : 1;
+            } else if (m_sort == QLatin1String("uri")) {
                 result = QString::compare(QString::fromUtf8(a.item->psz_uri), QString::fromUtf8(b.item->psz_uri));
             } else {
                 const auto an = vlc::wrap_cptr(input_item_GetName(a.item.get()));
@@ -275,4 +313,21 @@ void NetworkPlaylistModel::rebuild()
         m_expanded = expanded;
         emit expandedChanged();
     }
+}
+
+void NetworkPlaylistModel::playEpisode(int row, bool video, bool fromStart)
+{
+    if (!m_active || !m_ctx || row < 0 || size_t(row) >= m_rows.size()) return;
+    auto* original = m_rows[size_t(row)].item.get();
+    auto* controller = m_ctx->getIntf()->p_mainPlaylistController;
+    auto item = SharedInputItem(input_item_Copy(original), false);
+    if (!item) return;
+    if (video) {
+        const auto url = vlc::wrap_cptr(input_item_GetMetaExtra(item.get(), "podcast:video"));
+        if (!url || !*url) return;
+        input_item_SetURI(item.get(), url.get());
+    }
+    input_item_AddOption(item.get(), fromStart ? "restore-playback-pos=0" : "restore-playback-pos=2", VLC_INPUT_OPTION_TRUSTED);
+    const QVector<vlc::playlist::Media> media{vlc::playlist::Media{item.get()}};
+    controller->append(media, true);
 }

@@ -337,6 +337,8 @@ vlc_player_input_HandleState(struct vlc_player_input *input,
                    || player->global_state == VLC_PLAYER_STATE_STARTED);
             assert(state_date != VLC_TICK_INVALID);
             input->pause_date = state_date;
+            input->ml.last_progress_save = 0;
+            vlc_player_input_SavePodcastProgress(input);
 
             vlc_player_SignalAtoBLoop(player);
             vlc_player_UpdateTimerEvent(player, NULL,
@@ -1068,6 +1070,7 @@ input_thread_Events(input_thread_t *input_thread,
             {
                 input->time = event->times.time;
                 input->position = event->times.position;
+                vlc_player_input_SavePodcastProgress(input);
                 system_date = vlc_tick_now();
                 changed = true;
                 vlc_player_SendEvent(player, on_position_changed,
@@ -1303,6 +1306,8 @@ vlc_player_input_New(vlc_player_t *player, input_item_t *item)
     input->ml.restore_states = false;
     input->ml.delay_restore = false;
     input->ml.completed = false;
+    input->ml.podcast = false;
+    input->ml.last_progress_save = vlc_tick_now();
     input->ml.pos = -1.f;
     input->ml.stop_position = -1.f;
     input->ml.has_audio_tracks = input->ml.has_video_tracks = false;

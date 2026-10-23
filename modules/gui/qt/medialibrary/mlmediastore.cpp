@@ -123,7 +123,7 @@ void MLMediaStore::remove(const MLItemId &id)
     m_revisions.remove(mrl);
 }
 
-void MLMediaStore::insertMany(const QStringList &mrls, std::function<void()> completed)
+void MLMediaStore::insertMany(const QStringList &mrls, std::function<void()> completed, const QHash<QString, SharedInputItem>& podcasts)
 {
     auto batch = std::make_shared<Batch>();
     batch->generation = m_generation;
@@ -134,7 +134,7 @@ void MLMediaStore::insertMany(const QStringList &mrls, std::function<void()> com
         if (unique.contains(mrl)) continue;
         unique.insert(mrl);
         m_files.insert(mrl);
-        batch->entries.push_back({mrl, ++m_revisions[mrl]});
+        batch->entries.push_back({mrl, ++m_revisions[mrl], podcasts.value(mrl)});
     }
     // Replace queued work, but let the one in-flight chunk finish before starting
     // another. Rapid searches cannot build up a queue of database jobs.
@@ -159,7 +159,9 @@ void MLMediaStore::readNextBatch()
             result.reserve(chunk.size());
             for (const auto& entry : chunk) {
                 if (batch->cancelled) break;
-                ml_unique_ptr<vlc_ml_media_t> media {vlc_ml_get_media_by_mrl(ml, qtu(entry.mrl))};
+                vlc_ml_media_t* registered = nullptr;
+                if (entry.podcast && vlc_ml_control(ml, VLC_ML_REGISTER_PODCAST, entry.podcast.get(), &registered) != VLC_SUCCESS) registered = nullptr;
+                ml_unique_ptr<vlc_ml_media_t> media {registered ? registered : vlc_ml_get_media_by_mrl(ml, qtu(entry.mrl))};
                 result.push_back(details(ml, media.get(), audioMetadata, &batch->artists));
             }
         },

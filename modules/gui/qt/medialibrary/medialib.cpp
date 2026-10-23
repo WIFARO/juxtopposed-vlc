@@ -1052,6 +1052,24 @@ void MediaLib::addMediaTracks(const QUrl& url, const QList<QUrl>& tracks, bool s
         "redesign-media-tracks");
 }
 
+void MediaLib::playPodcast(const QUrl& url, bool video, bool fromStart)
+{
+    runOnMLThread<SharedInputItem>(this,
+        [url, video, fromStart](vlc_medialibrary_t* ml, SharedInputItem& item) {
+            item.reset(vlc_ml_get_input_item_by_mrl(ml, url.toEncoded().constData()), false);
+            if (!item) return;
+            if (video) {
+                const auto source = vlc::wrap_cptr(input_item_GetMetaExtra(item.get(), "podcast:video"));
+                if (!source || !*source) { item.reset(); return; }
+                input_item_SetURI(item.get(), source.get());
+            }
+            input_item_AddOption(item.get(), fromStart ? "restore-playback-pos=0" : "restore-playback-pos=2", VLC_INPUT_OPTION_TRUSTED);
+        },
+        [this](quint64, const SharedInputItem& item) {
+            if (item) m_playlistController->append(QVector<vlc::playlist::Media>{vlc::playlist::Media{item.get()}}, true);
+        }, "podcast-play");
+}
+
 void MediaLib::setMediaState(const QUrl& url, const QString& field, bool value, QJSValue callback)
 {
     if (field != QLatin1String("played") && field != QLatin1String("favorite")) return;

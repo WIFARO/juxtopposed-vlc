@@ -122,7 +122,9 @@ public:
         NETWORK_MEDIA,
         NETWORK_MEDIA_PROGRESS,
         NETWORK_MEDIA_DURATION,
-        URL
+        URL,
+        PODCAST,
+        PLAYED
     };
 
     Q_PROPERTY(MainCtx* ctx READ getCtx WRITE setCtx NOTIFY ctxChanged)
@@ -163,6 +165,7 @@ public:
     Q_INVOKABLE bool addToPlaylist(const QVariantList& itemIdList);
     Q_INVOKABLE bool addToPlaylist(const QModelIndexList& itemIdList);
     Q_INVOKABLE bool addAndPlay( int index );
+    Q_INVOKABLE void playEpisode(int row, bool video, bool fromStart);
     Q_INVOKABLE bool addAndPlay(const QVariantList& itemIdList);
     Q_INVOKABLE bool addAndPlay(const QModelIndexList& itemIdList);
 

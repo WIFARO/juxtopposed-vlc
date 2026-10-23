@@ -129,6 +129,7 @@ QHash<int, QByteArray> MLMediaModel::roleNames() const
         {MEDIA_IS_FAVORITE, QByteArrayLiteral("isFavorite")},
         {MEDIA_IS_LOCAL, QByteArrayLiteral("isLocal")},
         {MEDIA_PROGRESS, QByteArrayLiteral("progress")},
+        {MEDIA_PODCAST, QByteArrayLiteral("podcast")},
         {MEDIA_PLAYCOUNT, QByteArrayLiteral("playcount")},
         {MEDIA_LAST_PLAYED_DATE, QByteArrayLiteral("last_played_date")},
         {MEDIA_IS_DELETABLE_FILE, QByteArrayLiteral("isDeletableFile")},
@@ -176,6 +177,7 @@ QVariant MLMediaModel::itemRoleData(const MLItem *item, int role) const
         QUrl mediaUrl(media->mrl());
         return QVariant::fromValue(mediaUrl.isLocalFile());
     }
+    case MEDIA_PODCAST: return media->podcast();
     case MEDIA_PROGRESS:
         return QVariant::fromValue(media->progress());
     case MEDIA_PLAYCOUNT:

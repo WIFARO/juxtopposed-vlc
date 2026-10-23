@@ -30,6 +30,8 @@
 #include <vlc_dialog.h>
 #include "medialibrary.h"
 #include "track_rules.hpp"
+#include "podcast_metadata.hpp"
+#include <cmath>
 #include "history_filter.hpp"
 #include "fs/fs.h"
 #include "fs/devicelister.h"
@@ -626,6 +628,7 @@ int MediaLibrary::Control( int query, va_list args )
         case VLC_ML_SET_FOLDER_PRIVATE:
         case VLC_ML_RESUME_BACKGROUND:
         case VLC_ML_NEW_EXTERNAL_MEDIA:
+        case VLC_ML_REGISTER_PODCAST:
         case VLC_ML_NEW_STREAM:
         case VLC_ML_REMOVE_STREAM:
         case VLC_ML_MEDIA_GENERATE_THUMBNAIL:
@@ -705,6 +708,11 @@ int MediaLibrary::Control( int query, va_list args )
         case VLC_ML_CLEAR_HISTORY:
         {
             const auto type = static_cast<medialibrary::HistoryType>( va_arg(args, int) );
+            const auto history = m_ml->history(type);
+            if (history) for (const auto& media : history->all()) {
+                auto fields = vlc::podcast::read(*media);
+                if (!fields.empty()) { fields["progress"] = "0"; fields["time"] = "0"; vlc::podcast::save(*media, fields); }
+            }
             m_ml->clearHistory( type );
             break;
         }
@@ -718,6 +726,41 @@ int MediaLibrary::Control( int query, va_list args )
                 return VLC_EGENERIC;
             *va_arg( args, vlc_ml_media_t**) = CreateAndConvert<vlc_ml_media_t>( media.get() );
             return VLC_SUCCESS;
+        }
+        case VLC_ML_REGISTER_PODCAST:
+        {
+            auto item = va_arg(args, input_item_t*);
+            auto output = va_arg(args, vlc_ml_media_t**);
+            *output = nullptr;
+            if (!item) return VLC_EGENERIC;
+            auto feed = vlc::wrap_cptr(input_item_GetMetaExtra(item, "podcast:feed"));
+            if (!feed || !*feed) return VLC_EGENERIC;
+            auto guid = vlc::wrap_cptr(input_item_GetMetaExtra(item, "podcast:guid"));
+            auto show = vlc::wrap_cptr(input_item_GetMetaExtra(item, "podcast:showGuid"));
+            auto encodedFeed = vlc::wrap_cptr(vlc_uri_encode(show && *show ? show.get() : feed.get()));
+            auto encodedGuid = vlc::wrap_cptr(vlc_uri_encode(guid && *guid ? guid.get() : item->psz_uri));
+            if (!encodedFeed || !encodedGuid) return VLC_ENOMEM;
+            const auto identity = std::string("vlc-podcast://episode/") + encodedFeed.get() + "/" + encodedGuid.get();
+            auto priorityAccess = m_ml->acquirePriorityAccess();
+            auto media = m_ml->media(identity);
+            if (!media) media = m_ml->media(item->psz_uri);
+            if (!media) media = m_ml->addExternalMedia(item->psz_uri, MS_FROM_VLC_TICK(input_item_GetDuration(item)));
+            if (!media) return VLC_EGENERIC;
+            if (!m_ml->media(identity) && !media->addExternalMrl(identity, medialibrary::IFile::Type::Part)) return VLC_EGENERIC;
+            if (!m_ml->media(item->psz_uri) && !media->addExternalMrl(item->psz_uri, medialibrary::IFile::Type::Part)) return VLC_EGENERIC;
+            auto fields = vlc::podcast::read(*media);
+            const auto previous = fields;
+            vlc::podcast::collect(fields, item);
+            if (fields != previous && !vlc::podcast::save(*media, fields)) return VLC_EGENERIC;
+            const auto& title = fields[std::to_string(vlc_meta_Title)];
+            if (!title.empty() && title != media->title()) media->setTitle(title);
+            if (media->type() == medialibrary::IMedia::Type::Unknown) {
+                auto type = input_item_GetMetaExtra(item, "podcast:mime");
+                media->setType(type && !strncmp(type, "video/", 6) ? medialibrary::IMedia::Type::Video : medialibrary::IMedia::Type::Audio);
+                free(type);
+            }
+            *output = CreateAndConvert<vlc_ml_media_t>(media.get());
+            return *output ? VLC_SUCCESS : VLC_EGENERIC;
         }
         case VLC_ML_NEW_STREAM:
         {
@@ -755,6 +798,7 @@ int MediaLibrary::Control( int query, va_list args )
                                                width, height, position );
             return res == true ? VLC_SUCCESS : VLC_EGENERIC;
         }
+        case VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS:
         case VLC_ML_MEDIA_UPDATE_PROGRESS:
         case VLC_ML_MEDIA_GET_MEDIA_PLAYBACK_STATE:
         case VLC_ML_MEDIA_SET_MEDIA_PLAYBACK_STATE:
@@ -1978,10 +2022,7 @@ int MediaLibrary::controlMedia( int query, va_list args )
     auto m = m_ml->media( mediaId );
     if ( m == nullptr )
         return VLC_EGENERIC;
-    switch( query )
-    {
-        case VLC_ML_MEDIA_UPDATE_PROGRESS:
-        {
+    if (query == VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS || query == VLC_ML_MEDIA_UPDATE_PROGRESS) {
             auto pattern = vlc::wrap_cptr(var_InheritString(m_vlc_ml, "recentplay-filter"));
             if (pattern && *pattern) {
                 const vlc::medialibrary::HistoryFilter filter(pattern.get());
@@ -1998,6 +2039,30 @@ int MediaLibrary::controlMedia( int query, va_list args )
                     return VLC_SUCCESS;
                 }
             }
+    }
+    switch( query )
+    {
+        case VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS:
+        {
+            const double position = va_arg(args, double);
+            const bool completed = va_arg(args, int);
+            if (!std::isfinite(position)) return VLC_EGENERIC;
+            auto fields = vlc::podcast::read(*m);
+            if (fields.empty()) return VLC_EGENERIC;
+            fields["progress"] = completed ? "0" : std::to_string(std::clamp(position, 0., 1.));
+            const auto duration = atoll(fields["duration"].c_str());
+            if (duration > 0) fields["time"] = completed ? "0" : std::to_string(int64_t(std::clamp(position, 0., 1.) * duration));
+            if (!vlc::podcast::save(*m, fields)) return VLC_EGENERIC;
+            // The library applies start/end margins. Keep exact progress above,
+            // and use a middle position to update history without a completion.
+            const auto count = m->playCount();
+            if (m->setLastPosition(completed ? -1. : std::clamp(position, .06, .90)) == medialibrary::IMedia::ProgressResult::Error)
+                return VLC_EGENERIC;
+            if (completed && !m->setPlayCount(count + 1)) return VLC_EGENERIC;
+            return VLC_SUCCESS;
+        }
+        case VLC_ML_MEDIA_UPDATE_PROGRESS:
+        {
             if ( m->setLastPosition( va_arg( args, double ) ) ==
                     medialibrary::IMedia::ProgressResult::Error )
                 return VLC_EGENERIC;
@@ -2097,6 +2162,8 @@ int MediaLibrary::controlMedia( int query, va_list args )
         }
         case VLC_ML_MEDIA_SET_PLAYED:
         {
+            auto podcast = vlc::podcast::read(*m);
+            if (!podcast.empty()) { podcast["progress"] = "0"; podcast["time"] = "0"; if (!vlc::podcast::save(*m, podcast)) return VLC_EGENERIC; }
             if ( va_arg( args, int ) )
             {
                 if ( m->markAsPlayed() == false )

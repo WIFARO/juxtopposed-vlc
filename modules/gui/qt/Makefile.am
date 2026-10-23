@@ -318,6 +318,7 @@ libqt_plugin_la_SOURCES = \
 	util/release_info.hpp util/release_info.cpp \
 	player/subtitle_timeline_scanner.cpp player/subtitle_timeline_scanner.hpp \
 	player/audio_waveform_scanner.cpp player/audio_waveform_scanner.hpp \
+	util/podcast_metadata.hpp \
 	player/player_controlbar_model.cpp player/player_controlbar_model.hpp \
 	player/control_list_model.cpp player/control_list_model.hpp \
 	player/control_list_filter.cpp \
@@ -1299,6 +1300,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignPlugins.qml \
 	player/qml/redesign/RedesignTrackAssignments.qml \
 	player/qml/redesign/RedesignFolderInfo.qml \
+	player/qml/redesign/RedesignPodcastInfo.qml \
 	player/qml/redesign/RedesignAddToPlaylistDialog.qml \
 	player/qml/redesign/RedesignAddToPlaylist.qml \
 	player/qml/redesign/RedesignNetworkStreams.qml \
@@ -2621,8 +2623,8 @@ TESTS += tests/tst_RedesignMediaFavorite.qml tests/tst_RedesignCustomizationCont
 	tests/tst_RedesignSubtitles.qml tests/tst_RedesignToolTip.qml tests/tst_RedesignGlobalEqualizer.qml
 EXTRA_DIST += tests/tst_RedesignTrackAssignments.qml
 TESTS += tests/tst_RedesignTrackAssignments.qml
-EXTRA_DIST += tests/tst_RedesignFolderInfo.qml
-TESTS += tests/tst_RedesignFolderInfo.qml
+EXTRA_DIST += tests/tst_RedesignFolderInfo.qml \
+TESTS += tests/tst_RedesignFolderInfo.qml \
 TESTS += tests/tst_RedesignSubtitleTimeline.qml
 TESTS += tests/tst_FSM.qml tests/tst_Redesign.qml tests/tst_RedesignPreferences.qml tests/tst_RedesignPlayback.qml tests/tst_RedesignWaveform.qml tests/tst_RedesignAudio.qml tests/tst_RedesignVideo.qml tests/tst_RedesignOnboarding.qml tests/tst_RedesignMenu.qml
 endif

@@ -35,7 +35,8 @@ Item {
     property string playlistEditMessage: ""
     property int dragDestination: -1
     readonly property bool wideToolbar: expanded && width >= theme.dp(1000)
-    readonly property bool squareCards: category === 2 || showingFolders
+    property bool podcastView: false
+    readonly property bool squareCards: category === 2 || showingFolders || podcastView
     property var settingsContext
     property string sortScope: "media"
     property var sortFields: ["played", "insertion", "title", "main_artist", "album_title", "track_number", "uri", "disc_number"]
@@ -74,6 +75,21 @@ Item {
         if (!path || !path.prefix.startsWith("file://")) return text
         const normalized = mediaPaths.urlFor(path, path.parts.length)
         return path.windows ? normalized.toLowerCase() : normalized
+    }
+    function episodeSummary(model) {
+        const podcast = model.podcast
+        if (!podcast || !podcast.feed) return ""
+        const parts = []
+        if (podcast.season) parts.push(qsTr("Season %1").arg(podcast.season))
+        if (podcast.episode) parts.push(qsTr("Episode %1").arg(podcast.episode))
+        const duration = model.duration || podcast.duration
+        if (duration && duration.valid && duration.valid()) parts.push(duration.formatHMS(0))
+        const progress = Number(model.progress || 0)
+        if (progress > 0 && duration && duration.valid && duration.valid())
+            parts.push(qsTr("%1 left").arg(duration.scale(1 - progress).formatHMS(0)))
+        else if (model.played || Number(model.playcount || 0) > 0) parts.push(qsTr("Played"))
+        else parts.push(qsTr("Not played"))
+        return parts.join(" · ")
     }
     signal homeActivated(string section, int index)
     signal homeEnqueueRequested(string section, int index)
@@ -494,7 +510,7 @@ Item {
             model: root.mediaModel
             visible: !root.homeSectionsVisible && root.itemCount > 0
             cellWidth: root.expanded ? Math.min(width, theme.dp(root.grid ? root.squareCards ? 220 : 336 : 416)) : root.grid ? width / Math.max(1, Math.floor(width / theme.dp(130))) : width
-            cellHeight: root.grid ? root.expanded ? (cellWidth - theme.dp(20)) * (root.squareCards ? 1 : 9 / 16) + theme.dp(root.category === 2 ? 88 : 79) : theme.dp(142) : theme.dp(42)
+            cellHeight: root.grid ? root.expanded ? (cellWidth - theme.dp(20)) * (root.squareCards ? 1 : 9 / 16) + theme.dp(root.category === 2 ? 88 : 79) : theme.dp(142) : theme.dp(root.podcastView ? 62 : 42)
             keyNavigationEnabled: true
             currentIndex: -1
             function moveFocus(key) {
@@ -516,8 +532,9 @@ Item {
                 width: mediaView.cellWidth - (root.expanded ? theme.dp(20) : 0)
                 height: mediaView.cellHeight
                 readonly property string itemTitle: model.title || model.name || model.fileName || (model.url ? root.nameFromUrl(model.url) : "") || root.unnamedItemTitle
-                readonly property string itemArtist: model.main_artist || ""
-                readonly property string displayTitle: itemTitle + ((!root.expanded || !root.grid) && itemArtist ? " - " + itemArtist : "")
+                readonly property string episodeInfo: root.episodeSummary(model)
+                readonly property string itemArtist: episodeInfo || model.main_artist || ""
+                readonly property string displayTitle: itemTitle + ((!root.expanded || !root.grid) && !episodeInfo && itemArtist ? " - " + itemArtist : "")
                 readonly property string itemArtwork: root.artworkForItem(model)
                 readonly property url itemMediaUrl: model.fileUrl || model.mrl || model.url || ""
                 readonly property string mediaKey: root.mediaIdentity(itemMediaUrl)
@@ -616,7 +633,7 @@ Item {
                             objectName: "libraryTitle" + delegate.index
                             x: root.grid ? root.expanded ? 0 : theme.dp(4) : thumbnail.width + theme.dp(10)
                             y: root.grid ? thumbnail.y + thumbnail.height + (root.expanded ? theme.dp(35) - baselineOffset : theme.dp(6))
-                                : parent.height / 2 + theme.dp(5.5) - baselineOffset
+                                : parent.height / 2 + theme.dp(delegate.episodeInfo ? -4 : 5.5) - baselineOffset
                             width: root.grid ? parent.width - (root.expanded ? 0 : theme.dp(8)) : Math.max(0, parent.width - x - theme.dp(26))
                             text: delegate.displayTitle; textFormat: Text.PlainText; elide: Text.ElideRight
                             color: delegate.isCurrent && root.expanded && !root.grid ? theme.accent
@@ -628,10 +645,12 @@ Item {
                         }
                         Text {
                             objectName: "libraryArtist" + delegate.index
-                            visible: root.expanded && root.grid && delegate.itemArtist.length > 0
-                            x: 0; y: thumbnail.height + theme.dp(64) - baselineOffset; width: parent.width
+                            visible: delegate.episodeInfo.length > 0 || root.expanded && root.grid && delegate.itemArtist.length > 0
+                            x: root.grid ? 0 : thumbnail.width + theme.dp(10)
+                            y: root.grid ? thumbnail.height + theme.dp(root.expanded ? 64 : 39) - baselineOffset : parent.height / 2 + theme.dp(14) - baselineOffset
+                            width: parent.width - x - (root.grid ? 0 : theme.dp(26))
                             text: delegate.itemArtist; textFormat: Text.PlainText; elide: Text.ElideRight
-                            color: theme.playerLabel; font.pixelSize: theme.dp(16)
+                            color: theme.playerLabel; font.pixelSize: theme.dp(delegate.episodeInfo ? root.grid && root.expanded ? 14 : 12 : 16)
                         }
                     }
                     DragHandler {

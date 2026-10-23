@@ -71,6 +71,7 @@ public:
     Q_INVOKABLE void mlInputItem(const QVector<MLItemId>& itemIdVector, QJSValue callback);
     Q_INVOKABLE void mediaState(const QUrl& url, bool create, QJSValue callback);
     Q_INVOKABLE void addLibraryFiles(const QList<QUrl>& urls, QJSValue callback);
+    Q_INVOKABLE void playPodcast(const QUrl& url, bool video, bool fromStart);
     Q_INVOKABLE void setMediaState(const QUrl& url, const QString& field, bool value, QJSValue callback);
     Q_INVOKABLE void playlistState(const MLItemId& id, QJSValue callback);
     Q_INVOKABLE void playlistTrackTargets(const MLItemId& id, QJSValue callback);

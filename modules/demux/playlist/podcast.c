@@ -119,6 +119,17 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
     char *psz_item_episode = NULL;
     char *psz_item_art_url = NULL;
     char *psz_art_url = NULL;
+    enum { GUID, EPISODE_TYPE, EXPLICIT, VIDEO_URL, TRANSCRIPT, CHAPTERS, EXTRA_COUNT };
+    const char *extra_names[EXTRA_COUNT] = { "podcast:guid", "podcast:episodeType", "podcast:explicit", "podcast:video", "podcast:transcript", "podcast:chapters" };
+    char *extras[EXTRA_COUNT] = {0};
+    char *show_name = NULL;
+    char *show_author = NULL;
+    char *show_guid = NULL;
+    bool alternate_video = false;
+    char *prefixes[3] = {0};
+    const char *canonical_prefixes[3] = {"itunes", "podcast", "content"};
+    const char *namespace_uris[3] = {"http://www.itunes.com/dtds/podcast-1.0.dtd", "https://podcastindex.org/namespace/1.0", "http://purl.org/rss/1.0/modules/content/"};
+    char *show_explicit = NULL;
     const char *node;
     int i_type;
     input_item_t *p_input;
@@ -143,8 +154,26 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
         goto error;
     }
 
+    const char *namespace_attr, *namespace_value;
+    while ((namespace_attr = xml_ReaderNextAttr(p_xml_reader, &namespace_value))) {
+        if (!strncmp(namespace_attr, "xmlns:", 6))
+            for (int i = 0; i < 3; ++i) if (!strcmp(namespace_value, namespace_uris[i])) {
+                free(prefixes[i]); prefixes[i] = strdup(namespace_attr + 6);
+            }
+    }
+
     while( (i_type = xml_ReaderNextNode( p_xml_reader, &node )) > 0 )
     {
+        char canonical_node[256];
+        if (i_type == XML_READER_STARTELEM || i_type == XML_READER_ENDELEM) {
+            const char *colon = strchr(node, ':');
+            if (colon) for (int i = 0; i < 3; ++i) {
+                if (prefixes[i] && strlen(prefixes[i]) == (size_t)(colon - node) && !strncmp(node, prefixes[i], colon - node)) {
+                    if (snprintf(canonical_node, sizeof(canonical_node), "%s%s", canonical_prefixes[i], colon) < (int)sizeof(canonical_node)) node = canonical_node;
+                    break;
+                }
+            }
+        }
         switch( i_type )
         {
             case XML_READER_STARTELEM:
@@ -156,14 +185,21 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
 
                 if( !strcmp( node, "item" ) )
                     b_item = true;
+                else if (!strcmp(node, "podcast:alternateEnclosure")) alternate_video = false;
                 else if( !strcmp( node, "image" ) )
                     b_image = true;
 
+                if (!strcmp(node, "podcast:alternateEnclosure")) alternate_video = false;
                 // Read the attributes
                 const char *attr, *value;
                 while( (attr = xml_ReaderNextAttr( p_xml_reader, &value )) )
                 {
-                    if( !strcmp( node, "enclosure" ) )
+                    if (!strcmp(node, "rss") && !strncmp(attr, "xmlns:", 6)) {
+                        for (int i = 0; i < 3; ++i) if (!strcmp(value, namespace_uris[i])) {
+                            free(prefixes[i]); prefixes[i] = strdup(attr + 6);
+                        }
+                    }
+                    else if( !strcmp( node, "enclosure" ) )
                     {
                         char **p = NULL;
                         if( !strcmp( attr, "url" ) )
@@ -191,6 +227,14 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
                         if( *p != NULL )
                             vlc_xml_decode( *p );
                     }
+                    else if (b_item && !strcmp(node, "podcast:alternateEnclosure") && !strcmp(attr, "type"))
+                        alternate_video = !strncmp(value, "video/", 6) || !strcmp(value, "application/vnd.apple.mpegurl") || !strcmp(value, "application/x-mpegURL");
+                    else if (b_item && alternate_video && !strcmp(node, "podcast:source") && !strcmp(attr, "uri") && !extras[VIDEO_URL])
+                        extras[VIDEO_URL] = strdup(value);
+                    else if (b_item && !strcmp(node, "podcast:transcript") && !strcmp(attr, "url") && !extras[TRANSCRIPT])
+                        extras[TRANSCRIPT] = strdup(value);
+                    else if (b_item && !strcmp(node, "podcast:chapters") && !strcmp(attr, "url") && !extras[CHAPTERS])
+                        extras[CHAPTERS] = strdup(value);
                     else
                         msg_Dbg( p_demux,"unhandled attribute %s in <%s>",
                                  attr, node );
@@ -207,7 +251,7 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
                 {
                     char **p;
 
-                    if( !strcmp( psz_elname, "title" ) )
+                    if( !strcmp( psz_elname, "title" ) || !strcmp(psz_elname, "itunes:title") )
                         p = &psz_item_name;
                     else if( !strcmp( psz_elname, "itunes:author" ) ||
                              !strcmp( psz_elname, "author" ) )
@@ -229,10 +273,13 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
                         p = &psz_item_keywords;
                     else if( !strcmp( psz_elname, "itunes:subtitle" ) )
                         p = &psz_item_subtitle;
-                    else if( !strcmp( psz_elname, "itunes:season" ) )
+                    else if( !strcmp( psz_elname, "itunes:season" ) || !strcmp(psz_elname, "podcast:season") )
                         p = &psz_item_season;
-                    else if( !strcmp( psz_elname, "itunes:episode" ) )
+                    else if( !strcmp( psz_elname, "itunes:episode" ) || !strcmp(psz_elname, "podcast:episode") )
                         p = &psz_item_episode;
+                    else if (!strcmp(psz_elname, "guid")) p = &extras[GUID];
+                    else if (!strcmp(psz_elname, "itunes:episodeType")) p = &extras[EPISODE_TYPE];
+                    else if (!strcmp(psz_elname, "itunes:explicit")) p = &extras[EXPLICIT];
                     else
                         break;
 
@@ -242,8 +289,20 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
                 /* toplevel meta data */
                 else if( !b_image )
                 {
-                    if( !strcmp( psz_elname, "title" ) )
+                    if( !strcmp( psz_elname, "title" ) ) {
+                        free(show_name); show_name = strdup(node);
                         input_item_SetName( p_current_input, node );
+                    }
+                    else if (!strcmp(psz_elname, "itunes:explicit")) {
+                        free(show_explicit); show_explicit = strdup(node);
+                    }
+                    else if (!strcmp(psz_elname, "podcast:guid")) {
+                        free(show_guid); show_guid = strdup(node);
+                    }
+                    else if (!strcmp(psz_elname, "itunes:author")) {
+                        free(show_author); show_author = strdup(node);
+                        input_item_SetArtist(p_current_input, node);
+                    }
 #define ADD_GINFO( info, name ) \
     else if( !strcmp( psz_elname, name ) ) \
         input_item_AddInfo( p_current_input, _("Podcast Info"), \
@@ -319,6 +378,7 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
                         FREENULL( psz_item_episode );
                         FREENULL( psz_item_art_url );
                         FREENULL( psz_elname );
+                        for (int i = 0; i < EXTRA_COUNT; ++i) FREENULL(extras[i]);
                         b_item = false;
                         continue;
                     }
@@ -336,6 +396,17 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
                         break; /* FIXME: meta data memory leaks? */
                     }
 
+                    input_item_SetMetaExtra(p_input, "podcast:feed", p_current_input->psz_uri);
+                    input_item_SetMetaExtra(p_input, "podcast:audio", p_input->psz_uri);
+                    if (psz_item_type) input_item_SetMetaExtra(p_input, "podcast:mime", psz_item_type);
+                    if (!extras[EXPLICIT] && show_explicit) extras[EXPLICIT] = strdup(show_explicit);
+                    if (show_guid) input_item_SetMetaExtra(p_input, "podcast:showGuid", show_guid);
+                    if (show_name) input_item_SetShowName(p_input, show_name);
+                    if (!psz_item_author && show_author) input_item_SetArtist(p_input, show_author);
+                    for (int i = 0; i < EXTRA_COUNT; ++i) {
+                        if (extras[i]) input_item_SetMetaExtra(p_input, extra_names[i], extras[i]);
+                        FREENULL(extras[i]);
+                    }
                     /* Set the duration if available */
                     if( psz_item_duration )
                         p_input->i_duration = strTimeToMTime( psz_item_duration );
@@ -395,6 +466,7 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
                     input_item_Release( p_input );
                     b_item = false;
                 }
+                else if (!strcmp(node, "podcast:alternateEnclosure")) alternate_video = false;
                 else if( !strcmp( node, "image" ) )
                 {
                     b_image = false;
@@ -412,6 +484,9 @@ static int ReadDir( stream_t *p_demux, input_item_node_t *p_subitems )
     if( psz_art_url != NULL )
         input_item_SetArtURL( p_current_input, psz_art_url );
 
+    for (int i = 0; i < EXTRA_COUNT; ++i) free(extras[i]);
+    free(show_name); free(show_author); free(show_guid); free(show_explicit);
+    for (int i = 0; i < 3; ++i) free(prefixes[i]);
     free( psz_item_art_url );
     free( psz_art_url );
     free( psz_elname );
@@ -434,6 +509,9 @@ error:
     free( psz_item_content );
     free( psz_item_season );
     free( psz_item_episode );
+    for (int i = 0; i < EXTRA_COUNT; ++i) free(extras[i]);
+    free(show_name); free(show_author); free(show_guid); free(show_explicit);
+    for (int i = 0; i < 3; ++i) free(prefixes[i]);
     free( psz_item_art_url );
     free( psz_art_url );
     free( psz_elname );

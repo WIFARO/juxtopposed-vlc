@@ -33,6 +33,7 @@
 #include <functional>
 
 #include "mlmedia.hpp"
+#include "util/shared_input_item.hpp"
 
 class MediaLib;
 class MLItemId;
@@ -48,7 +49,7 @@ public:
 
     void insert(const QString &mrl, bool createMissing = false);
     // Read existing metadata in bounded batches, without importing or parsing files.
-    void insertMany(const QStringList &mrls, std::function<void()> completed);
+    void insertMany(const QStringList &mrls, std::function<void()> completed, const QHash<QString, SharedInputItem>& podcasts = {});
     void cancelBatch();
     void remove(const MLItemId &id);
     void clear();
@@ -74,7 +75,7 @@ private:
                            QHash<int64_t, QString>* artists = nullptr, bool identityMetadata = false);
     void notifyMetadata(const QString& mrl, const Details& details);
     struct Batch {
-        struct Entry { QString mrl; quint64 revision; };
+        struct Entry { QString mrl; quint64 revision; SharedInputItem podcast; };
         QVector<Entry> entries;
         qsizetype offset = 0;
         quint64 generation;

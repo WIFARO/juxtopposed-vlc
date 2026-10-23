@@ -43,6 +43,7 @@
 #include <vlc_media_library.h>
 #include <vlc_player.h>
 #include <vlc_url.h>
+#include <vlc_preparser.h>
 #include <vlc_configuration.h>
 #include <vlc_variables.h>
 #include <ftw.h>
@@ -457,9 +458,134 @@ static void TestResumeProgress(vlc_object_t *root, vlc_medialibrary_t *ml)
         input_item_Release(item);
     }
 
+    // Audio podcasts use the same Ask/Always resume flow as video.
+    item = input_item_New("mock://audio_track_count=1;video_track_count=0;length=100000000;pts_delay=0", "Audio episode");
+    assert(item);
+    input_item_SetMetaExtra(item, "podcast:feed", "https://example.test/audio-feed.xml");
+    input_item_SetMetaExtra(item, "podcast:guid", "audio-resume");
+    input_item_SetDuration(item, VLC_TICK_FROM_SEC(100));
+    test.queries = 0; test.restore = false;
+    ResumeOpen(player, &test, item, 0);
+    vlc_player_SetPosition(player, .37);
+    ResumeWaitPosition(player, &test, .37);
+    ResumeStop(player, &test);
+    test.restore = true;
+    ResumeOpen(player, &test, item, 1);
+    ResumeWaitPosition(player, &test, .37);
+    ResumeStop(player, &test);
+    input_item_Release(item);
+
     vlc_player_RemoveListener(player, listener);
     vlc_player_Unlock(player);
     vlc_player_Delete(player);
+}
+
+static void TestPodcastState(vlc_medialibrary_t *ml)
+{
+    input_item_t *item = input_item_New("https://example.test/audio.mp3?token=old", "Episode");
+    input_item_SetMetaExtra(item, "podcast:feed", "https://example.test/feed.xml");
+    input_item_SetMetaExtra(item, "podcast:guid", "stable-episode-guid");
+    input_item_SetMetaExtra(item, "podcast:showGuid", "stable-show-guid");
+    input_item_SetShowName(item, "Example show");
+    input_item_SetSeason(item, "4");
+    input_item_SetEpisode(item, "8");
+    input_item_SetDescription(item, "A description with = and % and \n a newline.");
+    input_item_SetDuration(item, VLC_TICK_FROM_SEC(100));
+    vlc_ml_media_t *media = NULL;
+    assert(vlc_ml_control(ml, VLC_ML_REGISTER_PODCAST, item, &media) == VLC_SUCCESS);
+    assert(media && media->i_duration == 100000 && media->p_podcast);
+    const int64_t id = media->i_id;
+    vlc_ml_release(media);
+    assert(vlc_ml_control(ml, VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS, id, .98, 0) == VLC_SUCCESS);
+    media = vlc_ml_get_media(ml, id);
+    assert(media && fabs(media->f_progress - .98f) < .00001f && media->i_playcount == 0);
+    vlc_ml_release(media);
+    // A changed enclosure and feed address retain progress through the GUIDs.
+    input_item_SetURI(item, "https://example.test/audio.mp3?token=new");
+    input_item_SetMetaExtra(item, "podcast:feed", "https://example.test/new-feed.xml");
+    input_item_SetDuration(item, VLC_TICK_FROM_SEC(200));
+    assert(vlc_ml_control(ml, VLC_ML_REGISTER_PODCAST, item, &media) == VLC_SUCCESS);
+    assert(media && media->i_id == id && fabs(media->f_progress - .49f) < .00001f);
+    vlc_ml_release(media);
+    input_item_t *saved = vlc_ml_get_input_item(ml, id);
+    assert(saved && !strcmp(saved->psz_uri, item->psz_uri));
+    char *value = input_item_GetShowName(saved);
+    assert(value && !strcmp(value, "Example show")); free(value);
+    value = input_item_GetDescription(saved);
+    assert(value && !strcmp(value, "A description with = and % and \n a newline.")); free(value);
+    input_item_Release(saved);
+    assert(vlc_ml_control(ml, VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS, id, 1., 1) == VLC_SUCCESS);
+    media = vlc_ml_get_media(ml, id);
+    assert(media && media->f_progress == 0 && media->i_playcount == 1);
+    vlc_ml_release(media);
+    assert(vlc_ml_media_set_played(ml, id, false) == VLC_SUCCESS);
+    media = vlc_ml_get_media(ml, id);
+    assert(media && media->f_progress == 0 && media->i_playcount == 0);
+    vlc_ml_release(media);
+    assert(vlc_ml_control(ml, VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS, id, .42, 0) == VLC_SUCCESS);
+    assert(vlc_ml_clear_history(ml, VLC_ML_HISTORY_TYPE_GLOBAL) == VLC_SUCCESS);
+    media = vlc_ml_get_media(ml, id);
+    assert(media && media->f_progress == 0 && media->i_playcount == 0);
+    vlc_ml_release(media);
+    input_item_Release(item);
+}
+
+struct PodcastParse { vlc_sem_t done; input_item_node_t *tree; int status; };
+static void PodcastSubtree(vlc_preparser_req *req, input_item_node_t *tree, void *opaque)
+{
+    (void)req;
+    struct PodcastParse *parse = opaque;
+    if (parse->tree) input_item_node_Delete(parse->tree);
+    parse->tree = tree;
+}
+static void PodcastParsed(vlc_preparser_req *req, int status, void *opaque)
+{
+    (void)req;
+    struct PodcastParse *parse = opaque;
+    parse->status = status;
+    vlc_sem_post(&parse->done);
+}
+static void TestPodcastFeed(vlc_object_t *root)
+{
+    const char xml[] = "<?xml version='1.0'?><rss version='2.0' xmlns:apple='http://www.itunes.com/dtds/podcast-1.0.dtd' xmlns:p='https://podcastindex.org/namespace/1.0'><channel>"
+        "<title>Example show</title><apple:author>Host</apple:author><p:guid>show-guid</p:guid>"
+        "<apple:image href='https://example.test/show.png'/><item><title>First</title>"
+        "<guid isPermaLink='false'>first-guid</guid><description><![CDATA[<p>Show notes</p>]]></description>"
+        "<apple:duration>1451</apple:duration><apple:season>42</apple:season><apple:episode>47</apple:episode>"
+        "<apple:episodeType>full</apple:episodeType><apple:explicit>true</apple:explicit>"
+        "<apple:image href='https://example.test/episode.png'/><enclosure url='https://example.test/audio.mp3' type='audio/mpeg' length='100'/>"
+        "<p:alternateEnclosure type='application/vnd.apple.mpegurl'><p:source uri='https://example.test/video.m3u8'/></p:alternateEnclosure>"
+        "</item><item><title>Second</title><guid>second-guid</guid><apple:duration>1:02:03</apple:duration>"
+        "<enclosure url='https://example.test/second.mp3' type='audio/mpeg' length='50'/></item></channel></rss>";
+    char path[] = "/tmp/vlc-podcast-XXXXXX";
+    const int fd = mkstemp(path);
+    assert(fd >= 0 && write(fd, xml, sizeof(xml) - 1) == sizeof(xml) - 1);
+    close(fd);
+    char *uri = vlc_path2uri(path, NULL);
+    input_item_t *item = input_item_New(uri, "Feed"); free(uri);
+    input_item_AddOption(item, "demux=podcast", VLC_INPUT_OPTION_TRUSTED);
+    const struct vlc_preparser_cfg cfg = {.types = VLC_PREPARSER_TYPE_PARSE, .max_parser_threads = 1, .timeout = VLC_TICK_FROM_SEC(5)};
+    vlc_preparser_t *parser = vlc_preparser_New(root, &cfg);
+    assert(parser);
+    struct PodcastParse parse = {.status = VLC_EGENERIC}; vlc_sem_init(&parse.done, 0);
+    const struct vlc_preparser_cbs callbacks = {.on_ended = PodcastParsed, .on_subtree_added = PodcastSubtree};
+    vlc_preparser_req *req = vlc_preparser_req_NewParse(parser, item, VLC_PREPARSER_TYPE_PARSE | VLC_PREPARSER_OPTION_SUBITEMS, &callbacks, &parse);
+    assert(req && vlc_preparser_Submit(parser, req) == VLC_SUCCESS);
+    vlc_sem_wait(&parse.done);
+    vlc_preparser_req_Release(req); vlc_preparser_Delete(parser);
+    assert(parse.status == VLC_SUCCESS && parse.tree && parse.tree->i_children == 2);
+    input_item_t *first = parse.tree->pp_children[0]->p_item;
+    assert(input_item_GetDuration(first) == VLC_TICK_FROM_SEC(1451));
+    char *value = input_item_GetMetaExtra(first, "podcast:guid"); assert(value && !strcmp(value, "first-guid")); free(value);
+    value = input_item_GetMetaExtra(first, "podcast:video"); assert(value && !strcmp(value, "https://example.test/video.m3u8")); free(value);
+    value = input_item_GetArtworkURL(first); assert(value && !strcmp(value, "https://example.test/episode.png")); free(value);
+    value = input_item_GetArtist(first); assert(value && !strcmp(value, "Host")); free(value);
+    value = input_item_GetEpisode(first); assert(value && !strcmp(value, "47")); free(value);
+    input_item_t *second = parse.tree->pp_children[1]->p_item;
+    assert(input_item_GetDuration(second) == VLC_TICK_FROM_SEC(3723));
+    value = input_item_GetArtworkURL(second); assert(value && !strcmp(value, "https://example.test/show.png")); free(value);
+    value = input_item_GetMetaExtra(second, "podcast:video"); assert(!value); free(value);
+    input_item_node_Delete(parse.tree); input_item_Release(item); unlink(path);
 }
 
 static int OpenIntf(vlc_object_t *root)
@@ -490,6 +616,8 @@ static int OpenIntf(vlc_object_t *root)
     TestAssociatedTracks(root, ml, media, MOCK_URL);
     TestBookmarks(ml, media->i_id);
     TestResumeProgress(root, ml);
+    TestPodcastState(ml);
+    TestPodcastFeed(root);
 
     vlc_ml_media_release(media);
 

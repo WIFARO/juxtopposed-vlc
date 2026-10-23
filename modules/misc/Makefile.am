@@ -131,6 +131,7 @@ libmedialibrary_plugin_la_SOURCES = \
 	misc/medialibrary/medialibrary.cpp \
 	misc/medialibrary/MetadataExtractor.cpp \
 	misc/medialibrary/entities.cpp \
+	misc/medialibrary/podcast_metadata.hpp \
 	misc/medialibrary/Thumbnailer.cpp \
 	misc/medialibrary/medialibrary.h \
 	misc/medialibrary/track_rules.hpp \

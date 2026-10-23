@@ -125,6 +125,8 @@ struct vlc_player_input
         bool delay_restore;
         /* Natural completion must not depend on periodic position updates. */
         bool completed;
+        bool podcast;
+        vlc_tick_t last_progress_save;
         /* Keep a trace of tracks as they appear since they won't be available
          * for probing when the input gets stopped
          */
@@ -601,6 +603,9 @@ vlc_player_osd_Program(vlc_player_t *player, const char *name);
 
 void
 vlc_player_input_RestoreMlStates(struct vlc_player_input* input, bool force_pos);
+
+void
+vlc_player_input_SavePodcastProgress(struct vlc_player_input* input);
 
 void
 vlc_player_UpdateMLStates(vlc_player_t *player, struct vlc_player_input* input);

@@ -248,6 +248,7 @@ typedef struct vlc_ml_media_t
     };
     bool b_subtitle_track_selection;
     bool b_soundtrack_track_selection;
+    input_item_t *p_podcast; /**< Cached feed metadata, or NULL. Owned by this record. */
 } vlc_ml_media_t;
 
 typedef struct vlc_ml_group_t
@@ -688,6 +689,14 @@ enum vlc_ml_control
      * An explicit per-media choice, including an empty one, takes priority.
      */
     VLC_ML_MEDIA_GET_FOLDER_TRACKS,
+    /** Cache feed metadata and resolve a stable episode identity.
+     * input_item_t*, vlc_ml_media_t**. Does not fetch the enclosure.
+     */
+    VLC_ML_REGISTER_PODCAST,
+    /** Save an exact podcast resume position without inferring completion.
+     * media id, double position, int natural completion.
+     */
+    VLC_ML_MEDIA_SAVE_PODCAST_PROGRESS,
 };
 
 /**

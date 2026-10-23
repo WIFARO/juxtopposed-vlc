@@ -80,6 +80,10 @@ Item {
         else if (saved) MediaLib.addAndPlay(data.id)
         else model.addAndPlay(index)
     }
+    function playEpisode(index, video, fromStart) {
+        if (linked) linkedModel.playEpisode(index, video, fromStart)
+        else if (model && model.playEpisode) model.playEpisode(index, video, fromStart)
+    }
     function enqueue(index) {
         const data = dataAt(index)
         if (!data || atRoot) return

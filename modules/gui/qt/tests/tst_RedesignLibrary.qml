@@ -1099,6 +1099,17 @@ TestCase {
         library.expanded = false
         tryCompare(second, "width", findChild(library, "libraryMediaView").width)
     }
+    function test_podcastSummaryShowsEpisodeAndProgress() {
+        const duration = {valid: () => true, formatHMS: () => "24:11", scale: value => ({formatHMS: () => "12:06"})}
+        const row = {podcast: {feed: "https://example.test/feed", season: "42", episode: "47"}, duration: duration, progress: .5}
+        const summary = library.episodeSummary(row)
+        verify(summary.includes("Season 42")); verify(summary.includes("Episode 47"))
+        verify(summary.includes("24:11")); verify(summary.includes("12:06 left"))
+        row.progress = 0; row.playcount = 1
+        verify(library.episodeSummary(row).includes("Played"))
+        row.playcount = 0
+        verify(library.episodeSummary(row).includes("Not played"))
+    }
     function test_clickSelectsAndDoubleClickOpens() {
         const button = findChild(library, "libraryMediaItem1")
         mouseClick(button)

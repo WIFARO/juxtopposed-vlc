@@ -29,6 +29,7 @@
 #include "mlhelper.hpp"
 #include "util/media_identity_ml.hpp"
 #include "util/vlctick.hpp"
+#include "util/podcast_metadata.hpp"
 
 #include <QObject>
 #include <algorithm>
@@ -72,12 +73,19 @@ public:
             m_discNumber = std::max(0, media->album_track.i_disc_nb);
         }
         m_mrl = getMRL();
+        if (media->p_podcast) {
+            m_podcast = podcastMetadata(media->p_podcast);
+            m_mrl = QUrl::fromEncoded(media->p_podcast->psz_uri);
+            const auto artwork = vlc::wrap_cptr(input_item_GetArtworkURL(media->p_podcast));
+            if (artwork && m_smallThumbnail.mrl.isEmpty()) m_smallThumbnail = {QString::fromUtf8(artwork.get()), VLC_ML_THUMBNAIL_STATUS_AVAILABLE};
+        }
         m_identityMetadata = MediaIdentity::libraryMetadata(media, m_mrl);
         m_type = media->i_type;
         m_isFavorite = media->b_is_favorite;
         m_lastPlayedDate = QDateTime::fromSecsSinceEpoch(media->i_last_played_date, QTimeZone::systemTimeZone());
     }
 
+    QVariantMap podcast() const { return m_podcast; }
     QVariantMap identityMetadata() const { return m_identityMetadata; }
     void setIdentityMetadata(const QVariantMap& metadata) { m_identityMetadata = metadata; }
     QString title() const { return m_title; }
@@ -121,6 +129,7 @@ protected:
         vlc_ml_thumbnail_status_t status = VLC_ML_THUMBNAIL_STATUS_MISSING;
     };
 
+    QVariantMap m_podcast;
     QVariantMap m_identityMetadata;
     QString m_title;
     QString m_fileName;

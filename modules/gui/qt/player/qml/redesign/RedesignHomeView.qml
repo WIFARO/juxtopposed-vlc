@@ -138,7 +138,7 @@ Flickable {
                                             showPlaceholderBackground: root.expanded
                                             placeholderColor: root.lightTheme ? root.theme.field : section.modelData.key === "folders" ? "#1e1e1e" : "#171717"
                                             cornerRadius: root.expanded ? 12 : 2
-                                            progress: root.expanded && section.modelData.key === "watching" ? Number(entry.model.progress || 0) : 0
+                                            progress: ["watching", "listening"].includes(section.modelData.key) ? Number(entry.model.progress || 0) : 0
                                             surroundColor: button.down || button.selected ? root.theme.selected : button.hovered ? root.theme.hover : root.theme.panel
                                         }
                                         Text {

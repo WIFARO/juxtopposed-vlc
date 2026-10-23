@@ -25,6 +25,7 @@
 #include "medialibrary/mlmediastore.hpp"
 
 #include "util/locallistbasemodel.hpp"
+#include "util/podcast_metadata.hpp"
 
 #include "playlist/media.hpp"
 #include "playlist/playlist_controller.hpp"
@@ -52,6 +53,8 @@ struct NetworkMediaItem : public NetworkBaseItem
     qint64 fileSize;
     QDateTime fileModified;
     MLMedia media;
+    QVariantMap podcast;
+    VLCDuration feedDuration;
 };
 
 using NetworkMediaItemPtr = std::shared_ptr<NetworkMediaItem>;
@@ -64,13 +67,8 @@ inline bool isADir(const NetworkMediaItemPtr& x)
 int compareMediaDuration(const NetworkMediaItemPtr &l
                          , const NetworkMediaItemPtr &r)
 {
-    const bool lHasMedia = l->media.valid();
-    const bool rHasMedia = r->media.valid();
-    if (lHasMedia != rHasMedia) return lHasMedia ? 1 : - 1;
-    if (!lHasMedia && !rHasMedia) return 0;
-
-    const auto &lmedia = l->media.duration();
-    const auto &rmedia = r->media.duration();
+    const auto lmedia = l->feedDuration.valid() ? l->feedDuration : l->media.duration();
+    const auto rmedia = r->feedDuration.valid() ? r->feedDuration : r->media.duration();
     if (lmedia == rmedia) return 0;
     return lmedia > rmedia ? 1 : -1;
 }
@@ -185,7 +183,8 @@ public:
                 m_MLMedias->clear();
         }
 
-        std::vector<NetworkMediaItem> items;
+        QStringList mediaUrls;
+        QHash<QString, SharedInputItem> podcasts;
         for (const auto& inputItem: children)
         {
             auto item = std::make_shared<NetworkMediaItem>();
@@ -230,6 +229,8 @@ public:
             }
 
             item->tree = NetworkTreeItem(treeItem, inputItem );
+            item->podcast = podcastMetadata(inputItem.get());
+            item->feedDuration = VLCDuration(input_item_GetDuration(inputItem.get()));
 
             if ( m_mediaLib && item->canBeIndexed)
             {
@@ -260,10 +261,19 @@ public:
             m_items[item->uri] = item;
             if (m_MLMedias && (item->type == NetworkMediaModel::TYPE_FILE))
             {
-                m_MLMedias->insert(item->uri);
+                mediaUrls.push_back(item->uri);
+                if (!item->podcast.isEmpty()) podcasts.insert(item->uri, inputItem);
             }
         }
 
+        if (m_MLMedias) {
+            mediaUrls.clear(); podcasts.clear();
+            for (const auto& current : m_items) if (current->type == NetworkMediaModel::TYPE_FILE) {
+                mediaUrls.push_back(current->uri);
+                if (!current->podcast.isEmpty()) podcasts.insert(current->uri, current->tree.media);
+            }
+            m_MLMedias->insertMany(mediaUrls, {}, podcasts);
+        }
         ++m_revision;
         invalidateCache();
     }
@@ -279,6 +289,18 @@ public:
 public:
     LocalListCacheLoader<NetworkMediaItemPtr>::ItemCompare getSortFunction() const override
     {
+        if (m_sortCriteria == "published" || m_sortCriteria == "episode") {
+            return [field = m_sortCriteria, descending = m_sortOrder == Qt::DescendingOrder](const NetworkMediaItemPtr& a, const NetworkMediaItemPtr& b) {
+                if (field == "published") {
+                    const auto left = QDateTime::fromString(a->podcast.value("date").toString(), Qt::RFC2822Date);
+                    const auto right = QDateTime::fromString(b->podcast.value("date").toString(), Qt::RFC2822Date);
+                    return descending ? left > right : left < right;
+                }
+                const auto left = std::make_pair(a->podcast.value("season").toInt(), a->podcast.value("episode").toDouble());
+                const auto right = std::make_pair(b->podcast.value("season").toInt(), b->podcast.value("episode").toDouble());
+                return descending ? left > right : left < right;
+            };
+        }
         if (m_sortCriteria == "mrl" )
         {
             if (m_sortOrder == Qt::SortOrder::DescendingOrder)
@@ -577,6 +599,8 @@ QVariant NetworkMediaModel::data( const QModelIndex& index, int role ) const
             return item->media.valid()
                     ? QVariant::fromValue(item->media)
                     : QVariant {};
+        case PODCAST: return item->podcast;
+        case PLAYED: return item->media.valid() && item->media.playCount() > 0;
         case NETWORK_MEDIA_PROGRESS:
         {
             if (item->media.valid())
@@ -592,7 +616,7 @@ QVariant NetworkMediaModel::data( const QModelIndex& index, int role ) const
                 return !duration.valid() ? QVariant {} : QVariant::fromValue(duration);
             }
 
-            return {};
+            return item->feedDuration.valid() ? QVariant::fromValue(item->feedDuration) : QVariant{};
         }
         case URL:
             return item->uri;
@@ -614,6 +638,8 @@ QHash<int, QByteArray> NetworkMediaModel::roleNames() const
     roles[NETWORK_MEDIA_PROGRESS] = QByteArrayLiteral("progress");
     roles[NETWORK_MEDIA_DURATION] = QByteArrayLiteral("duration");
     roles[URL] = QByteArrayLiteral("url");
+    roles[PODCAST] = QByteArrayLiteral("podcast");
+    roles[PLAYED] = QByteArrayLiteral("played");
 
     return roles;
 }
@@ -1044,4 +1070,23 @@ void NetworkMediaModelPrivate::ListenerCb::onItemPreparseEnded(MediaTreePtr, inp
         model->d_func()->m_loading = false;
         emit model->loadingChanged();
     });
+}
+
+void NetworkMediaModel::playEpisode(int row, bool video, bool fromStart)
+{
+    Q_D(NetworkMediaModel);
+    const auto* entry = d->getItemForRow(row);
+    if (!entry || !d->m_ctx || entry->podcast.isEmpty()) return;
+    auto* original = entry->tree.media.get();
+    auto* controller = d->m_ctx->getIntf()->p_mainPlaylistController;
+    auto item = SharedInputItem(input_item_Copy(original), false);
+    if (!item) return;
+    if (video) {
+        const auto url = vlc::wrap_cptr(input_item_GetMetaExtra(item.get(), "podcast:video"));
+        if (!url || !*url) return;
+        input_item_SetURI(item.get(), url.get());
+    }
+    input_item_AddOption(item.get(), fromStart ? "restore-playback-pos=0" : "restore-playback-pos=2", VLC_INPUT_OPTION_TRUSTED);
+    const QVector<vlc::playlist::Media> media{vlc::playlist::Media{item.get()}};
+    controller->append(media, true);
 }

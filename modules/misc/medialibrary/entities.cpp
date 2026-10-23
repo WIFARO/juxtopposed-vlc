@@ -23,6 +23,7 @@
 #endif
 
 #include "medialibrary.h"
+#include "podcast_metadata.hpp"
 
 #include <medialibrary/IMedia.h>
 #include <medialibrary/IFile.h>
@@ -188,6 +189,7 @@ static bool convertTracks( const medialibrary::IMedia* inputMedia, vlc_ml_media_
 
 bool Convert( const medialibrary::IMedia* input, vlc_ml_media_t& output )
 {
+    output.p_podcast = nullptr;
     output.i_id = input->id();
 
     switch ( input->type() )
@@ -255,6 +257,22 @@ bool Convert( const medialibrary::IMedia* input, vlc_ml_media_t& output )
     output.b_is_favorite = input->isFavorite();
     output.i_playcount = input->playCount();
     output.f_progress = input->lastPosition();
+    const auto podcast = vlc::podcast::read(*input);
+    const auto progress = podcast.find("progress");
+    if (progress != podcast.end()) output.f_progress = std::clamp(atof(progress->second.c_str()), 0., 1.);
+    const auto duration = podcast.find("duration");
+    if (duration != podcast.end()) output.i_duration = std::max<int64_t>(0, atoll(duration->second.c_str()));
+    const auto time = podcast.find("time");
+    if (time != podcast.end() && output.i_duration > 0)
+        output.f_progress = std::clamp(atoll(time->second.c_str()) / double(output.i_duration), 0., 1.);
+    if (!podcast.empty()) {
+        const auto uri = podcast.find("uri");
+        if (uri != podcast.end()) {
+            output.p_podcast = input_item_New(uri->second.c_str(), input->title().c_str());
+            if (!output.p_podcast) return false;
+            vlc::podcast::apply(podcast, output.p_podcast);
+        }
+    }
     output.i_last_played_date = input->lastPlayedDate();
     output.b_is_public = input->isPublic();
 
@@ -647,5 +665,6 @@ input_item_t* MediaToInputItem( const medialibrary::IMedia* media )
         }
     }
 
+    vlc::podcast::apply(vlc::podcast::read(*media), inputItem.get());
     return inputItem.release();
 }
