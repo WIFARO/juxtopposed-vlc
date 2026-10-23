@@ -7,6 +7,7 @@ import VLC.Playlist
 import VLC.Style
 import VLC.Util
 import VLC.Dialogs
+import VLC.Network
 import VLC.Widgets as Widgets
 
 FocusScope {
@@ -20,6 +21,39 @@ FocusScope {
     PlaylistTreeModel { id: queueTreeModel; treeEnabled: MainCtx.playlistTree }
     property int requestedLibraryCategory: -1
     property var requestedNetworkPlaylist: null
+    SeriesModel { id: seriesModel }
+    Timer { id: seriesContextTimer; interval: 0; onTriggered: seriesModel.setCurrent(Player.url, Player.seriesContext) }
+    property string seriesFeedUrl: seriesModel.feed.toString()
+    onSeriesFeedUrlChanged: seriesFeed.setSources(seriesFeedUrl ? [{mrl: seriesFeedUrl}] : [])
+    NetworkPlaylistModel {
+        id: seriesFeed
+        ctx: MainCtx
+        active: rootPlayer.seriesFeedUrl.length > 0
+        onModelReset: seriesFeedUpdate.restart()
+        onDataChanged: seriesFeedUpdate.restart()
+        onLoadingChanged: seriesFeedUpdate.restart()
+    }
+    Timer {
+        id: seriesFeedUpdate
+        interval: 0
+        onTriggered: {
+            if (!rootPlayer.seriesFeedUrl) return
+            const rows = []
+            for (let i = 0; i < seriesFeed.count; ++i) {
+                const row = seriesFeed.getDataAt(i)
+                row.sourceIndex = i
+                rows.push(row)
+            }
+            seriesModel.setFeedEpisodes(Qt.resolvedUrl(rootPlayer.seriesFeedUrl), rows)
+            seriesModel.setFeedStatus(seriesFeed.loading, !seriesFeed.loading && !seriesFeed.expanded)
+            seriesModel.setProgress(Player.url, Player.position)
+        }
+    }
+    Loader {
+        active: MainCtx.mediaLibraryAvailable
+        source: active ? "qrc:///qt/qml/VLC/Player/RedesignSeriesMetadata.qml" : ""
+        onLoaded: { item.seriesModel = seriesModel; seriesModel.loadStates() }
+    }
     Connections {
         target: DialogsProvider
         function onShowRedesignNetworkPlaylist(urls, name) {
@@ -30,7 +64,7 @@ FocusScope {
     function beginCustomization() {
         if (MainCtx.minimalView) MainCtx.minimalView = false
         mediaMenu.dismiss(); tracksPopup.close(); customChoice.close()
-        view.settingsPage = ""; view.queueOpen = false
+        view.settingsPage = ""; view.queueOpen = false; view.episodesOpen = false
         view.libraryOpen = false; view.libraryExpanded = false
         customizationPreferences.discard()
         customizationEditor.begin()
@@ -87,6 +121,7 @@ FocusScope {
         else if (action === "home" || action === "playlists") openLibraryCategory(action === "home" ? 0 : 4)
         else if (action === "properties") DialogsProvider.mediaInfoDialog()
         else if (action === "replay") Player.replay()
+        else if (action === "episodes") view.toggleEpisodes()
         else if (action === "chapters" || action === "bookmarks") {
             rootPlayer.queueTab = action === "chapters" ? 2 : 1
             view.settingsPage = ""; view.queueOpen = true
@@ -104,7 +139,9 @@ FocusScope {
     }
     Connections {
         target: Player
-        function onInputChanged() { view.refreshSeekPreview(); view.cancelTimeEdit(); gotoTime.reject() }
+        function onInputChanged() { view.refreshSeekPreview(); view.cancelTimeEdit(); gotoTime.reject(); seriesContextTimer.restart() }
+        function onCurrentMetaChanged() { seriesContextTimer.restart() }
+        function onPositionChanged() { seriesModel.setProgress(Player.url, Player.position) }
     }
     Connections {
         target: DialogsProvider
@@ -257,6 +294,7 @@ FocusScope {
     Binding { target: Player; property: "subtitleTimelineEnabled"; value: MainCtx.redesignPlayerPreferences.subtitleTimeline }
 
     Component.onCompleted: {
+        seriesContextTimer.restart()
         MainCtx.playqueuePanel.docked = true
         view.queueOpen = MainCtx.playqueuePanel.visible
     }
@@ -271,6 +309,7 @@ FocusScope {
         accentColor: MainCtx.redesignAccent
         playerLayout: MainCtx.redesignPlayerPreferences.layout
         customMenuOpen: customChoice.visible || mediaMenu.visible
+        episodesAvailable: seriesModel.available
         customControlStates: ({
             speed: {enabled: Player.ratechangable},
             forward10: {enabled: view.seekable}, backward10: {enabled: view.seekable},
@@ -290,6 +329,7 @@ FocusScope {
                 icon: favoriteLoader.item && favoriteLoader.item.favorite ? "favorite-active" : "favorite"},
             bookmark: {enabled: Player.isStarted && MainCtx.mediaLibraryAvailable}, bookmarks: {enabled: MainCtx.mediaLibraryAvailable},
             chapters: {enabled: Player.isStarted && Player.hasChapters}, properties: {enabled: Player.isStarted}, replay: {enabled: view.seekable},
+            episodes: {enabled: seriesModel.available, checked: view.episodesOpen},
             thumbnail: {artwork: Player.artwork}, fileName: {value: Player.name}, artist: {value: Player.artist},
             folderName: {value: rootPlayer.mediaFolderName()}, playlistName: {value: MainPlaylistController.currentItem.playlistName}
         })
@@ -534,6 +574,35 @@ FocusScope {
                 onPageRequested: page => view.settingsPage = page
                 onCloseRequested: view.settingsPage = ""
                 onSleepTimerRequested: minutes => sleepTimer.start(minutes)
+            }
+        }
+        episodesContent: Component {
+            RedesignEpisodesView {
+                scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
+                episodesModel: seriesModel
+                showTitle: seriesModel.showTitle
+                seasons: seriesModel.seasons
+                selectedSeason: seriesModel.selectedSeason
+                currentSeason: seriesModel.currentSeason
+                loading: seriesModel.loading; limited: seriesModel.limited; message: seriesModel.message
+                podcast: !!rootPlayer.seriesFeedUrl
+                onSeasonRequested: season => seriesModel.selectedSeason = season
+                onDetailsRequested: row => seriesModel.requestDetails(row)
+                onCloseRequested: view.episodesOpen = false
+                onRefreshRequested: {
+                    if (rootPlayer.seriesFeedUrl) { seriesFeed.setSources([]); seriesFeed.setSources([{mrl: rootPlayer.seriesFeedUrl}]) }
+                    else seriesModel.refresh()
+                }
+                onSearchFurtherRequested: seriesModel.searchFurther()
+                onFolderRequested: {
+                    const folder = DialogsProvider.selectLibraryFolder(seriesModel.folder)
+                    if (folder.toString()) seriesModel.refresh(folder)
+                }
+                onEpisodeRequested: (row, version, fromStart) => {
+                    const episode = seriesModel.get(row)
+                    if (episode.feedIndex >= 0) seriesFeed.playEpisode(episode.feedIndex, version > 0, fromStart)
+                    else if (episode.urls && version >= 0 && version < episode.urls.length) Player.playSeriesEpisode(episode.urls[version], fromStart)
+                }
             }
         }
     }

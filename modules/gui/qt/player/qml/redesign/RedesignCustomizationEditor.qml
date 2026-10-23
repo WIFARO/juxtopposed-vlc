@@ -154,7 +154,7 @@ Item {
             return rect
         }
         if (id === "play") return centered(54, 34)
-        if (["audio", "subtitles", "settings", "queue"].includes(id)) return centered(30, 32)
+        if (["audio", "subtitles", "episodes", "settings", "queue"].includes(id)) return centered(30, 32)
         if (id === "volume" && groupedVolume) {
             const rect = united(actual, bounds(player.chromeItems.mute))
             return Qt.rect(rect.x + dp(1), rect.y + (rect.height - dp(36)) / 2, rect.width + dp(2), dp(36))

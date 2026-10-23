@@ -15,14 +15,14 @@ QtObject {
         "speed", "forward10", "backward10", "forward15", "backward15", "stop", "repeat", "shuffle", "record",
         "snapshot", "pip", "hdr", "zoom", "rightSidebar", "quit", "preferences", "home", "thumbnail",
         "fileName", "artist", "folderName", "playlistName", "properties", "replay", "chapters", "favorite",
-        "bookmark", "bookmarks", "playlists"]
+        "bookmark", "bookmarks", "playlists", "episodes"]
 
     function defaults() {
         return {version: 1, zones: {
             headerLeft: ["menu", "library", "divider:1", "folder"],
             headerCenter: ["title"], headerRight: ["minimize", "maximize", "fullscreen", "close"],
             footerLeft: ["previous", "play", "next"], footerCenter: ["timeline"],
-            footerRight: ["mute", "volume", "audio", "subtitles", "settings", "queue"], above: []
+            footerRight: ["mute", "volume", "audio", "subtitles", "episodes", "settings", "queue"], above: []
         }}
     }
     function clone(value) { return JSON.parse(JSON.stringify(value)) }

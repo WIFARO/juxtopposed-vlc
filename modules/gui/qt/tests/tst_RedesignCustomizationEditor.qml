@@ -151,9 +151,9 @@ TestCase {
                            ["divider:1", 117, 6, 24, 28],
                            ["minimize", 1770, 8, 36, 24], ["close", 1878, 8, 36, 24],
                            ["previous", 20, 1039, 30, 28], ["play", 58, 1036, 54, 34],
-                           ["next", 120, 1039, 30, 28], ["timeline", 170, 1035, 1406, 36],
-                           ["volume", 1591, 1035, 130, 36], ["audio", 1736, 1037, 30, 32],
-                           ["subtitles", 1778, 1037, 30, 32], ["settings", 1820, 1037, 30, 32],
+                           ["next", 120, 1039, 30, 28], ["timeline", 170, 1035, 1364, 36],
+                           ["volume", 1549, 1035, 130, 36], ["audio", 1694, 1037, 30, 32],
+                           ["subtitles", 1736, 1037, 30, 32], ["episodes", 1778, 1037, 30, 32], ["settings", 1820, 1037, 30, 32],
                            ["queue", 1870, 1037, 30, 32]])
             outlineMatches(...row, data.scale)
         // Caption width follows the application's font and translated text.
@@ -168,9 +168,9 @@ TestCase {
         outlineMatches("previous", 895, 1039, 30, 28, data.scale)
         outlineMatches("play", 933, 1036, 54, 34, data.scale)
         outlineMatches("next", 995, 1039, 30, 28, data.scale)
-        player.layoutModel.move("fullscreen", "footerRight", 6)
-        outlineMatches("volume", 1540, 1035, 130, 36, data.scale)
-        outlineMatches("audio", 1685, 1037, 30, 32, data.scale)
+        player.layoutModel.move("fullscreen", "footerRight", 7)
+        outlineMatches("volume", 1498, 1035, 130, 36, data.scale)
+        outlineMatches("audio", 1643, 1037, 30, 32, data.scale)
         outlineMatches("fullscreen", 1864, 1041, 36, 24, data.scale)
         for (const id of ["menu", "library", "divider:1", "folder", "title"])
             player.layoutModel.move(id, "footerLeft", player.layoutModel.layout.zones.footerLeft.length)

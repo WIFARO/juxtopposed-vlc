@@ -50,8 +50,8 @@ TestCase {
     }
     function test_groupMovesUseOriginalInsertionBoundary() {
         layout.begin()
-        verify(layout.moveGroup(["mute", "volume"], "footerRight", 6))
-        compare(layout.layout.zones.footerRight, ["audio", "subtitles", "settings", "queue", "mute", "volume"])
+        verify(layout.moveGroup(["mute", "volume"], "footerRight", 7))
+        compare(layout.layout.zones.footerRight, ["audio", "subtitles", "episodes", "settings", "queue", "mute", "volume"])
         verify(layout.moveGroup(["mute", "volume"], "footerRight", 0))
         compare(layout.layout, layout.defaults())
         verify(layout.moveGroup(["mute", "volume"], "above", 0))

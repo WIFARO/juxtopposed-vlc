@@ -1273,6 +1273,8 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignBookmarks.qml \
 	player/qml/redesign/RedesignBookmarksView.qml \
 	player/qml/redesign/RedesignChaptersView.qml \
+	player/qml/redesign/RedesignEpisodesView.qml \
+	player/qml/redesign/RedesignSeriesMetadata.qml \
 	player/qml/redesign/RedesignQueuePanel.qml \
 	player/qml/redesign/RedesignLibrary.qml \
 	player/qml/redesign/RedesignPlayer.qml \
@@ -2617,6 +2619,8 @@ EXTRA_DIST += tests/tst_RedesignBookmarks.qml
 TESTS += tests/tst_RedesignBookmarks.qml
 EXTRA_DIST += tests/tst_RedesignChapters.qml
 TESTS += tests/tst_RedesignChapters.qml
+EXTRA_DIST += tests/tst_RedesignEpisodes.qml
+TESTS += tests/tst_RedesignEpisodes.qml
 EXTRA_DIST += tests/tst_RedesignLibrary.qml
 TESTS += tests/tst_RedesignLibrary.qml
 EXTRA_DIST += tests/tst_RedesignAddons.qml

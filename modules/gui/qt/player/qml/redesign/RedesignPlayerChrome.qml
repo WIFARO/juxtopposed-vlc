@@ -72,7 +72,7 @@ Item {
         let width = 0, count = 0
         for (const id of renderedLayout.zones[zone]) {
             const control = allControls[id]
-            if (!control) continue
+            if (!control || !control.visible) continue
             width += (control.implicitWidth || control.width) + control.Layout.leftMargin + control.Layout.rightMargin
             ++count
         }

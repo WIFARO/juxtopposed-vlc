@@ -59,6 +59,7 @@ FocusScope {
         if (minimalView) {
             libraryOpen = false
             queueOpen = false
+            episodesOpen = false
             settingsPage = ""
             forceActiveFocus()
         }
@@ -73,8 +74,13 @@ FocusScope {
     property bool libraryInitialized: false
     onLibraryOpenChanged: if (!libraryOpen) libraryExpanded = false
     property bool queueOpen: false
+    onQueueOpenChanged: if (queueOpen) episodesOpen = false
+    property bool episodesOpen: false
+    property bool episodesAvailable: false
+    onEpisodesAvailableChanged: if (!episodesAvailable) episodesOpen = false
     readonly property bool floatingQueue: queueOpen && miniPlayer.visible
     property string settingsPage: ""
+    onSettingsPageChanged: if (settingsPage.length > 0) episodesOpen = false
     property real position: 0
     property real volume: 1
     property real maxVolume: 1.25
@@ -105,6 +111,7 @@ FocusScope {
     property Component libraryContent
     property Component queueContent
     property Component settingsContent
+    property Component episodesContent
     property QtObject trackPopup
     readonly property alias videoItem: videoLoader.item
     readonly property rect subtitleArea: videoCanvas.width > 0 && videoCanvas.height > 0
@@ -121,7 +128,7 @@ FocusScope {
         for (let item = seek; item && item !== root; item = item.parent) y += item.y
         return y
     }
-    readonly property bool controlsLocked: elapsedTime.editing || chromeLayout.editing || customMenuOpen || queueOpen || libraryOpen || settingsPage.length > 0 || resumeAvailable || !!trackPopup && trackPopup.visible
+    readonly property bool controlsLocked: elapsedTime.editing || chromeLayout.editing || customMenuOpen || queueOpen || episodesOpen || libraryOpen || settingsPage.length > 0 || resumeAvailable || !!trackPopup && trackPopup.visible
     readonly property alias topVisible: header.visible
     readonly property alias bottomVisible: toolbar.visible
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
@@ -199,11 +206,13 @@ FocusScope {
     function revealControls() { revealTimer.restart() }
     function revealCursor() { if (fullscreen) cursorHideTimer.restart() }
     function toggleSettings(page: string) {
+        episodesOpen = false
         if (trackPopup) trackPopup.close()
         queueOpen = false
         settingsPage = settingsPage === page ? "" : page
     }
     function toggleTracks(anchor, page) {
+        episodesOpen = false
         if (!trackPopup) return
         if (settingsPage === page) {
             settingsPage = ""
@@ -215,18 +224,25 @@ FocusScope {
         trackPopup.toggleFrom(anchor, page)
     }
     function dismissPanels() {
+        episodesOpen = false
         settingsPage = ""
         queueOpen = false
         libraryOpen = false
     }
 
     Keys.onEscapePressed: event => {
-        if (queueOpen || libraryOpen || settingsPage.length > 0)
+        if (queueOpen || episodesOpen || libraryOpen || settingsPage.length > 0)
             dismissPanels()
         else if (fullscreen)
             fullscreenRequested()
         else
             event.accepted = false
+    }
+    function toggleEpisodes() {
+        if (!episodesAvailable && !presentationOnly) return
+        if (trackPopup) trackPopup.close()
+        queueOpen = false; settingsPage = ""
+        episodesOpen = !episodesOpen
     }
     Keys.onPressed: event => {
         if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
@@ -537,7 +553,7 @@ FocusScope {
         id: rightPanel
         objectName: "redesignRightPanel"
         z: 3
-        visible: (root.queueOpen && !root.floatingQueue) || root.settingsPage.length > 0
+        visible: root.episodesOpen || (root.queueOpen && !root.floatingQueue) || root.settingsPage.length > 0
         width: Math.min(theme.dp(400), root.width * 0.48)
         anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right
         anchors.topMargin: header.height + theme.dp(20); anchors.bottomMargin: toolbar.height + theme.dp(20)
@@ -549,7 +565,7 @@ FocusScope {
             anchors.fill: parent
             z: -1
             sourceComponent: root.videoBackdropContent
-            active: (root.queueOpen && !root.floatingQueue) || root.settingsPage.length > 0
+            active: root.episodesOpen || (root.queueOpen && !root.floatingQueue) || root.settingsPage.length > 0
         }
         MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onWheel: wheel => wheel.accepted = true }
         Loader {
@@ -566,6 +582,12 @@ FocusScope {
             anchors.fill: parent
             sourceComponent: root.settingsContent
             active: root.settingsPage.length > 0
+            visible: active
+        }
+        Loader {
+            anchors.fill: parent
+            sourceComponent: root.episodesContent
+            active: root.episodesOpen
             visible: active
         }
     }
@@ -1003,11 +1025,22 @@ FocusScope {
             ChromeButton {
                 id: subtitleButton
                 objectName: "subtitleButton"
+                // A centered playback group needs room on narrow custom bars.
+                // Subtitle settings remain available in the settings panel.
+                visible: !(episodesButton.visible && chrome.custom && root.width <= theme.dp(1000))
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 iconName: "subtitles"; text: qsTr("Subtitle tracks")
                 selectedIconName: "subtitles-active"
                 selected: !!root.trackPopup && root.trackPopup.visible && root.trackPopup.page === "subtitles"
                 onClicked: { root.toggleTracks(this, "subtitles"); root.subtitleTracksRequested(this) }
+            }
+            ChromeButton {
+                id: episodesButton
+                objectName: "episodesButton"
+                visible: root.episodesAvailable || root.presentationOnly || chromeLayout.editing
+                scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                iconName: "episodes"; text: qsTr("Episodes"); selected: root.episodesOpen
+                onClicked: root.toggleEpisodes()
             }
             ChromeButton {
                 id: playbackSettingsButton
@@ -1025,7 +1058,7 @@ FocusScope {
                 objectName: "queueButton"
                 scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
                 iconName: "lists"; selectedIconName: "lists-active"; text: qsTr("Play queue"); selected: root.queueOpen
-                onClicked: { root.settingsPage = ""; root.queueOpen = !root.queueOpen }
+                onClicked: { root.episodesOpen = false; root.settingsPage = ""; root.queueOpen = !root.queueOpen }
             }
         }
     }
@@ -1049,6 +1082,6 @@ FocusScope {
             title: titleControl, minimize: minimizeButton, maximize: maximizeButton, fullscreen: fullscreenButton, close: closeButton,
             previous: previousButton, play: playButton, next: nextButton, timeline: timelineControl,
             mute: muteButton, volume: volumeSlider, audio: audioButton, subtitles: subtitleButton,
-            settings: playbackSettingsButton, queue: queueButton})
+            episodes: episodesButton, settings: playbackSettingsButton, queue: queueButton})
     }
 }

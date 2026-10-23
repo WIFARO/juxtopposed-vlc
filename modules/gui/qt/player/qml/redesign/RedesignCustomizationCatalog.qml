@@ -30,6 +30,7 @@ QtObject {
         {id: "properties", label: qsTr("Properties"), icon: "info"},
         {id: "replay", label: qsTr("Replay"), icon: "replay"},
         {id: "chapters", label: qsTr("Chapters"), icon: "chapters"},
+        {id: "episodes", label: qsTr("Episodes"), icon: "episodes"},
         {id: "favorite", label: qsTr("Favorite"), icon: "favorite"},
         {id: "bookmark", label: qsTr("Bookmark"), icon: "bookmark"},
         {id: "bookmarks", label: qsTr("Bookmarks"), icon: "bookmarks"},

@@ -95,7 +95,7 @@ TestCase {
         for (const id of ["previous", "play", "next"]) model.move(id, "footerCenter", model.layout.zones.footerCenter.length)
         model.move("spacer", "footerLeft", 0); model.move("spacer", "footerRight", 0)
         tryVerify(() => item("customControl_spacer:1") && item("customControl_spacer:2")
-                  && item("customControl_spacer:1").width > 500 && item("customControl_spacer:2").width > 500)
+                  && item("customControl_spacer:1").width > testCase.width / 5 && item("customControl_spacer:2").width > testCase.width / 5)
         const play = item("playButton")
         fuzzyCompare(play.mapToItem(player, 0, 0).x + play.width / 2, width / 2, 1)
     }
