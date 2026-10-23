@@ -10,6 +10,38 @@ TestCase {
     visible: true
     when: windowShown
     property int activeBackdrops: 0
+    Component {
+        id: unavailableLibraryComponent
+        RedesignLibraryUnavailable { width: 427; height: 740 }
+    }
+    function test_unavailableLibraryNavigation_data() {
+        return ["Home", "Videos", "Music", "Network", "Playlists", "Recent files"].map((title, category) => ({tag: title, title: title, category: category}))
+    }
+    function test_unavailableLibraryNavigation(data) {
+        const panel = createTemporaryObject(unavailableLibraryComponent, testCase)
+        verify(panel !== null)
+        const added = signalSpy.createObject(testCase, {target: panel, signalName: "addRequested"})
+        mouseClick(findChild(panel, "libraryCategory" + data.category))
+        compare(panel.category, data.category)
+        compare(panel.heading, data.title)
+        compare(panel.breadcrumbs[0].label, data.title)
+        compare(added.count, 0)
+        verify(findChild(panel, "libraryEmptyMessage").visible)
+        added.destroy()
+        panel.searchText = "old search"
+        panel.resetLocation(2)
+        compare(panel.searchText, "")
+    }
+    function test_unavailableLibraryCanExpandAndReturn() {
+        const panel = createTemporaryObject(unavailableLibraryComponent, testCase)
+        verify(panel !== null)
+        panel.fullLibraryRequested.connect(() => panel.expanded = !panel.expanded)
+        mouseClick(findChild(panel, "expandLibraryButton"))
+        verify(panel.expanded)
+        mouseClick(findChild(panel, "expandLibraryButton"))
+        verify(!panel.expanded)
+    }
+    Component { id: signalSpy; SignalSpy {} }
     Item {
         id: pixelCaptureBounds
         width: testCase.width * Screen.devicePixelRatio

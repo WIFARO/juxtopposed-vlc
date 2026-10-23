@@ -76,9 +76,9 @@ FocusScope {
         Qt.callLater(applyLibraryCategory)
     }
     function applyLibraryCategory() {
-        const library = view.libraryItem ? view.libraryItem.item : null
+        const library = view.libraryItem ? view.libraryItem.contentItem : null
         if (requestedLibraryCategory < 0 || !library) return
-        if (requestedLibraryCategory === 3 && requestedNetworkPlaylist) {
+        if (requestedLibraryCategory === 3 && requestedNetworkPlaylist && typeof library.openNetworkPlaylist === "function") {
             library.openNetworkPlaylist(requestedNetworkPlaylist.urls, requestedNetworkPlaylist.name)
             requestedNetworkPlaylist = null
         } else library.resetLocation(requestedLibraryCategory)
@@ -505,21 +505,26 @@ FocusScope {
                     rootPlayer.applyLibraryCategory()
                 }
                 Loader {
+                    id: unavailableLibrary
                     anchors.fill: parent
                     active: !MainCtx.mediaLibraryAvailable
                     asynchronous: true
-                    sourceComponent: RedesignLibraryView {
+                    sourceComponent: RedesignLibraryUnavailable {
                         videoBackdropContent: rootPlayer.menuBackdropContent
                         anchors.fill: parent
                         expanded: view.libraryExpanded
                         scaleFactor: view.scaleFactor; lightTheme: view.lightTheme; accentColor: view.accentColor
-                        emptyText: qsTr("The media library is not available. Open files or a folder to add them to the queue.")
-                        onAddRequested: DialogsProvider.simpleOpenDialog()
-                        onCategoryRequested: category => category === 3 ? DialogsProvider.openNetDialog() : DialogsProvider.simpleOpenDialog()
+                        onAddRequested: category === 3 ? DialogsProvider.openNetDialog() : DialogsProvider.simpleOpenDialog()
+                        onFilesRequested: DialogsProvider.simpleOpenDialog()
+                        onFolderRequested: DialogsProvider.PLOpenDir()
+                        onFullLibraryRequested: view.libraryExpanded = !view.libraryExpanded
+                        onPreferencesRequested: DialogsProvider.prefsPageDialog("library")
                     }
+                    onLoaded: rootPlayer.applyLibraryCategory()
                 }
-                property string heading: item ? item.heading : qsTr("Videos")
-                property string locationTitle: item && item.breadcrumbs.length ? item.breadcrumbs[item.breadcrumbs.length - 1].label : qsTr("Videos")
+                readonly property var contentItem: item || unavailableLibrary.item
+                property string heading: contentItem ? contentItem.heading : qsTr("Videos")
+                property string locationTitle: contentItem && contentItem.breadcrumbs.length ? contentItem.breadcrumbs[contentItem.breadcrumbs.length - 1].label : qsTr("Videos")
             }
         }
         queueContent: Component {
