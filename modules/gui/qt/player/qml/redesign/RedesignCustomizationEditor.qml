@@ -369,7 +369,7 @@ Item {
         x: (parent.width - width) / 2
         y: Math.max(root.theme.dp(55), Math.min((parent.height - height) / 2 - root.theme.dp(23), parent.height - root.player.controlsHeight - height - root.theme.dp(15)))
         padding: 0; modal: false; dim: false; focus: true
-        closePolicy: C.Popup.NoAutoClose
+        closePolicy: root.saving ? C.Popup.NoAutoClose : C.Popup.CloseOnEscape
         background: RedesignDialogSurface { theme: root.theme; fill: root.theme.lightTheme ? root.theme.panel : "#0e0e0e"; videoBackdropContent: root.videoBackdropContent }
         onAboutToShow: controlPalette.positionViewAtBeginning()
         onClosed: {

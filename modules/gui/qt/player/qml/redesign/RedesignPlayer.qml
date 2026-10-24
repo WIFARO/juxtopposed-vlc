@@ -161,6 +161,7 @@ FocusScope {
     }
     Connections {
         target: DialogsProvider
+        function onShowToolbarEditorDialog() { rootPlayer.beginCustomization() }
         function onShowRedesignGotoTime() {
             if (gotoTime.visible) gotoTime.reject()
             else {
