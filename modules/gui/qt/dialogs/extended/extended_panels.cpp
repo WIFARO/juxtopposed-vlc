@@ -31,6 +31,8 @@
 #include <algorithm>
 #include <vector>
 
+#include <QColorDialog>
+#include <QToolButton>
 #include <QLabel>
 #include <QVariant>
 #include <QString>
@@ -166,18 +168,38 @@ static inline void setup_vfilter( qt_intf_t *p_intf, const char* psz_name, QWidg
 #define SETUP_VFILTER_VALUE_LABEL( name ) \
     setupSliderValueLabel( ui.name##Slider, ui.name##ValueLabel );
 
+namespace {
+class VideoColorValidator final : public QValidator
+{
+public:
+    VideoColorValidator(qint64 minimum, qint64 maximum, QObject* parent)
+        : QValidator(parent), m_minimum(qMax<qint64>(0, minimum)), m_maximum(qMin<qint64>(0xffffff, maximum)) {}
+    State validate(QString& text, int&) const override
+    {
+        auto digits = text;
+        if (digits.startsWith(QLatin1Char('#'))) digits.remove(0, 1);
+        static const QRegularExpression hex(QStringLiteral("^[0-9a-fA-F]{0,6}$"));
+        if (!hex.match(digits).hasMatch()) return Invalid;
+        if (digits.size() != 6) return Intermediate;
+        const auto value = digits.toLongLong(nullptr, 16);
+        return value >= m_minimum && value <= m_maximum ? Acceptable : Intermediate;
+    }
+private:
+    qint64 m_minimum, m_maximum;
+};
+}
+
 ExtVideo::ExtVideo( qt_intf_t *_p_intf, QTabWidget *_parent ) :
-            QObject( _parent ), p_intf( _p_intf )
+            QObject( _parent ), m_tabs(_parent), p_intf( _p_intf )
 {
     ui.setupUi( _parent );
 
     SETUP_VFILTER_gb( adjust )
     SETUP_VFILTER_OPTION( hueSlider, &QSlider::valueChanged )
-    SETUP_VFILTER_OPTION( contrastSlider, &QSlider::valueChanged )
     SETUP_VFILTER_OPTION( brightnessSlider, &QSlider::valueChanged )
+    SETUP_VFILTER_OPTION( contrastSlider, &QSlider::valueChanged )
     SETUP_VFILTER_OPTION( saturationSlider, &QSlider::valueChanged )
     SETUP_VFILTER_OPTION( gammaSlider, &QSlider::valueChanged )
-    SETUP_VFILTER_OPTION( brightnessThresholdCheck, &QtCheckboxChanged )
 
     SETUP_VFILTER_VALUE_LABEL( hue )
     SETUP_VFILTER_VALUE_LABEL( brightness )
@@ -186,12 +208,12 @@ ExtVideo::ExtVideo( qt_intf_t *_p_intf, QTabWidget *_parent ) :
     SETUP_VFILTER_VALUE_LABEL( gamma )
 
     SETUP_VFILTER_gb( extract )
-    SETUP_VFILTER_OPTION( extractComponentText, &QLineEdit::textChanged )
+    SETUP_VFILTER_OPTION( extractComponentText, &QLineEdit::editingFinished )
 
     SETUP_VFILTER_cb( posterize )
 
     SETUP_VFILTER_gb( colorthres )
-    SETUP_VFILTER_OPTION( colorthresColorText, &QLineEdit::textChanged )
+    SETUP_VFILTER_OPTION( colorthresColorText, &QLineEdit::editingFinished )
     SETUP_VFILTER_OPTION( colorthresSaturationthresSlider, &QSlider::valueChanged )
     SETUP_VFILTER_OPTION( colorthresSimilaritythresSlider, &QSlider::valueChanged )
 
@@ -248,7 +270,7 @@ ExtVideo::ExtVideo( qt_intf_t *_p_intf, QTabWidget *_parent ) :
     BUTTONACT( ui.eraseBrowseBtn, &ExtVideo::browseEraseFile );
 
     SETUP_VFILTER_gb( marq )
-    SETUP_VFILTER_OPTION( marqMarqueeText, &QLineEdit::textChanged )
+    SETUP_VFILTER_OPTION( marqMarqueeText, &QLineEdit::editingFinished )
     SETUP_VFILTER_OPTION( marqPositionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged) )
 
     SETUP_VFILTER_gb( logo )
@@ -292,6 +314,13 @@ ExtVideo::ExtVideo( qt_intf_t *_p_intf, QTabWidget *_parent ) :
     connect( ui.topBotCropSync, &QCheckBox::toggled, this, &ExtVideo::cropChange );
     connect( ui.topBotCropSync, &QCheckBox::toggled, ui.cropBotPx, &QSpinBox::setDisabled );
     connect( ui.leftRightCropSync, &QCheckBox::toggled, ui.cropRightPx, &QSpinBox::setDisabled );
+    auto* posterize = new QSpinBox(_parent);
+    posterize->setObjectName(QStringLiteral("posterizeLevelSpin"));
+    posterize->setRange(2, 256);
+    posterize->setProperty("videoEffectModule", QStringLiteral("posterize"));
+    setWidgetValue(posterize);
+    connect(posterize, QOverload<int>::of(&QSpinBox::valueChanged), this, &ExtVideo::updateFilterOptions);
+    buildControls();
 }
 
 void ExtVideo::cropChange()
@@ -325,14 +354,19 @@ static QString ChangeFiltersString( qt_intf_t *p_intf, const char *psz_filter_ty
     if (!strcmp(psz_filter_type, "audio-filter")) {
         if (const auto output = THEMIM->getAout()) psz_chain = var_GetString(output.get(), psz_filter_type);
         if (!psz_chain) psz_chain = var_InheritString(p_intf, psz_filter_type);
-    } else if (const auto vout = THEMIM->getVout(); vout != nullptr)
-        psz_chain = var_GetString(vout.get(), psz_filter_type);
+    } else {
+        if (const auto vout = THEMIM->getVout()) psz_chain = var_GetString(vout.get(), psz_filter_type);
+        if (!psz_chain) psz_chain = var_InheritString(p_intf, psz_filter_type);
+    }
 
     QString const chain = QString( psz_chain ? psz_chain : "" );
     QStringList list = chain.split( ':', Qt::SkipEmptyParts );
 
-    if( b_add && std::find(list.begin(), list.end(), psz_name) == list.end() )
-        list << psz_name;
+    if( b_add && std::find(list.begin(), list.end(), psz_name) == list.end() ) {
+        const int transform = !strcmp(psz_filter_type, "video-filter") ? list.indexOf(QStringLiteral("transform")) : -1;
+        if (transform >= 0) list.insert(transform, qfu(psz_name));
+        else list << psz_name;
+    }
     else if (!b_add)
         list.removeAll( psz_name );
 
@@ -355,12 +389,16 @@ static void UpdateVFiltersString( qt_intf_t *p_intf,
 
 void ExtVideo::changeVFiltersString( const char *psz_name, bool b_add )
 {
-    const char *psz_filter_type = GetVFilterType( p_intf, psz_name );
-    if( psz_filter_type == NULL )
-        return;
+    if (b_add && !module_exists(psz_name)) return;
+    const auto cached = m_filterTypes.value(qfu(psz_name));
+    const auto cachedType = cached.toUtf8();
+    const char *psz_filter_type = cached.isEmpty() ? GetVFilterType(p_intf, psz_name) : cachedType.constData();
+    if (!psz_filter_type) return;
 
     QString result = ChangeFiltersString( p_intf, psz_filter_type, psz_name, b_add );
 
+    if (var_Type(p_intf, psz_filter_type) == 0) var_Create(p_intf, psz_filter_type, VLC_VAR_STRING | VLC_VAR_DOINHERIT);
+    var_SetString(p_intf, psz_filter_type, qtu(result));
     emit configChanged( qfu( psz_filter_type ), result );
 
     UpdateVFiltersString( p_intf, psz_filter_type, qtu( result ) );
@@ -378,38 +416,94 @@ void ExtVideo::updateFilters()
                                    : groupbox->isChecked() );
 }
 
-#define UPDATE_AND_APPLY_TEXT( widget, file ) \
-    connect( ui.widget, &QLineEdit::textChanged, this, &ExtVideo::updateFilterOptions ); \
-    ui.widget->setText( toNativeSeparators( file ) ); \
-    ui.widget->disconnect( SIGNAL( textChanged( const QString& ) ) );
-
 void ExtVideo::browseLogo()
 {
-    const QStringList schemes = QStringList(QStringLiteral("file"));
-    QString filter = QString( "%1 (*.png *.jpg);;%2 (*)" )
-                        .arg( TITLE_EXTENSIONS_IMAGE )
-                        .arg( TITLE_EXTENSIONS_ALL );
-    QString file = QFileDialog::getOpenFileUrl( NULL, qtr( "Logo filenames" ),
-                   p_intf->p_mi->getDialogFilePath(), filter,
-                   NULL, QFileDialog::Options(), schemes ).toLocalFile();
-
-    UPDATE_AND_APPLY_TEXT( logoFileText, file );
+    const auto file = QFileDialog::getOpenFileUrl(m_tabs, qtr("Choose a logo image"),
+        p_intf->p_mi->getDialogFilePath(), QStringLiteral("%1 (*.png *.jpg);;%2 (*)").arg(TITLE_EXTENSIONS_IMAGE, TITLE_EXTENSIONS_ALL),
+        nullptr, QFileDialog::Options(), {QStringLiteral("file")}).toLocalFile();
+    if (file.isEmpty()) return;
+    ui.logoFileText->setText(toNativeSeparators(file)); ui.logoFileText->setModified(false);
+    setFilterOption("logo", "logo-file", 0, 0, qtu(toNativeSeparators(file)));
 }
 
 void ExtVideo::browseEraseFile()
 {
-    const QStringList schemes = QStringList(QStringLiteral("file"));
-    QString filter = QString( "%1 (*.png *.jpg);;%2 (*)" )
-                        .arg( TITLE_EXTENSIONS_IMAGE )
-                        .arg( TITLE_EXTENSIONS_ALL );
-    QString file = QFileDialog::getOpenFileUrl( NULL, qtr( "Image mask" ),
-                   p_intf->p_mi->getDialogFilePath(), filter,
-                   NULL, QFileDialog::Options(), schemes ).toLocalFile();
-
-    UPDATE_AND_APPLY_TEXT( eraseMaskText, file );
+    const auto file = QFileDialog::getOpenFileUrl(m_tabs, qtr("Choose a mask image"),
+        p_intf->p_mi->getDialogFilePath(), QStringLiteral("%1 (*.png *.jpg);;%2 (*)").arg(TITLE_EXTENSIONS_IMAGE, TITLE_EXTENSIONS_ALL),
+        nullptr, QFileDialog::Options(), {QStringLiteral("file")}).toLocalFile();
+    if (file.isEmpty()) return;
+    ui.eraseMaskText->setText(toNativeSeparators(file)); ui.eraseMaskText->setModified(false);
+    setFilterOption("erase", "erase-mask", 0, 0, qtu(toNativeSeparators(file)));
 }
 
-#undef UPDATE_AND_APPLY_TEXT
+QVariant ExtVideo::currentValue(const QString& key, const QHash<QString, QVariant>& pending) const
+{
+    const auto bytes = key.toUtf8();
+    const auto output = THEMIM->getVout();
+    const int type = config_GetType(bytes.constData()) & VLC_VAR_CLASS;
+    if (!type) return {};
+    if (output && key != QLatin1String("video-splitter") && var_Type(output.get(), bytes.constData())) {
+        switch (type) {
+        case VLC_VAR_FLOAT: return var_GetFloat(output.get(), bytes.constData());
+        case VLC_VAR_INTEGER: return QVariant::fromValue(var_GetInteger(output.get(), bytes.constData()));
+        case VLC_VAR_BOOL: return var_GetBool(output.get(), bytes.constData());
+        case VLC_VAR_STRING: { char* value = var_GetString(output.get(), bytes.constData()); const auto result = qfu(value ? value : ""); free(value); return result; }
+        }
+    }
+    if (pending.contains(key)) return pending.value(key);
+    switch (type) {
+    case VLC_VAR_FLOAT: return config_GetFloat(bytes.constData());
+    case VLC_VAR_INTEGER: return QVariant::fromValue(config_GetInt(bytes.constData()));
+    case VLC_VAR_BOOL: return bool(config_GetInt(bytes.constData()));
+    case VLC_VAR_STRING: {
+        const bool chain = key == QLatin1String("video-filter") || key == QLatin1String("sub-source")
+            || key == QLatin1String("sub-filter") || key == QLatin1String("video-splitter");
+        char* value = chain ? var_InheritString(p_intf, bytes.constData()) : config_GetPsz(bytes.constData());
+        const auto result = qfu(value ? value : ""); free(value); return result;
+    }
+    default: return {};
+    }
+}
+
+void ExtVideo::refreshVideoValues(const QHash<QString, QVariant>& pending) { if (m_refreshVideoValues) m_refreshVideoValues(pending); }
+bool ExtVideo::hasDraft() const { return m_hasDraft && m_hasDraft(); }
+bool ExtVideo::commitDrafts() { return !m_commitDrafts || m_commitDrafts(); }
+
+bool ExtVideo::eventFilter(QObject* object, QEvent* event)
+{
+    if (object->property("videoEffectsViewport").toBool() && event->type() == QEvent::Resize)
+        QTimer::singleShot(0, this, [this] { if (m_layoutControls) m_layoutControls(); });
+    auto* crop = object->property("videoCropField").toBool() ? qobject_cast<QSpinBox*>(object) : nullptr;
+    auto* input = qobject_cast<QLineEdit*>(object);
+    if (crop) input = crop->findChild<QLineEdit*>();
+    if (input && !crop && input->property("videoCropField").toBool()) crop = qobject_cast<QSpinBox*>(input->parentWidget());
+    if (input && event->type() == QEvent::ShortcutOverride) {
+        const auto key = static_cast<QKeyEvent*>(event)->key();
+        if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Escape) { event->accept(); return true; }
+    }
+    if (input && event->type() == QEvent::KeyPress) {
+        auto* key = static_cast<QKeyEvent*>(event);
+        if (crop && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter)) {
+            if (crop->hasAcceptableInput()) { crop->interpretText(); input->setModified(false); }
+            input->selectAll(); return true;
+        }
+        if (crop && key->key() == Qt::Key_Escape) {
+            const QSignalBlocker block(crop);
+            crop->setValue(input->property("videoCropCurrent").toInt()); input->setModified(false); crop->clearFocus();
+            return true;
+        }
+        if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter) {
+            if (input->hasAcceptableInput()) { QMetaObject::invokeMethod(input, "editingFinished"); input->setModified(false); emit draftChanged(); }
+            input->selectAll(); return true;
+        }
+        if (key->key() == Qt::Key_Escape) {
+            const QSignalBlocker block(input);
+            input->setText(input->property("videoEffectCurrent").toString()); input->setModified(false); input->clearFocus();
+            emit draftChanged(); return true;
+        }
+    }
+    return QObject::eventFilter(object, event);
+}
 
 void ExtVideo::initComboBoxItems( QObject *widget )
 {
@@ -456,30 +550,20 @@ void ExtVideo::initComboBoxItems( QObject *widget )
 
 void ExtVideo::setWidgetValue( QObject *widget )
 {
-    QString module = ModuleFromWidgetName( widget->parent() );
-    //std::cout << "Module name: " << module.toStdString() << std::endl;
-    QString option = OptionFromWidgetName( widget );
-    //std::cout << "Option name: " << option.toStdString() << std::endl;
-
-    vlc_value_t val;
-    int i_type = config_GetType( qtu( option ) ) & VLC_VAR_CLASS;
-    switch( i_type )
-    {
-        case VLC_VAR_INTEGER:
-        case VLC_VAR_BOOL:
-        case VLC_VAR_FLOAT:
-        case VLC_VAR_STRING:
-            break;
-        default:
-            msg_Err( p_intf,
-                     "Module %s's %s variable is of an unsupported type ( %d )",
-                     qtu( module ), qtu( option ), i_type );
-            return;
-    }
-    if( var_Create( p_intf, qtu( option ), i_type | VLC_VAR_DOINHERIT ) )
-        return;
-    if( var_GetChecked( p_intf, qtu( option ), i_type, &val ) )
-        return;
+    auto* control = qobject_cast<QWidget*>(widget);
+    if (control && !m_options.contains(control)) m_options.append(control);
+    const auto module = widget->property("videoEffectModule").isValid() ? widget->property("videoEffectModule").toString()
+        : ModuleFromWidgetName(widget->parent());
+    if (control) m_modules.insert(control, module);
+    const auto option = OptionFromWidgetName(widget);
+    const auto current = currentValue(option);
+    if (!current.isValid()) return;
+    const int i_type = config_GetType(qtu(option)) & VLC_VAR_CLASS;
+    vlc_value_t val {};
+    if (i_type == VLC_VAR_INTEGER) val.i_int = current.toLongLong();
+    else if (i_type == VLC_VAR_BOOL) val.i_int = current.toBool();
+    else if (i_type == VLC_VAR_FLOAT) val.f_float = current.toFloat();
+    else if (i_type == VLC_VAR_STRING) val.psz_string = strdup(qtu(current.toString()));
 
     /* Try to cast to all the widgets we're likely to encounter. Only
      * one of the casts is expected to work. */
@@ -510,7 +594,7 @@ void ExtVideo::setWidgetValue( QObject *widget )
     }
     else if( i_type == VLC_VAR_FLOAT )
     {
-        if( slider ) slider->setValue( ( int )( val.f_float*( double )slider->tickInterval() ) ); /* hack alert! */
+        if( slider ) slider->setValue( qRound(val.f_float * slider->tickInterval()) ); /* hack alert! */
         else if( doublespinbox ) doublespinbox->setValue( val.f_float );
         else if( dial ) dial->setValue( (360 - lroundf(val.f_float)) % 360 );
         else msg_Warn( p_intf, "Could not find the correct Float widget" );
@@ -541,10 +625,7 @@ void ExtVideo::setFilterOption( const char *psz_module, const char *psz_option,
     auto p_vout = THEMIM->getVout();
     int i_type = 0;
 
-    if( !p_vout )
-        return;
-
-    i_type = var_Type( p_vout.get(), psz_option );
+    if (p_vout) i_type = var_Type(p_vout.get(), psz_option);
     if( i_type == 0 )
         i_type = config_GetType( psz_option );
 
@@ -567,7 +648,7 @@ void ExtVideo::setFilterOption( const char *psz_module, const char *psz_option,
     {
         if( psz_string == NULL )
             psz_string = "";
-        emit configChanged( qfu( psz_option ), QVariant( psz_string ) );
+        emit configChanged( qfu( psz_option ), qfu(psz_string) );
         val.psz_string = (char *) psz_string;
     }
     else
@@ -580,12 +661,15 @@ void ExtVideo::setFilterOption( const char *psz_module, const char *psz_option,
         return;
     }
 
-    var_SetChecked( p_vout.get(), psz_option, i_type, val );
+    if (p_vout) {
+        if (var_Type(p_vout.get(), psz_option) == 0) var_Create(p_vout.get(), psz_option, i_type | VLC_VAR_DOINHERIT | VLC_VAR_ISCOMMAND);
+        var_SetChecked(p_vout.get(), psz_option, i_type, val);
+    }
 }
 
 void ExtVideo::updateFilterOptions()
 {
-    QString module = ModuleFromWidgetName( sender()->parent() );
+    QString module = m_modules.value(qobject_cast<QWidget*>(sender()), ModuleFromWidgetName(sender()->parent()));
     //msg_Dbg( p_intf, "Module name: %s", qtu( module ) );
     QString option = OptionFromWidgetName( sender() );
     //msg_Dbg( p_intf, "Option name: %s", qtu( option ) );
@@ -616,7 +700,9 @@ void ExtVideo::updateFilterOptions()
         f_float = i_int;
     }
     else if( lineedit ) {
-        i_int = lineedit->text().toInt( NULL,16 );
+        if (!lineedit->isModified() || !lineedit->hasAcceptableInput()) return;
+        auto hex = lineedit->text(); hex.remove(QLatin1Char('#'));
+        i_int = hex.toInt(nullptr, 16);
         f_float = lineedit->text().toDouble();
         val = lineedit->text();
     }
@@ -626,6 +712,8 @@ void ExtVideo::updateFilterOptions()
     }
 
     setFilterOption( qtu( module ), qtu( option ), i_int, f_float, qtu( val ) );
+    if (lineedit) lineedit->setModified(false);
+    emit draftChanged();
 }
 
 /**********************************************************************
@@ -1208,6 +1296,7 @@ public:
     void resetValue() { setValue(m_reset); }
     void updateCurrent(double current)
     {
+        current = qBound(minimum(), QString::number(current, 'f', decimals()).toDouble(), maximum());
         auto* input = lineEdit();
         const bool draft = input->isModified();
         if (!draft) { m_currentChanged = false; m_draft = false; m_draftApplied = false; }
@@ -1223,7 +1312,7 @@ public:
         }
     }
     bool currentChangedWhileTyping() const { return lineEdit()->isModified() && m_currentChanged; }
-    QString currentText() const { return textFromValue(value()) + suffix(); }
+    QString currentText() const { return !specialValueText().isEmpty() && value() == minimum() ? specialValueText() : textFromValue(value()) + suffix(); }
 protected:
     QString textFromValue(double value) const override
     {
@@ -1304,6 +1393,416 @@ const char* audioFilterDescription(const QString& name)
     if (name == QLatin1String("scaletempo_pitch")) return N_("Change the pitch of the sound.");
     return N_("Move sound to the left or right.");
 }
+}
+
+void ExtVideo::buildControls()
+{
+    struct Section { QString module, type; QWidget* body; QCheckBox* toggle; QLabel* title; QLabel* help; QLabel* missing; QPushButton* reset; QGroupBox* group; QCheckBox* original; bool available; };
+    struct Control { QWidget* original; AudioFilterSpinBox* number; QLabel* label; QLabel* notice; QLabel* source; QString key, module; int type; double factor, sliderScale; QGridLayout* row; QToolButton* swatch; };
+    QList<Section> sections;
+    QList<Control> controls;
+    QList<QVBoxLayout*> pageLayouts, cardLayouts;
+    QList<QLabel*> hints;
+    QList<QScrollArea*> scrolls;
+    QFrame* cropCard = nullptr;
+    QLabel* cropCaption = nullptr;
+    QPushButton* cropReset = nullptr;
+    applyRedesignWidgetTheme(m_tabs, p_intf->p_mi);
+    QHash<QWidget*, QLabel*> labels;
+    for (auto* label : m_tabs->findChildren<QLabel*>()) if (label->buddy()) labels.insert(label->buddy(), label);
+    const auto display = [](const Control& control, const QVariant& value) {
+        return control.type == VLC_VAR_INTEGER ? QStringLiteral("%1").arg(value.toLongLong(), 6, 16, QLatin1Char('0')).toUpper() : value.toString();
+    };
+    const auto apply = [this](const Control& control, const QVariant& value) {
+        setFilterOption(qtu(control.module), qtu(control.key), value.toInt(), value.toDouble(), qtu(value.toString()));
+    };
+    const auto description = [](const QString& module) -> const char* {
+        if (module == QLatin1String("adjust")) return "";
+        if (module == QLatin1String("sharpen")) return N_("Make edges more clear.");
+        if (module == QLatin1String("gradfun")) return N_("Reduce visible color bands.");
+        if (module == QLatin1String("grain")) return N_("Add grain to the image.");
+        if (module == QLatin1String("extract")) return N_("Keep one color from the image.");
+        if (module == QLatin1String("gradient")) return N_("Show edges and color changes.");
+        if (module == QLatin1String("colorthres")) return N_("Keep colors within a set range.");
+        if (module == QLatin1String("sepia")) return N_("Give the image a warm brown color.");
+        if (module == QLatin1String("transform")) return N_("Turn or flip the image.");
+        if (module == QLatin1String("rotate")) return N_("Turn the image by a set angle.");
+        if (module == QLatin1String("puzzle")) return N_("Split the image into movable tiles.");
+        if (module == QLatin1String("magnify")) return N_("Zoom into part of the image.");
+        if (module == QLatin1String("logo")) return N_("Place an image over the video.");
+        if (module == QLatin1String("marq")) return N_("Place text over the video.");
+        if (module == QLatin1String("erase")) return N_("Hide part of the image with a mask.");
+        if (module == QLatin1String("gaussianblur")) return N_("Soften the image.");
+        if (module == QLatin1String("motionblur")) return N_("Add blur to motion.");
+        if (module == QLatin1String("antiflicker")) return N_("Reduce changes in image brightness.");
+        if (module == QLatin1String("hqdn3d")) return N_("Reduce noise in the image.");
+        if (module == QLatin1String("clone") || module == QLatin1String("wall")) return N_("Select Save, then open the video again.");
+        return "";
+    };
+    std::function<void(QLayout*, QList<QWidget*>&)> collect = [&](QLayout* layout, QList<QWidget*>& found) {
+        for (int i = 0; i < layout->count(); ++i) {
+            auto* item = layout->itemAt(i);
+            if (item->layout()) collect(item->layout(), found);
+            else if (auto* widget = item->widget(); widget && (qobject_cast<QGroupBox*>(widget) || qobject_cast<QCheckBox*>(widget))) found.append(widget);
+        }
+    };
+    for (int pageIndex = 0; pageIndex < m_tabs->count(); ++pageIndex) {
+        auto* page = m_tabs->widget(pageIndex);
+        auto* oldLayout = page->layout();
+        QList<QWidget*> originals;
+        if (pageIndex != 1) collect(oldLayout, originals);
+        QWidget* cropBody = nullptr;
+        if (pageIndex == 1) { cropBody = new QWidget(page); cropBody->setLayout(oldLayout); }
+        else delete oldLayout;
+        auto* outer = new QVBoxLayout(page); pageLayouts.append(outer);
+        auto* scroll = new QScrollArea(page); scrolls.append(scroll);
+        scroll->setObjectName(QStringLiteral("videoEffectsScroll%1").arg(pageIndex));
+        scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        auto* content = new QWidget(scroll); auto* list = new QVBoxLayout(content); cardLayouts.append(list); list->setContentsMargins(0, 0, 0, 0);
+        scroll->setWidget(content); outer->addWidget(scroll, 1);
+        auto* hint = new QLabel(page); hint->setWordWrap(true); hints.append(hint); outer->addWidget(hint);
+        if (cropBody) {
+            cropCard = new QFrame(content); cropCard->setProperty("redesignCard", true); auto* layout = new QVBoxLayout(cropCard);
+            cropCaption = new QLabel(qtr("Crop"), cropCard); cropCaption->setProperty("redesignSectionHeading", true); layout->addWidget(cropCaption); layout->addWidget(cropBody);
+            cropReset = new QPushButton(qtr("Reset crop"), cropCard); cropReset->setObjectName(QStringLiteral("resetVideoCrop")); cropReset->setAutoDefault(false); layout->addWidget(cropReset, 0, Qt::AlignRight);
+            list->addWidget(cropCard); list->addStretch();
+            for (auto* field : {ui.cropTopPx, ui.cropBotPx, ui.cropLeftPx, ui.cropRightPx}) {
+                field->setKeyboardTracking(false); field->setProperty("videoCropField", true); field->installEventFilter(this);
+                auto* input = field->findChild<QLineEdit*>(); input->setProperty("videoCropField", true); input->installEventFilter(this);
+            }
+            connect(cropReset, &QPushButton::clicked, this, [this] {
+                const QSignalBlocker a(ui.cropTopPx), b(ui.cropBotPx), c(ui.cropLeftPx), d(ui.cropRightPx);
+                for (auto* field : {ui.cropTopPx, ui.cropBotPx, ui.cropLeftPx, ui.cropRightPx}) field->setValue(0);
+                cropChange();
+            });
+            continue;
+        }
+        for (auto* original : originals) {
+            auto* group = qobject_cast<QGroupBox*>(original);
+            auto* originalCheck = qobject_cast<QCheckBox*>(original);
+            const auto module = ModuleFromWidgetName(original);
+            const bool available = module_exists(qtu(module));
+            QString type = module == QLatin1String("clone") || module == QLatin1String("wall") ? QStringLiteral("video-splitter")
+                : module == QLatin1String("logo") || module == QLatin1String("marq") ? QStringLiteral("sub-source") : QStringLiteral("video-filter");
+            if (available) if (const auto* actual = GetVFilterType(p_intf, qtu(module))) type = qfu(actual);
+            m_filterTypes.insert(module, type);
+            auto* card = new QFrame(content); card->setObjectName(module + QStringLiteral("Card")); card->setProperty("redesignCard", true);
+            auto* layout = new QVBoxLayout(card); cardLayouts.append(layout);
+            auto* heading = new QHBoxLayout;
+            auto* title = new QLabel(group ? group->title() : originalCheck->text(), card); title->setWordWrap(true); title->setProperty("redesignSectionHeading", true);
+            auto* toggle = group ? new QCheckBox(card) : originalCheck;
+            toggle->setObjectName(group ? module + QStringLiteral("Toggle") : originalCheck->objectName());
+            heading->addWidget(title, 1); heading->addWidget(toggle); layout->addLayout(heading);
+            auto* help = new QLabel(card); help->setWordWrap(true); layout->addWidget(help);
+            auto* missing = new QLabel(card); missing->setObjectName(module + QStringLiteral("Unavailable")); missing->setWordWrap(true); layout->addWidget(missing);
+            QWidget* body = group ? static_cast<QWidget*>(group) : new QWidget(card);
+            if (group) {
+                group->setTitle({}); group->setCheckable(false); group->setFocusPolicy(Qt::NoFocus); group->setProperty("videoEffectBody", true);
+                delete group->layout();
+                for (auto* child : group->findChildren<QWidget*>(QString(), Qt::FindDirectChildrenOnly)) child->hide();
+            }
+            body->setMinimumSize(0, 0); body->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+            auto* fields = new QVBoxLayout(body); fields->setContentsMargins(0, 0, 0, 0); cardLayouts.append(fields); layout->addWidget(body);
+            QList<Control> sectionControls;
+            for (auto* option : m_options) {
+                if (m_modules.value(option) != module) continue;
+                const auto key = OptionFromWidgetName(option);
+                const auto* config = config_FindConfig(qtu(key));
+                if (!config) continue;
+                const int valueType = config_GetType(qtu(key)) & VLC_VAR_CLASS;
+                auto* row = new QWidget(body); auto* grid = new QGridLayout(row); grid->setContentsMargins(0, 0, 0, 0);
+                auto* label = new QLabel(row); label->setWordWrap(true);
+                auto* notice = new QLabel(row); notice->setTextFormat(Qt::PlainText); notice->setObjectName(key + QStringLiteral("CurrentNotice")); notice->setWordWrap(true); notice->hide();
+                AudioFilterSpinBox* number = nullptr;
+                QToolButton* swatch = nullptr;
+                auto* slider = qobject_cast<QSlider*>(option); auto* dial = qobject_cast<VLCQDial*>(option); auto* spin = qobject_cast<QSpinBox*>(option);
+                if (slider || dial || spin) {
+                    number = new AudioFilterSpinBox(row); number->setObjectName(key + QStringLiteral("Value")); number->setKeyboardTracking(false);
+                    number->setDecimals(valueType == VLC_VAR_FLOAT ? 6 : 0);
+                    const double sliderScale = slider && valueType == VLC_VAR_FLOAT ? slider->tickInterval() : 1.0;
+                    double minimum = slider ? slider->minimum() / sliderScale : spin ? spin->minimum() : 0;
+                    double maximum = slider ? slider->maximum() / sliderScale : spin ? spin->maximum() : 360;
+                    const double nativeMin = valueType == VLC_VAR_FLOAT ? config->min.f : config->min.i;
+                    const double nativeMax = valueType == VLC_VAR_FLOAT ? config->max.f : config->max.i;
+                    if (nativeMax > nativeMin) { minimum = qMax(minimum, nativeMin); maximum = qMin(maximum, nativeMax); }
+                    if (valueType == VLC_VAR_INTEGER) { minimum = qMax(minimum, double(INT_MIN)); maximum = qMin(maximum, double(INT_MAX)); }
+                    if (key == QLatin1String("logo-x") || key == QLatin1String("logo-y")) { minimum = -1; number->setSpecialValueText(qtr("Default")); }
+                    const double factor = key == QLatin1String("logo-opacity") ? 100.0 / 255.0 : 1.0;
+                    number->setRange(minimum * factor, maximum * factor); number->setSingleStep(factor != 1 ? 1 : slider ? 1.0 / sliderScale : 1.0);
+                    if (factor != 1) number->setSuffix(QStringLiteral("%"));
+                    if (spin) number->setSuffix(spin->suffix());
+                    const double reset = valueType == VLC_VAR_FLOAT ? config->orig.f : config->orig.i;
+                    if (slider) { slider->setTickPosition(QSlider::NoTicks); number->setResetValue(slider, reset * factor); }
+                    number->setValue(currentValue(key).toDouble() * factor); label->setBuddy(number);
+                    grid->addWidget(label, 0, 0); grid->addWidget(number, 0, 1);
+                    if (!spin) { grid->addWidget(option, 1, 0, 1, 2); option->show(); }
+                    else option->hide();
+                } else {
+                    label->setBuddy(option);
+                    if (auto* check = qobject_cast<QCheckBox*>(option)) { label->hide(); grid->addWidget(check, 0, 0, 1, 2); }
+                    else { grid->addWidget(label, 0, 0); grid->addWidget(option, 0, 1); }
+                    option->show();
+                    if (auto* input = qobject_cast<QLineEdit*>(option)) {
+                        input->setProperty("videoEffectKey", key); input->installEventFilter(this);
+                        if (valueType == VLC_VAR_INTEGER) input->setValidator(new VideoColorValidator(config->min.i, config->max.i, input));
+                        connect(input, &QLineEdit::textEdited, this, &ExtVideo::draftChanged);
+                        if (valueType == VLC_VAR_INTEGER) {
+                            input->setPlaceholderText(QStringLiteral("RRGGBB"));
+                            swatch = new QToolButton(row); swatch->setObjectName(key + QStringLiteral("ColorButton"));
+                            grid->addWidget(swatch, 0, 2);
+                            connect(swatch, &QToolButton::clicked, this, [this, input, key] {
+                                const QColor initial = QColor::fromRgb(currentValue(key).toUInt() & 0xffffff);
+                                const QColor chosen = QColorDialog::getColor(initial, m_tabs, qtr("Choose color"));
+                                if (!chosen.isValid()) return;
+                                input->setText(chosen.name().mid(1).toUpper()); input->setModified(true);
+                                if (input->hasAcceptableInput()) QMetaObject::invokeMethod(input, "editingFinished");
+                                emit draftChanged();
+                            });
+                        }
+                    }
+                    auto* browse = key == QLatin1String("logo-file") ? ui.logoBrowseBtn : key == QLatin1String("erase-mask") ? ui.eraseBrowseBtn : nullptr;
+                    if (browse) { grid->addWidget(browse, 0, 2); browse->show(); }
+                }
+                const bool compactInput = number || (valueType == VLC_VAR_INTEGER && qobject_cast<QLineEdit*>(option));
+                grid->setColumnStretch(0, compactInput ? 1 : 0); grid->setColumnStretch(1, compactInput ? 0 : 1);
+                grid->addWidget(notice, 2, 0, 1, 3); fields->addWidget(row);
+                Control record {option, number, label, notice, labels.value(option), key, module, valueType, key == QLatin1String("logo-opacity") ? 100.0 / 255.0 : 1.0, slider && valueType == VLC_VAR_FLOAT ? double(slider->tickInterval()) : 1.0, grid, swatch};
+                controls.append(record); sectionControls.append(record);
+                if (number) {
+                    connect(number, &QDoubleSpinBox::valueChanged, this, [this, record](double displayed) {
+                        const double value = displayed / record.factor;
+                        setFilterOption(qtu(record.module), qtu(record.key), qRound(value), value, nullptr);
+                        const QSignalBlocker block(record.original);
+                        if (auto* slider = qobject_cast<QSlider*>(record.original)) slider->setValue(qRound(value * record.sliderScale));
+                        else if (auto* dial = qobject_cast<VLCQDial*>(record.original)) dial->setValue((360 - qRound(value)) % 360);
+                        else if (auto* spin = qobject_cast<QSpinBox*>(record.original)) spin->setValue(qRound(value));
+                    });
+                    if (slider) connect(slider, &QSlider::valueChanged, number, [number, slider, record](int position) { const QSignalBlocker block(number); number->setValue(position / record.sliderScale * record.factor); });
+                    if (dial) connect(dial, &VLCQDial::valueChanged, number, [number](int position) { const QSignalBlocker block(number); number->setValue((360 - position) % 360); });
+                    connect(number->findChild<QLineEdit*>(), &QLineEdit::textEdited, this, &ExtVideo::draftChanged);
+                    connect(number, &QDoubleSpinBox::editingFinished, this, &ExtVideo::draftChanged);
+                }
+            }
+            auto* reset = new QPushButton(card); reset->setObjectName(module + QStringLiteral("Reset")); reset->setAutoDefault(false); layout->addWidget(reset, 0, Qt::AlignRight);
+            reset->setVisible(!sectionControls.isEmpty()); body->setVisible(!sectionControls.isEmpty());
+            layout->removeWidget(reset); heading->insertWidget(1, reset);
+            connect(reset, &QPushButton::clicked, this, [this, sectionControls, display, apply] {
+                for (const auto& record : sectionControls) {
+                    const auto* config = config_FindConfig(qtu(record.key)); if (!config) continue;
+                    const QVariant value = record.type == VLC_VAR_FLOAT ? QVariant(config->orig.f) : record.type == VLC_VAR_STRING ? QVariant(qfu(config->orig.psz ? config->orig.psz : "")) : QVariant::fromValue(config->orig.i);
+                    const QSignalBlocker block(record.original);
+                    if (record.number) { const QSignalBlocker editorBlock(record.number); record.number->setValue(value.toDouble() * record.factor); record.number->findChild<QLineEdit*>()->setModified(false); }
+                    else if (auto* input = qobject_cast<QLineEdit*>(record.original)) { input->setText(display(record, value)); input->setModified(false); }
+                    else if (auto* check = qobject_cast<QCheckBox*>(record.original)) check->setChecked(value.toBool());
+                    else if (auto* combo = qobject_cast<QComboBox*>(record.original)) combo->setCurrentIndex(combo->findData(value));
+                    apply(record, value);
+                }
+                emit draftChanged();
+            });
+            if (group) connect(toggle, &QCheckBox::clicked, this, [this, module](bool enabled) { changeVFiltersString(qtu(module), enabled); });
+            connect(toggle, &QCheckBox::toggled, body, [body, reset, available](bool checked) { body->setEnabled(available && checked); reset->setEnabled(available && checked); });
+            sections.append({module, type, body, toggle, title, help, missing, reset, group, originalCheck, available});
+            list->addWidget(card);
+        }
+        list->addStretch();
+    }
+    m_layoutControls = [this, controls] {
+        const double scale = p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.0;
+        for (const auto& control : controls) {
+            if (!control.number || !qobject_cast<QSlider*>(control.original)) continue;
+            const bool compact = control.row->parentWidget()->width() >= qRound(500 * scale);
+            if (control.row->property("videoInline").isValid() && control.row->property("videoInline").toBool() == compact) continue;
+            control.row->setProperty("videoInline", compact);
+            control.row->removeWidget(control.label); control.row->removeWidget(control.number); control.row->removeWidget(control.original);
+            control.row->addWidget(control.label, 0, 0);
+            control.row->addWidget(control.number, 0, compact ? 2 : 1);
+            control.row->addWidget(control.original, compact ? 0 : 1, compact ? 1 : 0, 1, compact ? 1 : 2);
+            control.row->setColumnStretch(0, compact ? 0 : 1); control.row->setColumnStretch(1, compact ? 1 : 0); control.row->setColumnStretch(2, 0);
+        }
+    };
+    for (auto* scroll : scrolls) { scroll->viewport()->setProperty("videoEffectsViewport", true); scroll->viewport()->installEventFilter(this); }
+    QWidget* previous = m_tabs->tabBar();
+    const auto appendTabStop = [&previous](QWidget* widget) {
+        QWidget::setTabOrder(previous, widget); previous = widget;
+    };
+    for (int page = 0; page < m_tabs->count(); ++page) {
+        if (page == 1) {
+            for (auto* field : {ui.cropTopPx, ui.cropBotPx, ui.cropLeftPx, ui.cropRightPx}) appendTabStop(field);
+            appendTabStop(ui.topBotCropSync); appendTabStop(ui.leftRightCropSync); appendTabStop(cropReset);
+            continue;
+        }
+        for (const auto& section : sections) {
+            if (!m_tabs->widget(page)->isAncestorOf(section.body)) continue;
+            appendTabStop(section.toggle);
+            for (const auto& control : controls) {
+                if (control.module != section.module) continue;
+                appendTabStop(control.number ? static_cast<QWidget*>(control.number) : control.original);
+                if (control.number && !qobject_cast<QSpinBox*>(control.original)) appendTabStop(control.original);
+                if (control.swatch) appendTabStop(control.swatch);
+                auto* browse = control.key == QLatin1String("logo-file") ? ui.logoBrowseBtn : control.key == QLatin1String("erase-mask") ? ui.eraseBrowseBtn : nullptr;
+                if (browse) appendTabStop(browse);
+            }
+            appendTabStop(section.reset);
+        }
+    }
+    m_hasDraft = [controls] {
+        for (const auto& control : controls) {
+            auto* editor = control.number ? static_cast<QWidget*>(control.number) : control.original;
+            if (!editor->isEnabled() || !editor->isVisible()) continue;
+            if (control.number) { if (control.number->findChild<QLineEdit*>()->isModified() && control.number->hasAcceptableInput()) return true; }
+            else if (auto* input = qobject_cast<QLineEdit*>(editor); input && input->isModified() && input->hasAcceptableInput()) return true;
+        }
+        return false;
+    };
+    m_commitDrafts = [this, controls] {
+        for (const auto& control : controls) {
+            auto* editor = control.number ? static_cast<QWidget*>(control.number) : control.original;
+            if (!editor->isEnabled() || !editor->isVisible()) continue;
+            if (control.number && control.number->findChild<QLineEdit*>()->isModified()) {
+                if (!control.number->hasAcceptableInput()) { control.number->setFocus(); return false; }
+                control.number->interpretText(); control.number->findChild<QLineEdit*>()->setModified(false);
+                QMetaObject::invokeMethod(control.number, "editingFinished");
+            } else if (auto* input = qobject_cast<QLineEdit*>(editor); input && input->isModified()) {
+                if (!input->hasAcceptableInput()) { input->setFocus(); return false; }
+                QMetaObject::invokeMethod(input, "editingFinished"); input->setModified(false);
+            }
+        }
+        return true;
+    };
+    m_refreshVideoValues = [this, controls, sections, hints, cropCard, cropReset, display](const QHash<QString, QVariant>& pending) {
+        // Disable transitions must not commit a draft through focus loss.
+        std::vector<QSignalBlocker> blocks;
+        blocks.reserve(controls.size() * 2);
+        for (const auto& control : controls) { blocks.emplace_back(control.original); if (control.number) blocks.emplace_back(control.number); }
+        for (const auto& section : sections) {
+            const auto chain = currentValue(section.type, pending).toString();
+            const bool checked = filterIsPresent(chain, section.module);
+            const QSignalBlocker block(section.toggle);
+            section.toggle->setChecked(checked); section.toggle->setEnabled(section.available || checked);
+            section.body->setEnabled(section.available && checked); section.reset->setEnabled(section.available && checked);
+            section.missing->setVisible(!section.available);
+        }
+        for (const auto& control : controls) {
+            const auto value = currentValue(control.key, pending); if (!value.isValid() || (control.type == VLC_VAR_FLOAT && !std::isfinite(value.toDouble()))) continue;
+            bool conflict = false; QString current;
+            if (control.number) {
+                control.number->updateCurrent((control.type == VLC_VAR_FLOAT ? audioFilterValue(value.toFloat()) : value.toDouble()) * control.factor);
+                conflict = control.number->currentChangedWhileTyping(); current = control.number->currentText();
+                if (auto* slider = qobject_cast<QSlider*>(control.original)) slider->setValue(qRound(value.toDouble() * control.sliderScale));
+                else if (auto* dial = qobject_cast<VLCQDial*>(control.original)) dial->setValue((360 - qRound(value.toDouble())) % 360);
+            } else if (auto* input = qobject_cast<QLineEdit*>(control.original)) {
+                current = display(control, value);
+                if (input->isModified() && input->property("videoEffectCurrent").isValid() && input->property("videoEffectCurrent").toString() != current) input->setProperty("videoEffectConflict", true);
+                if (!input->isModified()) { input->setProperty("videoEffectConflict", false); input->setText(current); }
+                input->setProperty("videoEffectCurrent", current);
+                conflict = input->isModified() && input->property("videoEffectConflict").toBool();
+            } else if (auto* check = qobject_cast<QCheckBox*>(control.original)) check->setChecked(value.toBool());
+            else if (auto* combo = qobject_cast<QComboBox*>(control.original)) combo->setCurrentIndex(combo->findData(value));
+            if (control.swatch) {
+                QColor color = QColor::fromRgb(value.toUInt() & 0xffffff);
+                auto* input = qobject_cast<QLineEdit*>(control.original);
+                auto draft = input->text(); if (!draft.startsWith(QLatin1Char('#'))) draft.prepend(QLatin1Char('#'));
+                if (input->isModified() && QColor(draft).isValid()) color = QColor(draft);
+                const int size = qRound(32 * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.0));
+                const auto style = QStringLiteral("QToolButton { background: %1; min-width: %2px; max-width: %2px; min-height: %2px; max-height: %2px; padding: 0; border: 1px solid palette(mid); border-radius: 4px; } QToolButton:hover, QToolButton:focus { border-color: palette(text); }").arg(color.name()).arg(size);
+                if (control.swatch->styleSheet() != style) control.swatch->setStyleSheet(style);
+            }
+            control.notice->setText(qtr("Current value: %1. Press Escape to use it.").arg(current));
+            if (auto* input = qobject_cast<QLineEdit*>(control.original); input && control.type == VLC_VAR_INTEGER && input->isModified() && !input->hasAcceptableInput()) {
+                const auto digits = QString(input->text()).remove(QLatin1Char('#'));
+                control.notice->setText(digits == QLatin1String("000000")
+                    ? qtr("Use a color other than black. Press Escape to use %1.").arg(current)
+                    : qtr("Enter six color digits. Press Escape to use %1.").arg(current));
+                conflict = true;
+            }
+            control.notice->setVisible(conflict);
+            (control.number ? static_cast<QWidget*>(control.number) : control.original)->setAccessibleDescription(conflict ? control.notice->text() : QString());
+        }
+        const auto output = THEMIM->getVout();
+        cropCard->setEnabled(bool(output)); cropReset->setEnabled(bool(output));
+        const QSignalBlocker a(ui.cropTopPx), b(ui.cropBotPx), c(ui.cropLeftPx), d(ui.cropRightPx), e(ui.topBotCropSync), f(ui.leftRightCropSync);
+        if (output) {
+            for (const auto& pair : {qMakePair(ui.cropTopPx, "crop-top"), qMakePair(ui.cropBotPx, "crop-bottom"), qMakePair(ui.cropLeftPx, "crop-left"), qMakePair(ui.cropRightPx, "crop-right")}) {
+                auto* field = pair.first;
+                const int current = var_GetInteger(output.get(), pair.second);
+                auto* input = field->findChild<QLineEdit*>(); input->setProperty("videoCropCurrent", current);
+                if (!input->isModified()) field->setValue(current);
+            }
+            if (ui.cropTopPx->value() != ui.cropBotPx->value()) ui.topBotCropSync->setChecked(false);
+            if (ui.cropLeftPx->value() != ui.cropRightPx->value()) ui.leftRightCropSync->setChecked(false);
+            ui.cropBotPx->setEnabled(!ui.topBotCropSync->isChecked()); ui.cropRightPx->setEnabled(!ui.leftRightCropSync->isChecked());
+        }
+        for (int i = 0; i < hints.size(); ++i) hints[i]->setText(i == 1 ? output ? qtr("Crop affects the current video.") : qtr("Open a video to crop it.")
+            : output ? qtr("Changes apply now. Select Save to keep them.") : qtr("Select Save to use these settings when you open a video."));
+    };
+    const auto refreshText = [this, controls, sections, description, cropCaption, cropReset] {
+        struct Draft { QLineEdit* input; QString text; int cursor, selection, length; bool modified, preserve; };
+        QList<Draft> inputs;
+        std::vector<QSignalBlocker> blockers;
+        for (auto* input : m_tabs->findChildren<QLineEdit*>()) {
+            inputs.append({input, input->text(), input->cursorPosition(), input->selectionStart(), int(input->selectedText().size()), input->isModified(), input->isModified() || m_options.contains(input)});
+            blockers.emplace_back(input);
+        }
+        ui.retranslateUi(m_tabs);
+        for (const auto& section : sections) {
+            const auto title = section.group ? section.group->title() : section.original->text();
+            section.title->setText(title); if (section.group) section.group->setTitle({});
+            section.toggle->setText(qtr("Enable")); section.toggle->setAccessibleName(qtr("Enable %1").arg(title));
+            const auto* help = description(section.module); section.help->setText(*help ? qtr(help) : QString()); section.help->setVisible(*help);
+            section.missing->setText(qtr("This video effect is not available in this build."));
+            section.reset->setText(qtr("Reset values")); section.reset->setAccessibleName(qtr("Reset %1").arg(title));
+        }
+        for (const auto& control : controls) {
+            const auto* config = config_FindConfig(qtu(control.key));
+            const auto text = control.source ? control.source->text() : config ? qfut(config->psz_text) : control.key;
+            auto caption = text;
+            if (control.key == QLatin1String("logo-opacity")) caption = qtr("Opacity");
+            else if (control.key == QLatin1String("sharpen-sigma")) caption = qtr("Strength");
+            else if (control.key == QLatin1String("gaussianblur-sigma") || control.key == QLatin1String("blur-factor")) caption = qtr("Blur amount");
+            else if (control.key == QLatin1String("grain-variance")) caption = qtr("Grain amount");
+            else if (control.key == QLatin1String("extract-component") || control.key == QLatin1String("colorthres-color")) caption = qtr("Color (RRGGBB)");
+            control.label->setText(caption);
+            if (control.number) {
+                control.number->setAccessibleName(caption);
+                if (control.key == QLatin1String("logo-x") || control.key == QLatin1String("logo-y")) control.number->setSpecialValueText(qtr("Default"));
+            }
+            control.original->setAccessibleName(caption);
+            if (control.swatch) { control.swatch->setAccessibleName(qtr("Choose color")); control.swatch->setToolTip(qtr("Choose color")); }
+            const char* tip = nullptr;
+            if (control.key == QLatin1String("hue")) tip = N_("Shift the colors in the image.");
+            else if (control.key == QLatin1String("brightness")) tip = N_("Change the light level in the image.");
+            else if (control.key == QLatin1String("contrast")) tip = N_("Change the difference between light and dark areas.");
+            else if (control.key == QLatin1String("saturation")) tip = N_("Change how strong colors are.");
+            else if (control.key == QLatin1String("gamma")) tip = N_("Change the light level in dark areas.");
+            if (tip) { control.label->setToolTip(qtr(tip)); if (control.number) control.number->setToolTip(qtr(tip)); }
+            if (auto* combo = qobject_cast<QComboBox*>(control.original)) {
+                const QSignalBlocker block(combo); const auto value = combo->currentData();
+                combo->clear(); initComboBoxItems(combo); combo->setCurrentIndex(combo->findData(value));
+            }
+        }
+        cropCaption->setText(qtr("Crop")); cropReset->setText(qtr("Reset crop"));
+        ui.logoBrowseBtn->setText(qtr("Choose file")); ui.eraseBrowseBtn->setText(qtr("Choose file"));
+        for (const auto& saved : inputs) {
+            if (!saved.preserve) continue;
+            saved.input->setText(saved.text); saved.input->setCursorPosition(saved.cursor);
+            if (saved.selection >= 0) saved.input->setSelection(saved.selection, saved.length);
+            saved.input->setModified(saved.modified);
+        }
+    };
+    const auto metrics = [this, controls, pageLayouts, cardLayouts, scrolls] {
+        const auto dp = [this](int value) { return qRound(value * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.0)); };
+        for (auto* layout : pageLayouts) { layout->setContentsMargins(dp(16), dp(16), dp(16), dp(12)); layout->setSpacing(dp(12)); }
+        for (auto* layout : cardLayouts) { layout->setSpacing(dp(12)); if (qobject_cast<QFrame*>(layout->parentWidget())) layout->setContentsMargins(dp(12), dp(12), dp(12), dp(12)); }
+        for (auto* area : scrolls) area->setMinimumHeight(dp(140));
+        for (const auto& control : controls) {
+            if (control.number) control.number->setFixedWidth(dp(140));
+            else if (control.type == VLC_VAR_INTEGER && qobject_cast<QLineEdit*>(control.original)) control.original->setFixedWidth(dp(160));
+            if (auto* dial = qobject_cast<VLCQDial*>(control.original)) dial->setFixedSize(dp(100), dp(100));
+        }
+    };
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, [this, metrics] { metrics(); if (m_layoutControls) m_layoutControls(); });
+    if (auto* translator = InterfaceTranslator::instance()) connect(translator, &InterfaceTranslator::languageChanged, this, refreshText);
+    refreshText(); metrics(); refreshVideoValues({}); m_layoutControls();
 }
 
 void AudioFilterControlWidget::build()

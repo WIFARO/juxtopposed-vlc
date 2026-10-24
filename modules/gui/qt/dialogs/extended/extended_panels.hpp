@@ -54,9 +54,24 @@ class ExtVideo: public QObject
     friend class ExtendedDialog;
 public:
     ExtVideo( qt_intf_t *, QTabWidget * );
+    void refreshVideoValues(const QHash<QString, QVariant>& pending);
+    bool hasDraft() const;
+    bool commitDrafts();
+protected:
+    bool eventFilter(QObject*, QEvent*) override;
 private:
     Ui::ExtVideoWidget ui;
     QSignalMapper* filterMapper;
+    QTabWidget* m_tabs;
+    QList<QWidget*> m_options;
+    QHash<QWidget*, QString> m_modules;
+    QHash<QString, QString> m_filterTypes;
+    std::function<void(const QHash<QString, QVariant>&)> m_refreshVideoValues;
+    std::function<bool()> m_hasDraft;
+    std::function<bool()> m_commitDrafts;
+    std::function<void()> m_layoutControls;
+    void buildControls();
+    QVariant currentValue(const QString&, const QHash<QString, QVariant>& pending = {}) const;
     qt_intf_t *p_intf;
     void initComboBoxItems( QObject* );
     void setWidgetValue( QObject* );
@@ -74,6 +89,7 @@ private slots:
     void browseEraseFile();
 signals:
     void configChanged( QString name, QVariant value );
+    void draftChanged();
 };
 
 class ExtV4l2 : public QWidget

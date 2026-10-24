@@ -62,12 +62,17 @@ private:
     QHash<QString, QVariant> m_savedAudioValues;
     QString m_savedAudioChain;
     bool m_audioSaveFailed = false;
+    QHash<QString, QVariant> m_savedVideoValues;
+    QHash<QString, QString> m_savedVideoChains;
+    bool m_videoSaveFailed = false;
 private slots:
     void changedItem(PlayerController::PlayingState );
     void currentTabChanged( int );
     void saveConfig();
     void refreshAudioConfig();
     void updateAudioSave();
+    void refreshVideoConfig();
+    void updateVideoSave();
     void putAudioConfig( const QString& name, const QVariant value );
     void putVideoConfig( const QString& name, const QVariant value );
 };

@@ -25,6 +25,7 @@
 #endif
 
 #include <cassert>
+#include <cmath>
 
 #include "extended.hpp"
 #include "util/interface_translator.hpp"
@@ -36,6 +37,7 @@
 
 #include <QTimer>
 #include <vlc_aout.h>
+#include <vlc_vout.h>
 #include <QTabWidget>
 #include <QGridLayout>
 #include <QDialogButtonBox>
@@ -49,7 +51,7 @@
 #include <vlc_modules.h>
 
 namespace {
-QVariant savedAudioValue(const QString& name, const QVariant& type)
+QVariant savedEffectValue(const QString& name, const QVariant& type)
 {
     const auto key = name.toUtf8();
     if (type.metaType().id() == QMetaType::QString) {
@@ -60,13 +62,14 @@ QVariant savedAudioValue(const QString& name, const QVariant& type)
         return config_GetFloat(key.constData());
     return QVariant::fromValue(config_GetInt(key.constData()));
 }
-QVariant currentAudioValue(audio_output_t* output, const QString& name)
+template<typename Output>
+QVariant currentEffectValue(Output* output, const QString& name)
 {
     if (!output) return {};
     const auto key = name.toUtf8();
     // Command and choice flags do not change the variable value type.
     switch (var_Type(output, key.constData()) & VLC_VAR_CLASS) {
-    case VLC_VAR_FLOAT: return var_GetFloat(output, key.constData());
+    case VLC_VAR_FLOAT: { const float value = var_GetFloat(output, key.constData()); return std::isfinite(value) ? QVariant(value) : QVariant(); }
     case VLC_VAR_BOOL: return var_GetBool(output, key.constData());
     case VLC_VAR_INTEGER: return QVariant::fromValue(var_GetInteger(output, key.constData()));
     case VLC_VAR_STRING: {
@@ -203,17 +206,24 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
     }
 
     connect( THEMIM, &PlayerController::playingStateChanged, this, &ExtendedDialog::changedItem );
-    m_savedAudioChain = savedAudioValue(QStringLiteral("audio-filter"), QString()).toString();
+    m_savedAudioChain = savedEffectValue(QStringLiteral("audio-filter"), QString()).toString();
     auto* refresh = new QTimer(this);
     refresh->setInterval(250);
-    connect(refresh, &QTimer::timeout, this, [this] { if (isVisible()) refreshAudioConfig(); });
+    connect(refresh, &QTimer::timeout, this, [this] { if (isVisible()) { refreshAudioConfig(); refreshVideoConfig(); } });
     connect(THEMIM, &PlayerController::inputChanged, this, &ExtendedDialog::refreshAudioConfig);
+    connect(THEMIM, &PlayerController::inputChanged, this, &ExtendedDialog::refreshVideoConfig);
     if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::redesignPlayerPreferencesChanged,
         this, &ExtendedDialog::refreshAudioConfig);
     for (auto* controls : findChildren<AudioFilterControlWidget*>())
         connect(controls, &AudioFilterControlWidget::draftChanged, this, &ExtendedDialog::updateAudioSave);
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::redesignPlayerPreferencesChanged,
+        this, &ExtendedDialog::refreshVideoConfig);
+    connect(videoEffect, &ExtVideo::draftChanged, this, &ExtendedDialog::updateVideoSave);
+    for (const auto* type : {"video-filter", "sub-source", "sub-filter", "video-splitter"})
+        m_savedVideoChains.insert(qfu(type), savedEffectValue(qfu(type), QString()).toString());
     refresh->start();
     refreshAudioConfig();
+    refreshVideoConfig();
 }
 
 ExtendedDialog::~ExtendedDialog()
@@ -223,7 +233,7 @@ ExtendedDialog::~ExtendedDialog()
 
 bool ExtendedDialog::event(QEvent* event)
 {
-    if (event->type() == QEvent::Show) refreshAudioConfig();
+    if (event->type() == QEvent::Show) { refreshAudioConfig(); refreshVideoConfig(); }
     // The main interface also has an application-wide Ctrl+S streaming action.
     if (event->type() == QEvent::ShortcutOverride && static_cast<QKeyEvent*>(event)->matches(QKeySequence::Save)) {
         event->accept();
@@ -286,13 +296,14 @@ void ExtendedDialog::currentTabChanged( int i )
 
 void ExtendedDialog::putAudioConfig( const QString& name, const QVariant value )
 {
-    if (!m_hashConfigs[AUDIO_TAB].contains(name)) m_savedAudioValues.insert(name, savedAudioValue(name, value));
+    if (!m_hashConfigs[AUDIO_TAB].contains(name)) m_savedAudioValues.insert(name, savedEffectValue(name, value));
     m_hashConfigs[AUDIO_TAB].insert( name, value );
     m_applyButton->setEnabled( true );
 }
 
 void ExtendedDialog::putVideoConfig( const QString& name, const QVariant value )
 {
+    if (!m_hashConfigs[VIDEO_TAB].contains(name)) m_savedVideoValues.insert(name, savedEffectValue(name, value));
     m_hashConfigs[VIDEO_TAB].insert( name, value );
     m_applyButton->setEnabled( true );
 }
@@ -302,8 +313,8 @@ void ExtendedDialog::refreshAudioConfig()
     const auto output = THEMIM->getAout();
     auto& pending = m_hashConfigs[AUDIO_TAB];
     for (auto it = pending.begin(); it != pending.end();) {
-        const auto saved = savedAudioValue(it.key(), it.value());
-        const auto current = currentAudioValue(output.get(), it.key());
+        const auto saved = savedEffectValue(it.key(), it.value());
+        const auto current = currentEffectValue(output.get(), it.key());
         // A later defaults change supersedes this window's older pending value.
         // Failed local saves update the snapshot but retain the retry state.
         const bool superseded = saved != m_savedAudioValues.value(it.key());
@@ -314,8 +325,8 @@ void ExtendedDialog::refreshAudioConfig()
         ++it;
     }
     if (pending.isEmpty()) m_audioSaveFailed = false;
-    const auto savedChain = savedAudioValue(QStringLiteral("audio-filter"), QString()).toString();
-    const auto currentChain = currentAudioValue(output.get(), QStringLiteral("audio-filter"));
+    const auto savedChain = savedEffectValue(QStringLiteral("audio-filter"), QString()).toString();
+    const auto currentChain = currentEffectValue(output.get(), QStringLiteral("audio-filter"));
     // The interface shadow keeps sequential changes when no output exists.
     // Keep it current after defaults change elsewhere or the live chain changes.
     if (currentChain.isValid() || savedChain != m_savedAudioChain) {
@@ -339,6 +350,40 @@ void ExtendedDialog::updateAudioSave()
     m_applyButton->setEnabled(!m_hashConfigs[AUDIO_TAB].isEmpty() || draft);
 }
 
+void ExtendedDialog::refreshVideoConfig()
+{
+    const auto output = THEMIM->getVout();
+    auto& pending = m_hashConfigs[VIDEO_TAB];
+    for (auto it = pending.begin(); it != pending.end();) {
+        const auto saved = savedEffectValue(it.key(), it.value());
+        const auto current = it.key() == QLatin1String("video-splitter") ? QVariant() : currentEffectValue(output.get(), it.key());
+        if (saved != m_savedVideoValues.value(it.key())
+            || (!m_videoSaveFailed && current.isValid() && current == saved)) {
+            m_savedVideoValues.remove(it.key()); it = pending.erase(it); continue;
+        }
+        if (current.isValid()) it.value() = current;
+        ++it;
+    }
+    if (pending.isEmpty()) m_videoSaveFailed = false;
+    for (const auto* type : {"video-filter", "sub-source", "sub-filter", "video-splitter"}) {
+        const auto key = qfu(type);
+        const auto saved = savedEffectValue(key, QString()).toString();
+        const auto current = key == QLatin1String("video-splitter") ? QVariant() : currentEffectValue(output.get(), key);
+        if (current.isValid() || saved != m_savedVideoChains.value(key)) {
+            if (var_Type(p_intf, type) == 0) var_Create(p_intf, type, VLC_VAR_STRING);
+            var_SetString(p_intf, type, qtu(current.isValid() ? current.toString() : pending.value(key, saved).toString()));
+        }
+        m_savedVideoChains.insert(key, saved);
+    }
+    videoEffect->refreshVideoValues(pending);
+    updateVideoSave();
+}
+
+void ExtendedDialog::updateVideoSave()
+{
+    if (currentTab() == VIDEO_TAB) m_applyButton->setEnabled(!m_hashConfigs[VIDEO_TAB].isEmpty() || videoEffect->hasDraft());
+}
+
 void ExtendedDialog::saveConfig()
 {
     assert( currentTab() == AUDIO_TAB || currentTab() == VIDEO_TAB );
@@ -351,6 +396,7 @@ void ExtendedDialog::saveConfig()
         }
     }
     if (currentTab() == AUDIO_TAB) refreshAudioConfig();
+    else { if (!videoEffect->commitDrafts()) return; refreshVideoConfig(); }
     QHash<QString, QVariant> *hashConfig = &m_hashConfigs[currentTab()];
 
     for( QHash<QString, QVariant>::iterator i = hashConfig->begin();
@@ -364,7 +410,12 @@ void ExtendedDialog::saveConfig()
                 break;
             case QMetaType::Int:
             case QMetaType::Bool:
-                config_PutInt( qtu(i.key()), value.toInt() ) ;
+            case QMetaType::Long:
+            case QMetaType::ULong:
+            case QMetaType::UInt:
+            case QMetaType::LongLong:
+            case QMetaType::ULongLong:
+                config_PutInt( qtu(i.key()), value.toLongLong() ) ;
                 break;
             case QMetaType::Double:
             case QMetaType::Float:
@@ -378,7 +429,12 @@ void ExtendedDialog::saveConfig()
         if (currentTab() == AUDIO_TAB) {
             m_audioSaveFailed = true;
             for (auto it = hashConfig->cbegin(); it != hashConfig->cend(); ++it)
-                m_savedAudioValues.insert(it.key(), savedAudioValue(it.key(), it.value()));
+                m_savedAudioValues.insert(it.key(), savedEffectValue(it.key(), it.value()));
+        }
+        if (currentTab() == VIDEO_TAB) {
+            m_videoSaveFailed = true;
+            for (auto it = hashConfig->cbegin(); it != hashConfig->cend(); ++it)
+                m_savedVideoValues.insert(it.key(), savedEffectValue(it.key(), it.value()));
         }
         DialogsProvider::getInstance()->messageDialog(
             qtr("VLC cannot save these settings.\n\nYour changes stay in this window. Select Save to try again."),
@@ -387,5 +443,6 @@ void ExtendedDialog::saveConfig()
     }
     hashConfig->clear();
     if (currentTab() == AUDIO_TAB) { m_savedAudioValues.clear(); m_audioSaveFailed = false; }
+    else { m_savedVideoValues.clear(); m_videoSaveFailed = false; }
     m_applyButton->setEnabled( false );
 }

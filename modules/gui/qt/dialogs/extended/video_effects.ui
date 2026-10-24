@@ -526,9 +526,6 @@
            <height>16777215</height>
           </size>
          </property>
-         <property name="inputMask">
-          <string>&gt;HHHHHH;#</string>
-         </property>
          <property name="alignment">
           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
          </property>
@@ -644,9 +641,6 @@
            <width>140</width>
            <height>16777215</height>
           </size>
-         </property>
-         <property name="inputMask">
-          <string>&gt;HHHHHH;#</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
