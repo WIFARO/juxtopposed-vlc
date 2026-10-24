@@ -90,8 +90,13 @@ public:
     Q_INVOKABLE void setPlaylistFavorite(const MLItemId& id, bool favorite, QJSValue callback);
     Q_INVOKABLE void savePlaylistDetails(const MLItemId& id, const QString& name, const QUrl& cover, QJSValue callback);
     Q_INVOKABLE void shuffleAndPlay(const MLItemId& id);
+    struct PlaylistExportResult {
+        enum class Failure { None, Source, Destination };
+        Failure failure = Failure::Source;
+        QString error;
+    };
     void exportPlaylist(const MLItemId& id, const QUrl& file, const QByteArray& format,
-                        QObject* receiver, std::function<void(const QString&)> callback);
+                        QObject* receiver, std::function<void(const PlaylistExportResult&)> callback);
     struct TrackAddition {
         QList<QUrl> added;
         QString error;

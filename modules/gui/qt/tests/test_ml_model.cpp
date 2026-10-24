@@ -846,15 +846,16 @@ private slots:
         };
         auto exportFile = [&](const MLItemId& id, const QString& path, const QByteArray& format) {
             bool done = false;
-            QString error;
+            MediaLib::PlaylistExportResult result;
             m_medialib->exportPlaylist(id, QUrl::fromLocalFile(path), format, this,
-                [&](const QString& result) { error = result; done = true; });
+                [&](const MediaLib::PlaylistExportResult& value) { result = value; done = true; });
             if (!QTest::qWaitFor([&] { return done; })) qFatal("Playlist export did not finish");
-            return error;
+            return result;
         };
+        using Failure = MediaLib::PlaylistExportResult::Failure;
         const MLItemId id(42, VLC_ML_PARENT_PLAYLIST);
         const QString file = directory.filePath(QStringLiteral("saved & français.m3u8"));
-        QVERIFY(exportFile(id, file, "export-m3u8").isEmpty());
+        QCOMPARE(exportFile(id, file, "export-m3u8").failure, Failure::None);
         QFile output(file); QVERIFY(output.open(QIODevice::ReadOnly));
         const auto content = output.readAll(); output.close();
         QVERIFY(content.startsWith("#EXTM3U"));
@@ -862,14 +863,18 @@ private slots:
         QVERIFY(content.indexOf("first%20%26%20last.mkv") < content.indexOf("https://example.test/video.mp4"));
         QVERIFY(content.lastIndexOf("first%20%26%20last.mkv") > content.indexOf("https://example.test/video.mp4"));
         reject = true;
-        QVERIFY(!exportFile(id, file, "export-m3u8").isEmpty());
+        const auto sourceFailure = exportFile(id, file, "export-m3u8");
+        QCOMPARE(sourceFailure.failure, Failure::Source);
+        QVERIFY(!sourceFailure.error.isEmpty());
         QVERIFY(output.open(QIODevice::ReadOnly)); QCOMPARE(output.readAll(), content); output.close();
         reject = false;
-        QVERIFY(!exportFile(MLItemId(99, VLC_ML_PARENT_PLAYLIST), file, "export-m3u8").isEmpty());
-        QVERIFY(!exportFile(id, file, "unsupported").isEmpty());
-        QVERIFY(!exportFile(id, directory.path(), "export-m3u8").isEmpty());
+        QCOMPARE(exportFile(MLItemId(99, VLC_ML_PARENT_PLAYLIST), file, "export-m3u8").failure, Failure::Source);
+        QCOMPARE(exportFile(id, file, "unsupported").failure, Failure::Source);
+        const auto destinationFailure = exportFile(id, directory.path(), "export-m3u8");
+        QCOMPARE(destinationFailure.failure, Failure::Destination);
+        QVERIFY(!destinationFailure.error.isEmpty());
         empty = true;
-        QVERIFY(exportFile(id, file, "export-m3u8").isEmpty());
+        QCOMPARE(exportFile(id, file, "export-m3u8").failure, Failure::None);
         QVERIFY(output.open(QIODevice::ReadOnly)); QCOMPARE(output.readAll().trimmed(), QByteArray("#EXTM3U"));
     }
 
@@ -1026,6 +1031,8 @@ private slots:
         QVERIFY(!episode.contains("year")); // An episode air year is not a series start year.
         input_item_SetMeta(item.get(), vlc_meta_ShowName, nullptr);
         input_item_SetMeta(item.get(), vlc_meta_Episode, nullptr);
+        QVERIFY(!MediaIdentity::inputMetadata(item.get()).contains("year")); // The filename still identifies an episode.
+        input_item_SetURI(item.get(), "file:///Movie.mkv");
         QCOMPARE(MediaIdentity::inputMetadata(item.get()).value("year").toInt(), 2024);
         input_item_SetMeta(item.get(), vlc_meta_Artist, "Artist");
         input_item_SetMeta(item.get(), vlc_meta_Album, "Album");

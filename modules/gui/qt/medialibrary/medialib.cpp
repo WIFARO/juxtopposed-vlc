@@ -945,10 +945,11 @@ void MediaLib::shuffleAndPlay(const MLItemId& id)
 }
 
 void MediaLib::exportPlaylist(const MLItemId& id, const QUrl& file, const QByteArray& format,
-                             QObject* receiver, std::function<void(const QString&)> callback)
+                             QObject* receiver, std::function<void(const PlaylistExportResult&)> callback)
 {
-    runOnMLThread<QString>(receiver,
-        [id, file, format, intf = m_intf](vlc_medialibrary_t* ml, QString& error) {
+    runOnMLThread<PlaylistExportResult>(receiver,
+        [id, file, format, intf = m_intf](vlc_medialibrary_t* ml, PlaylistExportResult& result) {
+            auto& error = result.error;
             error = qtr("VLC cannot export this playlist. Select it again.");
             if (id.type != VLC_ML_PARENT_PLAYLIST || id.id <= 0 || !file.isLocalFile()) return;
             if (format != "export-xspf" && format != "export-m3u" && format != "export-m3u8" && format != "export-html") return;
@@ -970,6 +971,7 @@ void MediaLib::exportPlaylist(const MLItemId& id, const QUrl& file, const QByteA
             auto queue = vlc::wrap_cptr(vlc_playlist_New(VLC_OBJECT(intf),
                 VLC_PLAYLIST_PREPARSING_DISABLED, 1, 0), vlc_playlist_Delete);
             if (!queue) return;
+            result.failure = PlaylistExportResult::Failure::Destination;
             error = qtr("VLC cannot save this file. Select another location.");
             const QFileInfo destination(file.toLocalFile());
             QTemporaryFile temporary(destination.dir().filePath(QStringLiteral(".vlc-export-XXXXXX")));
@@ -991,8 +993,9 @@ void MediaLib::exportPlaylist(const MLItemId& id, const QUrl& file, const QByteA
             }
             if (input.error() != QFile::NoError || !output.commit()) return;
             error.clear();
+            result.failure = PlaylistExportResult::Failure::None;
         },
-        [callback = std::move(callback)](quint64, const QString& error) { callback(error); },
+        [callback = std::move(callback)](quint64, const PlaylistExportResult& result) { callback(result); },
         "redesign-playlist-export");
 }
 
