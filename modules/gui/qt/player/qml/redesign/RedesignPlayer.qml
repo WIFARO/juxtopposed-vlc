@@ -388,7 +388,7 @@ FocusScope {
         buffering: Player.buffering
         statistics: Player.playbackStatistics
         mediaTitle: Player.title || Player.name || qsTr("VLC Media Player")
-        locationTitle: view.libraryItem ? view.libraryItem.locationTitle : qsTr("Videos")
+        locationTitle: view.libraryItem ? view.libraryItem.locationTitle : qsTr("Home")
         timeText: started ? rootPlayer.clockText(Player.time) : "00:00:00"
         lengthText: started ? rootPlayer.clockText(Player.length) : "00:00:00"
         artist: Player.artist
