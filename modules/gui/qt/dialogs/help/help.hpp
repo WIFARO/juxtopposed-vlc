@@ -44,6 +44,7 @@ class QLineEdit;
 class QLabel;
 class QPushButton;
 class QTimer;
+class UpdateModel;
 
 class HelpDialog : public QVLCFrame
 {
@@ -82,10 +83,18 @@ protected:
     bool eventFilter(QObject*, QEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
     void resizeEvent(QResizeEvent*) override;
+    void showEvent(QShowEvent*) override;
+    void hideEvent(QHideEvent*) override;
 
 private:
     void updateHeaderLayout();
     void updateHeaderIcons(QToolButton *hoveredButton = nullptr, bool hovered = false);
+    void updateUpdateButton();
+#ifdef UPDATE_CHECK
+    QPointer<UpdateModel> m_updateModel;
+#endif
+    bool m_inlineCheckActive = false;
+    bool m_headerLayoutUpdating = false;
     Ui::aboutWidget ui;
 };
 
@@ -124,6 +133,9 @@ public:
     ~UpdateModel();
 
     Q_INVOKABLE void checkUpdate(bool explicitCheck = false);
+    Q_INVOKABLE void checkUpdateInline();
+    void presentUpdate();
+    bool inlineCheck() const;
 
     Q_INVOKABLE bool openReleasePage();
     Q_INVOKABLE bool download(QString destDir);
@@ -153,6 +165,7 @@ signals:
     void presentationRequested();
 
 private:
+    void startCheck(bool explicitCheck, bool inlineCheck);
     void _setExplicitCheck(bool) const
     {
         // This method is added as a workaround for QML engine bug

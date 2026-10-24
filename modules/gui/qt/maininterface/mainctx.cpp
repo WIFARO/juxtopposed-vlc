@@ -1378,7 +1378,7 @@ UpdateModel* MainCtx::getUpdateModel() const
         m_updateModel = std::make_unique<UpdateModel>(p_intf);
 
         const auto presentUpdate = [this]() {
-            if (m_updateModel->presentationDismissed()) return;
+            if (m_updateModel->presentationDismissed() || m_updateModel->inlineCheck()) return;
             // An active pane handles its own state. Otherwise, use the update window.
 
             const auto openLegacyDialogIfNecessary = [&]() {

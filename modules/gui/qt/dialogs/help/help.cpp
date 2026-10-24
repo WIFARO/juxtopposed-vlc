@@ -58,9 +58,11 @@
 #include <QKeyEvent>
 #include <QToolButton>
 #include <QTimer>
+#include <QScopedValueRollback>
 #include <QScreen>
 
 #include <cassert>
+#include <algorithm>
 
 namespace {
 int helpDp(qt_intf_t *intf, int value)
@@ -271,12 +273,34 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
     ui.buildDetails->hide();
     connect(ui.buildDetailsButton, &QToolButton::toggled, this, [this](bool show) {
         ui.buildDetails->setVisible(show);
+        updateHeaderLayout();
+        layout()->activate();
+        if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
     });
 #ifdef UPDATE_CHECK
+    if (p_intf->p_mi) m_updateModel = p_intf->p_mi->getUpdateModel();
     connect(ui.checkUpdatesButton, &QToolButton::clicked, this, [this] {
-        // About is modal. Close it before presenting the shared update window.
-        accept();
-        p_intf->p_mi->getUpdateModel()->checkUpdate(true);
+        const auto model = m_updateModel;
+        if (!model) return;
+        if (model->updateStatus() == UpdateModel::NeedUpdate) {
+            m_inlineCheckActive = false;
+            accept();
+            if (model) model->presentUpdate();
+        } else {
+            m_inlineCheckActive = true;
+            model->checkUpdateInline();
+        }
+    });
+    if (m_updateModel) connect(m_updateModel, &UpdateModel::updateStatusChanged, this, [this] {
+        const auto model = m_updateModel;
+        updateUpdateButton();
+        if (model && isVisible() && m_inlineCheckActive && model->inlineCheck()
+            && model->updateStatus() == UpdateModel::NeedUpdate) {
+            // Release About's modality before showing the available release.
+            m_inlineCheckActive = false;
+            accept();
+            if (model) model->presentUpdate();
+        }
     });
 #else
     ui.checkUpdatesButton->setEnabled(false);
@@ -318,15 +342,11 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
         qtr( "<p>VLC media player is a free and open source media player, encoder, and streamer made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>" ).remove(QStringLiteral("color:#0057ae;")) +
         "</p>" + AboutModel::getDesignAttribution() + "</body> </html>");
         colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link));
+        updateUpdateButton();
         updateHeaderLayout();
     };
     updateText();
     const auto metrics = [this] {
-        const int margin = helpDp(p_intf, 24);
-        layout()->setContentsMargins(margin,margin,margin,margin);
-        layout()->setSpacing(helpDp(p_intf, 12));
-        ui.headerLayout->setSpacing(helpDp(p_intf, 16));
-        ui.identityLayout->setSpacing(helpDp(p_intf, 16));
         ui.titleLayout->setSpacing(helpDp(p_intf, 4));
         ui.versionLayout->setSpacing(helpDp(p_intf, 4));
         const QSize iconSize(helpDp(p_intf, 20), helpDp(p_intf, 20));
@@ -388,8 +408,76 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
                       static_cast<QWidget*>(ui.version), static_cast<QWidget*>(ui.buildDetails)}) view->installEventFilter(this);
 }
 
+void AboutDialog::updateUpdateButton()
+{
+#ifdef UPDATE_CHECK
+    const auto status = m_updateModel ? m_updateModel->updateStatus() : UpdateModel::Unchecked;
+    QString text = qtr("Check for updates");
+    QString hint = qtr("Check for a new version of VLC.");
+    switch (status) {
+    case UpdateModel::Checking:
+        text = qtr("Checking for updates");
+        hint = text;
+        break;
+    case UpdateModel::UpToDate:
+        text = qtr("VLC is up to date");
+        hint = qtr("VLC is up to date. Select this button to check again.");
+        break;
+    case UpdateModel::CheckFailed:
+        text = qtr("Cannot check for updates");
+        hint = text + QLatin1Char('\n') + qtr("Check your network connection. Select this button to check again.");
+        break;
+    case UpdateModel::NeedUpdate:
+        text = qtr("View update");
+        hint = qtr("A new version is available.");
+        break;
+    default:
+        break;
+    }
+    ui.checkUpdatesButton->setText(text);
+    ui.checkUpdatesButton->setAccessibleName(text);
+    ui.checkUpdatesButton->setToolTip(m_updateModel ? hint : qtr("Update checks are not available."));
+    ui.checkUpdatesButton->setEnabled(m_updateModel && status != UpdateModel::Checking && status != UpdateModel::Downloading);
+#endif
+    updateHeaderIcons();
+    updateHeaderLayout();
+}
+
+void AboutDialog::showEvent(QShowEvent *event)
+{
+    QVLCDialog::showEvent(event);
+    updateUpdateButton();
+#ifdef UPDATE_CHECK
+    const auto model = m_updateModel;
+    if (model && model->updateStatus() == UpdateModel::Checking && !model->explicitCheck()) {
+        // Join a startup check without sending another request.
+        m_inlineCheckActive = true;
+        model->checkUpdateInline();
+    }
+#endif
+}
+
+void AboutDialog::hideEvent(QHideEvent *event)
+{
+#ifdef UPDATE_CHECK
+    if (m_inlineCheckActive) {
+        m_inlineCheckActive = false;
+        if (m_updateModel && m_updateModel->inlineCheck()) m_updateModel->dismissPresentation();
+    }
+#endif
+    QVLCDialog::hideEvent(event);
+}
+
 void AboutDialog::updateHeaderLayout()
 {
+    if (m_headerLayoutUpdating) return;
+    QScopedValueRollback<bool> guard(m_headerLayoutUpdating, true);
+    const bool shortScreen = screen() && screen()->availableGeometry().height() < helpDp(p_intf, 400);
+    const int margin = helpDp(p_intf, shortScreen ? 12 : 24);
+    layout()->setContentsMargins(margin, margin, margin, margin);
+    layout()->setSpacing(helpDp(p_intf, shortScreen ? 6 : 12));
+    ui.headerLayout->setSpacing(helpDp(p_intf, shortScreen ? 8 : 16));
+    ui.identityLayout->setSpacing(helpDp(p_intf, shortScreen ? 8 : 16));
     // Measure the full caption regardless of the currently displayed style.
     ui.checkUpdatesButton->setMinimumWidth(0);
     ui.checkUpdatesButton->setMaximumWidth(QWIDGETSIZE_MAX);
@@ -410,6 +498,16 @@ void AboutDialog::updateHeaderLayout()
     ui.headerLayout->setAlignment(ui.checkUpdatesButton, Qt::AlignRight | (compact ? Qt::AlignTop : Qt::AlignVCenter));
     // Reserve room for the icon so it stays beside the identity at small sizes.
     ui.aboutHeader->setMinimumWidth(ui.identityLayout->minimumSize().width() + compactWidth + ui.headerLayout->spacing());
+    if (screen()) {
+        // Keep the scrollable build details within the work area at large text sizes.
+        int minimum = layout()->totalMinimumHeightForWidth(width());
+        if (minimum < 0) minimum = layout()->minimumSize().height();
+        const bool hidden = ui.buildDetails->isHidden();
+        const int otherHeight = minimum - (hidden ? 0 : ui.buildDetails->minimumHeight());
+        const int room = screen()->availableGeometry().height() - otherHeight
+            - (hidden ? layout()->spacing() : 0);
+        ui.buildDetails->setFixedHeight(std::clamp(room, 1, helpDp(p_intf, 128)));
+    }
 }
 
 void AboutDialog::updateHeaderIcons(QToolButton *hoveredButton, bool hovered)
@@ -422,7 +520,15 @@ void AboutDialog::updateHeaderIcons(QToolButton *hoveredButton, bool hovered)
     };
     apply(ui.copyVersionButton, QStringLiteral(":/icons/copy.svg"));
     apply(ui.buildDetailsButton, QStringLiteral(":/icons/info.svg"));
-    apply(ui.checkUpdatesButton, QStringLiteral(":/menu/redesign/refresh.svg"));
+#ifdef UPDATE_CHECK
+    if (m_updateModel && m_updateModel->updateStatus() == UpdateModel::UpToDate) {
+        const QColor color = palette().color(QPalette::Window).lightness() > 128
+            ? QColor(QStringLiteral("#248a3d")) : QColor(QStringLiteral("#63c174"));
+        ui.checkUpdatesButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/icons/check.svg"), color, {}, {},
+            {{QStringLiteral("black"), color.name()}}));
+    } else
+#endif
+        apply(ui.checkUpdatesButton, QStringLiteral(":/menu/redesign/refresh.svg"));
 }
 
 void AboutDialog::resizeEvent(QResizeEvent *event)
@@ -496,6 +602,7 @@ public:
     UpdateModel::Status status = UpdateModel::Unchecked;
     bool explicitCheck = false;
     bool presentationDismissed = false;
+    bool inlineCheck = false;
 };
 
 UpdateModel::UpdateModel(qt_intf_t * p_intf)
@@ -516,11 +623,41 @@ UpdateModel::~UpdateModel() = default;
 
 void UpdateModel::checkUpdate(bool explicitCheck)
 {
+    startCheck(explicitCheck, false);
+}
+
+void UpdateModel::checkUpdateInline()
+{
+    startCheck(true, true);
+}
+
+bool UpdateModel::inlineCheck() const
+{
+    Q_D(const UpdateModel);
+    return d->inlineCheck;
+}
+
+void UpdateModel::presentUpdate()
+{
+    Q_D(UpdateModel);
+    if (d->status != NeedUpdate) return;
+    d->inlineCheck = false;
+    d->presentationDismissed = false;
+    if (!d->explicitCheck) {
+        d->explicitCheck = true;
+        emit explicitCheckChanged();
+    }
+    emit presentationRequested();
+}
+
+void UpdateModel::startCheck(bool explicitCheck, bool inlineCheck)
+{
     Q_D(UpdateModel);
     if (d->status == Checking)
     {
         if (explicitCheck)
         {
+            d->inlineCheck = inlineCheck;
             d->presentationDismissed = false;
             if (!d->explicitCheck)
             {
@@ -528,14 +665,15 @@ void UpdateModel::checkUpdate(bool explicitCheck)
                 emit explicitCheckChanged();
             }
             // Present the existing request without sending another one.
-            emit presentationRequested();
+            if (!inlineCheck) emit presentationRequested();
         }
         return;
     }
     d->presentationDismissed = false;
-    if (explicitCheck && !d->explicitCheck)
+    d->inlineCheck = inlineCheck;
+    if (d->explicitCheck != explicitCheck)
     {
-        d->explicitCheck = true;
+        d->explicitCheck = explicitCheck;
         emit explicitCheckChanged();
     }
     d->release.reset();
