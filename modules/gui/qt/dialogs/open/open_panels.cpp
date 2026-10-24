@@ -473,6 +473,11 @@ DiscOpenPanel::DiscOpenPanel( QWidget *_parent, qt_intf_t *_p_intf ) :
 #ifdef _WIN32 /* Disc drives probing for Windows */
 void DiscOpenPanel::onFocus()
 {
+    const auto previousText = ui.deviceCombo->currentText();
+    const int previousIndex = ui.deviceCombo->findText(previousText);
+    const auto previousData = previousIndex >= 0 ? ui.deviceCombo->itemData(previousIndex) : QVariant();
+    const auto previousPath = previousData.isValid() ? previousData.toString() : previousText;
+    const QSignalBlocker choicesBlock(ui.deviceCombo), editBlock(ui.deviceCombo->lineEdit());
     ui.deviceCombo->clear();
     wchar_t szDrives[512];
     szDrives[0] = L'\0';
@@ -504,11 +509,21 @@ void DiscOpenPanel::onFocus()
         SetThreadErrorMode(oldMode, NULL);
     }
 
-    char *psz_config = config_GetPsz( "dvd" );
-    int temp = ui.deviceCombo->findData( qfu(psz_config), Qt::UserRole, Qt::MatchStartsWith );
-    free( psz_config );
-    if( temp != -1 )
-        ui.deviceCombo->setCurrentIndex( temp );
+    if (m_deviceListInitialized)
+    {
+        const int index = ui.deviceCombo->findData(previousPath);
+        if (index >= 0) ui.deviceCombo->setCurrentIndex(index);
+        // Keep an entered path, an empty draft, or a drive that is now absent.
+        else ui.deviceCombo->setEditText(previousPath);
+    }
+    else
+    {
+        char *psz_config = config_GetPsz("dvd");
+        const int index = ui.deviceCombo->findData(qfu(psz_config), Qt::UserRole, Qt::MatchStartsWith);
+        free(psz_config);
+        if (index >= 0) ui.deviceCombo->setCurrentIndex(index);
+        m_deviceListInitialized = true;
+    }
 }
 #elif defined( __OS2__ ) /* Disc drives probing for OS/2 */
 void DiscOpenPanel::onFocus()
@@ -555,8 +570,15 @@ void DiscOpenPanel::onFocus()
 
 void DiscOpenPanel::updateContext(int c)
 {
+    if (context == c) return;
     OpenPanel::updateContext(c);
-    ui.dvdsimple->setChecked( context == OpenPanel::CONTEXT_BATCH );
+    ui.dvdsimple->setChecked(defaultSkipDiscMenus());
+}
+
+bool DiscOpenPanel::defaultSkipDiscMenus() const
+{
+    return context == OpenPanel::CONTEXT_BATCH ||
+        (ui.bdRadioButton->isChecked() && !var_InheritBool(p_intf, "bluray-menu"));
 }
 
 DiscOpenPanel::~DiscOpenPanel()
@@ -572,6 +594,7 @@ void DiscOpenPanel::clear()
     ui.chapterSpin->setValue( 0 );
     ui.subtitlesSpin->setValue(0);
     ui.audioSpin->setValue(0);
+    ui.dvdsimple->setChecked(defaultSkipDiscMenus());
     m_discType = None;
 }
 
@@ -619,7 +642,7 @@ void DiscOpenPanel::updateButtons()
         {
             setDrive( psz_dvddiscpath );
             m_discType = BRD;
-            ui.dvdsimple->setChecked( !var_InheritBool( p_intf, "bluray-menu" ) );
+            ui.dvdsimple->setChecked(defaultSkipDiscMenus());
         }
         ui.titleLabel->setText( qtr("Title") );
         ui.chapterLabel->hide();

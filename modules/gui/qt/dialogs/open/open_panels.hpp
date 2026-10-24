@@ -192,6 +192,10 @@ private:
     Ui::OpenDisk ui;
     char *psz_dvddiscpath, *psz_vcddiscpath, *psz_cddadiscpath;
     DiscType m_discType;
+#ifdef _WIN32
+    bool m_deviceListInitialized = false;
+#endif
+    bool defaultSkipDiscMenus() const;
 public slots:
     void updateMRL() override;
 private slots:
