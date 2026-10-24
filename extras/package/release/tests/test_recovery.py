@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tarfile
 import tempfile
 import unittest
 from unittest import mock
@@ -284,7 +283,7 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'full build'):
                 recovery.recovery_changes(old, 'HEAD', root, rebuild_targets={'win64', 'macos-x86_64'})
 
-    def test_assembly_preserves_sources_and_produces_complete_manifest_and_checksums(self):
+    def test_assembly_preserves_provenance_and_checksums_only_application_archives(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             old, new, _ = self.make_repository(root)
@@ -303,10 +302,7 @@ class RecoveryTests(unittest.TestCase):
                 self.assertEqual(package['run_id'], '5678' if rebuilt else '1234')
             self.assertEqual((output / 'SOURCE_COMMIT.txt').read_text(), new + '\n')
             self.assertEqual(json.loads((output / 'RELEASE_MANIFEST.json').read_text()), manifest)
-            with tarfile.open(output / f'vlc-juxtopposed-{VERSION}-source-{old}.tar.gz') as archive:
-                self.assertFalse(any(name.endswith('/doc/RELEASING.md') for name in archive.getnames()))
-            with tarfile.open(output / f'vlc-juxtopposed-{VERSION}-source.tar.gz') as archive:
-                self.assertTrue(any(name.endswith('/doc/RELEASING.md') for name in archive.getnames()))
+            self.assertFalse(list(output.glob('*-source*.tar.gz')))
             notes = (output / 'RELEASE_NOTES.md').read_text()
             update_metadata = json.loads((output / 'UPDATE_METADATA.json').read_text())
             self.assertEqual(update_metadata['version'], VERSION)
@@ -315,9 +311,12 @@ class RecoveryTests(unittest.TestCase):
             self.assertIn(recovery.append_metadata('', update_metadata).strip(), notes)
             self.assertIn(f'`{old}`', notes)
             self.assertIn(f'`{new}`', notes)
+            checksum_names = set()
             for line in (output / 'SHA256SUMS.txt').read_text().splitlines():
                 digest, filename = line.split('  ')
                 self.assertEqual(digest, recovery.file_digest(output / filename))
+                checksum_names.add(filename)
+            self.assertEqual(checksum_names, {p['asset_name'] for p in manifest['packages']})
             # An incomplete set must not produce a "complete" output directory.
             (artifacts / f'{VERSION}-win64/windows-build.json').unlink()
             with self.assertRaises(OSError):
@@ -351,7 +350,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual({p['target'] for p in manifest['packages'] if not p['reused']}, rebuilt)
             self.assertEqual({p['source_commit'] for p in manifest['packages'] if p['reused']}, {old})
 
-    def test_collection_manifest_records_two_build_runs_and_exact_source_archives(self):
+    def test_collection_manifest_records_two_build_runs_without_source_archives(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             old, built, command = self.make_repository(root)
@@ -371,8 +370,7 @@ class RecoveryTests(unittest.TestCase):
                 self.assertTrue(package['reused'])
                 self.assertEqual(package['source_commit'], origins[package['target']]['source_commit'])
                 self.assertEqual(package['run_id'], origins[package['target']]['run_id'])
-            for commit in (old, built):
-                self.assertTrue((root / f'complete/vlc-juxtopposed-{VERSION}-source-{commit}.tar.gz').exists())
+            self.assertFalse(list((root / 'complete').glob('*-source*.tar.gz')))
             self.assertEqual(manifest['packaging_commit'], packaging)
             with self.assertRaisesRegex(ValueError, 'Missing artifact origin'):
                 recovery.assemble(root / 'artifacts', root / 'missing-origin', VERSION, packaging,
@@ -403,7 +401,17 @@ class RecoveryTests(unittest.TestCase):
             output = Path(temp)
             (output / 'RELEASE_NOTES.md').write_text('Notes')
             (output / 'RELEASE_MANIFEST.json').write_text('{}')
-            (output / 'package.zip').touch()
+            (output / 'windows-build.json').write_text('{}')
+            (output / 'UPDATE_METADATA.json').write_text('{}')
+            (output / 'SOURCE_COMMIT.txt').write_text(NEW)
+            (output / f'vlc-juxtopposed-{VERSION}-source.tar.gz').write_bytes(b'old source archive')
+            (output / f'vlc-juxtopposed-{VERSION}-source.zip').write_bytes(b'old source archive')
+            expected = ['SHA256SUMS.txt']
+            for target, spec in recovery.TARGETS.items():
+                name = f'vlc-juxtopposed-{VERSION}-{target}.{spec["extension"]}'
+                expected.extend((name, name + '.sha256'))
+            for name in expected:
+                (output / name).write_bytes(b'package or checksum')
             with mock.patch.object(sys, 'argv', ['recovery.py', 'publish', '--repository', REPO,
                                                 '--output', str(output)]), \
                     mock.patch.object(recovery, 'git', return_value=NEW), \
@@ -414,8 +422,26 @@ class RecoveryTests(unittest.TestCase):
             args = tool.call_args.args[0]
             self.assertEqual(args[:8], ['gh', 'release', 'create', VERSION, '--target', NEW,
                                        '--draft', '--prerelease'])
-            self.assertIn(str(output / 'RELEASE_MANIFEST.json'), args)
+            notes_index = args.index('--notes-file')
+            self.assertEqual(args[notes_index + 1], str(output / 'RELEASE_NOTES.md'))
+            self.assertEqual(set(args[notes_index + 2:]), {str(output / name) for name in expected})
+            self.assertEqual(len(args[notes_index + 2:]), 9)
             self.assertTrue(tool.call_args.kwargs['check'])
+
+    def test_incomplete_release_downloads_do_not_create_a_draft(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            for name in ['SHA256SUMS.txt', *recovery.package_asset_names(VERSION)]:
+                (output / name).write_bytes(b'package or checksum')
+            with mock.patch.object(sys, 'argv', ['recovery.py', 'publish', '--repository', REPO,
+                                                '--output', str(output)]), \
+                    mock.patch.object(recovery, 'git', return_value=NEW), \
+                    mock.patch.object(recovery, 'check_release_tag'), \
+                    mock.patch.object(recovery.subprocess, 'run') as tool, \
+                    mock.patch('sys.stderr', new_callable=io.StringIO), \
+                    self.assertRaises(SystemExit):
+                recovery.main()
+            tool.assert_not_called()
 
 
 if __name__ == '__main__':

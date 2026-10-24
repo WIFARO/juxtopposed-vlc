@@ -212,6 +212,22 @@ def file_digest(path):
     return digest.hexdigest()
 
 
+def package_asset_names(version):
+    return sorted(f'vlc-juxtopposed-{version}-{target}.{spec["extension"]}'
+                  for target, spec in TARGETS.items())
+
+
+def release_assets(directory, version):
+    names = ['SHA256SUMS.txt']
+    for name in package_asset_names(version):
+        names.extend((name, name + '.sha256'))
+    paths = [directory / name for name in names]
+    for path in paths:
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f'Missing or invalid release asset: {path.name}')
+    return paths
+
+
 def assemble(artifacts, output, version, current, run_id, repository, previous_run='',
              target='all', source='', root=ROOT, origins=None):
     if output.exists():
@@ -263,13 +279,6 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
                     previous_run_id=str(previous_run) if previous_run else None, packages=packages)
     (output / 'RELEASE_MANIFEST.json').write_text(json.dumps(manifest, indent=2) + '\n')
     (output / 'SOURCE_COMMIT.txt').write_text(current + '\n')
-    # Supply the exact sources for reused binaries as well as the packaging commit.
-    for commit in sorted({current} | {p['source_commit'] for p in packages}):
-        suffix = '' if commit == current else f'-{commit}'
-        filename = f'vlc-juxtopposed-{version}-source{suffix}.tar.gz'
-        with (output / filename).open('wb') as stream:
-            subprocess.run(['git', '-C', str(root), 'archive', '--format=tar.gz',
-                            f'--prefix=vlc-juxtopposed-{version}-source/', commit], stdout=stream, check=True)
     notes += f'\n\nRelease packaging commit: `{current}`\n\n'
     notes += '| Package | Binary source commit | Build run |\n| --- | --- | --- |\n'
     for package in packages:
@@ -278,7 +287,7 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
         notes += f'| {package["target"]} | `{package["source_commit"]}` | [{origin}]({url}) |\n'
     (output / 'UPDATE_METADATA.json').write_text(json.dumps(update_metadata, indent=2) + '\n')
     (output / 'RELEASE_NOTES.md').write_text(append_metadata(notes, update_metadata))
-    sums = ''.join(f'{file_digest(path)}  {path.name}\n' for path in sorted(output.iterdir()))
+    sums = ''.join(f'{file_digest(output / name)}  {name}\n' for name in package_asset_names(version))
     (output / 'SHA256SUMS.txt').write_text(sums)
     return manifest
 
@@ -331,7 +340,7 @@ def main():
         else:
             check_release_tag(args.repository, version, current)
             flags = ['--prerelease'] if validate_tag(version)['channel'] != 'stable' else []
-            assets = [str(p) for p in sorted(args.output.iterdir()) if p.name != 'RELEASE_NOTES.md']
+            assets = [str(p) for p in release_assets(args.output, version)]
             subprocess.run(['gh', 'release', 'create', version, '--target', current, '--draft', *flags,
                             '--title', f'VLC Juxtopposed Redesign - {version}',
                             '--notes-file', str(args.output / 'RELEASE_NOTES.md'), *assets], check=True)

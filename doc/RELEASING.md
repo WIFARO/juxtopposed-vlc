@@ -208,9 +208,11 @@ The completed bundle includes `RELEASE_MANIFEST.json` with each package's source
 commit, originating run, size, hash and reuse status. Existing package metadata
 and embedded source commits are preserved. `SOURCE_COMMIT.txt` identifies the
 current release packaging commit, not every binary's source: the release notes
-and manifest list the sources individually. The usual source archive contains
-the current commit; additional `-source-<commit>.tar.gz` archives contain the exact
-sources for reused binaries. `SHA256SUMS.txt` covers the assembled files.
+and manifest list the sources individually. Metadata, manifests and dependency
+audits remain in the workflow's `<version>-complete` artifact. The draft release
+attaches only `SHA256SUMS.txt`, the four application archives and their individual
+`.sha256` files. `SHA256SUMS.txt` covers only the application archives. No custom
+source archives are generated; releases use GitHub's automatic source downloads.
 
 **create_draft** is also available for full manual builds. It uses the checked-out
 commit as the version tag's target if the tag does not exist. An existing tag must
@@ -239,7 +241,7 @@ artifact. Missing packages, failed checks or application changes since the
 completed build stop collection; they never silently start another compilation.
 The original full run remains the baseline, so a recovery run is not used as a
 replacement baseline. Each artifact keeps its own run ID, source commit and hash
-in `RELEASE_MANIFEST.json`, and each distinct source commit is archived.
+in the workflow artifact's `RELEASE_MANIFEST.json`.
 
 The v4 download action nests artifacts downloaded by ID under their artifact
 name unless `merge-multiple: true` is set. Reuse downloads explicitly use that
@@ -254,10 +256,10 @@ remains failed.
 ### Update metadata
 
 Release assembly appends a hidden `vlc-update-metadata` JSON block to the GitHub
-release notes and includes the same data in `UPDATE_METADATA.json`. The updater
-reads the block from the existing releases API response; it does not fetch the
-JSON asset. Keep the block when editing the published release notes. The app
-removes it from the displayed notes.
+release notes and retains the same data in the workflow artifact's
+`UPDATE_METADATA.json`. The updater reads the block from the existing releases
+API response; it does not fetch the JSON file. Keep the block when editing the
+published release notes. The app removes it from the displayed notes.
 
 An optional `doc/releases/<version>.json` file supplies release display fields:
 
@@ -324,9 +326,11 @@ git push origin refs/tags/4.0.0-beta.5
 ```
 
 A pushed `4.0.0-beta.5` tag runs the same builds and creates a **draft prerelease** named
-`VLC Juxtopposed Redesign - 4.0.0-beta.5`. It attaches the downloads, source snapshot,
-source commit, Mac build metadata and `SHA256SUMS.txt`. The notes are taken from
-the tagged source and include its commit hash. Inspect and publish the draft
+`VLC Juxtopposed Redesign - 4.0.0-beta.5`. It attaches only the four application
+archives, their `.sha256` files and `SHA256SUMS.txt`. Build metadata stays in the
+workflow artifacts; source downloads are provided automatically by GitHub.
+The notes are taken from the tagged source and include its commit hash.
+Inspect and publish the draft
 manually only after downloading and trying the appropriate binaries.
 
 With draft creation unchecked, the manual workflow run is a preflight build.
@@ -442,7 +446,7 @@ Mac packaging also verifies code signatures and all bundled dependency paths.
 
 ## Dependency sources
 
-The release source snapshot includes the contrib recipes, patches, source URLs
+The repository source includes the contrib recipes, patches, source URLs
 and SHA-512 sums. Retain build logs and exact dependency versions with release
 artifacts. For dependency modifications, distribute the corresponding patched
 source as required by each dependency's license; do not substitute an unrecorded
