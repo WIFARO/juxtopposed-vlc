@@ -376,6 +376,8 @@ QVariant DialogsProvider::getTextDialog(QWidget *parent,
     for (auto *caption : dialog.findChildren<QLabel*>())
     {
         caption->setTextFormat(Qt::PlainText);
+        // Keep the input's label buddy, without interpreting data as mnemonics.
+        caption->setText(QString(label).replace(QStringLiteral("&"), QStringLiteral("&&")));
         caption->setWordWrap(true);
     }
     QVLCDialog::setWindowTransientParent(&dialog, parent ? parent->window()->windowHandle() : nullptr, p_intf);
