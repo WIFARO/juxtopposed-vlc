@@ -512,6 +512,7 @@ qt_plugin_sources = files(
     'util/playlist_cover_store.hpp',
     'util/track_matching.hpp',
     'util/media_identity.hpp',
+    'util/filter_chain_edit.hpp',
     'util/artwork_discovery.hpp',
     'util/artwork_store.hpp',
     'util/media_identity_ml.hpp',
@@ -1653,6 +1654,15 @@ if qt6_dep.found()
             'moc_sources': files('tests/test_media_identity.cpp'),
             'suite': ['qt'],
             'include_directories': qt_include_dir,
+            'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
+        }
+        vlc_tests += {
+            'name': 'test_qt_filter_chain_edit',
+            'sources': files('tests/test_filter_chain_edit.cpp'),
+            'moc_sources': files('tests/test_filter_chain_edit.cpp'),
+            'suite': ['qt'],
+            'include_directories': qt_include_dir,
+            'link_with': [libvlccore],
             'dependencies': [qt6_dep, qt_extra_deps, qtest_qt6_dep],
         }
         vlc_tests += {

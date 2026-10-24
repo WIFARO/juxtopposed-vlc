@@ -2450,23 +2450,37 @@ void PlayerController::setSubtitleDelay(VLCDuration delay)
 void PlayerController::setSecondarySubtitleDelay(VLCDuration delay)
 {
     Q_D(PlayerController);
-    vlc_player_locker lock{ d->m_player };
-    if( !d->isCurrentItemSynced() )
-        return;
-    if (d->m_secondarySpuEsId.get() != NULL)
-        vlc_player_SetEsIdDelay(d->m_player, d->m_secondarySpuEsId.get(),
-                                delay.toVLCTick(), VLC_PLAYER_WHENCE_ABSOLUTE);
+    {
+        vlc_player_locker lock{d->m_player};
+        if (!d->isCurrentItemSynced()) return;
+        // A selected subtitle can acquire its secondary renderer after a
+        // paused edit. UpdateSpuOrder applies this requested delay when ready.
+        d->m_secondarySubtitleDelay = delay;
+        if (d->m_secondarySpuEsId)
+            vlc_player_SetEsIdDelay(d->m_player, d->m_secondarySpuEsId.get(),
+                                   delay.toVLCTick(), VLC_PLAYER_WHENCE_ABSOLUTE);
+    }
+    emit secondarySubtitleDelayChanged(delay);
 }
 
 /*Q_INVOKABLE*/void PlayerController::addSecondarySubtitleDelay(VLCDuration delay)
 {
     Q_D(PlayerController);
-    vlc_player_locker lock{ d->m_player };
-    if (d->m_secondarySpuEsId.get() != NULL) {
-        vlc_player_SetEsIdDelay(d->m_player, d->m_secondarySpuEsId.get(),
-                                delay.toVLCTick(), VLC_PLAYER_WHENCE_RELATIVE);
-        emit secondarySubtitleDelayChanged(delay);
+    VLCDuration requested;
+    {
+        vlc_player_locker lock{d->m_player};
+        if (!d->isCurrentItemSynced()) return;
+        const auto actual = d->m_secondarySpuEsId
+            ? vlc_player_GetEsIdDelay(d->m_player, d->m_secondarySpuEsId.get()) : VLC_TICK_INVALID;
+        const auto current = actual != VLC_TICK_INVALID ? VLCDuration(actual)
+            : d->m_secondarySubtitleDelay.valid() ? d->m_secondarySubtitleDelay : VLCDuration::fromMS(0);
+        requested = current + delay;
+        d->m_secondarySubtitleDelay = requested;
+        if (d->m_secondarySpuEsId)
+            vlc_player_SetEsIdDelay(d->m_player, d->m_secondarySpuEsId.get(),
+                                   delay.toVLCTick(), VLC_PLAYER_WHENCE_RELATIVE);
     }
+    emit secondarySubtitleDelayChanged(requested);
 }
 
 int PlayerController::getAudioDelayMS() const

@@ -39,6 +39,10 @@
 #include <vlc_aout.h>
 #include <vlc_vout.h>
 #include <QTabWidget>
+#include <QTabBar>
+#include <QComboBox>
+#include <QPointer>
+#include <QScreen>
 #include <QGridLayout>
 #include <QDialogButtonBox>
 #include <QPushButton>
@@ -51,6 +55,61 @@
 #include <vlc_modules.h>
 
 namespace {
+class EffectsSectionPicker final : public QObject
+{
+public:
+    EffectsSectionPicker(QTabWidget* tabs, MainCtx* ctx, const char* label) : QObject(tabs), m_tabs(tabs), m_ctx(ctx), m_label(label)
+    {
+        auto* parent = tabs->parentWidget();
+        auto* wrapper = new QWidget(parent);
+        auto* oldItem = parent->layout()->replaceWidget(tabs, wrapper);
+        delete oldItem;
+        auto* layout = new QVBoxLayout(wrapper); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(0);
+        m_picker = new QComboBox(wrapper);
+        m_picker->setObjectName(QStringLiteral("effectsSectionPicker"));
+        layout->addWidget(m_picker, 0, Qt::AlignLeft); layout->addWidget(tabs, 1);
+        tabs->installEventFilter(this);
+        tabs->tabBar()->installEventFilter(this);
+        connect(m_picker.data(), QOverload<int>::of(&QComboBox::activated), tabs, &QTabWidget::setCurrentIndex);
+        connect(tabs, &QTabWidget::currentChanged, this, [this] { refresh(); });
+        if (ctx) connect(ctx, &MainCtx::intfScaleFactorChanged, this, [this] { schedule(); });
+        schedule();
+    }
+    void refresh()
+    {
+        if (!m_tabs || !m_picker) return;
+        const QSignalBlocker block(m_picker.data());
+        m_picker->setAccessibleName(qtr(m_label));
+        m_picker->setToolTip(qtr("Select a section."));
+        bool changed = m_picker->count() != m_tabs->count();
+        for (int i = 0; !changed && i < m_tabs->count(); ++i) changed = m_picker->itemText(i) != m_tabs->tabText(i);
+        if (changed) { m_picker->clear(); for (int i = 0; i < m_tabs->count(); ++i) m_picker->addItem(m_tabs->tabText(i)); }
+        m_picker->setCurrentIndex(m_tabs->currentIndex());
+        const bool compact = m_tabs->tabBar()->sizeHint().width() > m_tabs->contentsRect().width();
+        const int width = qMin(m_tabs->contentsRect().width(), qMax(qRound(180 * (m_ctx ? m_ctx->getIntfScaleFactor() : 1)), m_picker->sizeHint().width()));
+        if (m_picker->width() != width) m_picker->setFixedWidth(width);
+        if (m_tabs->tabBar()->isHidden() != compact) m_tabs->tabBar()->setVisible(!compact);
+        if (m_picker->isHidden() == compact) m_picker->setVisible(compact);
+    }
+protected:
+    bool eventFilter(QObject* object, QEvent* event) override
+    {
+        if (event->type() == QEvent::Resize || event->type() == QEvent::LayoutRequest || event->type() == QEvent::Show) schedule();
+        return QObject::eventFilter(object, event);
+    }
+private:
+    void schedule()
+    {
+        if (m_queued) return;
+        m_queued = true;
+        QTimer::singleShot(0, this, [this] { m_queued = false; refresh(); });
+    }
+    QPointer<QTabWidget> m_tabs;
+    QPointer<MainCtx> m_ctx;
+    QPointer<QComboBox> m_picker;
+    const char* m_label;
+    bool m_queued = false;
+};
 QVariant savedEffectValue(const QString& name, const QVariant& type)
 {
     const auto key = name.toUtf8();
@@ -104,6 +163,7 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
     QWidget *audioWidget = new QWidget;
     QHBoxLayout *audioLayout = new QHBoxLayout( audioWidget );
     QTabWidget *audioTab = new QTabWidget( audioWidget );
+    audioTab->setObjectName(QStringLiteral("audioEffectTabs"));
 
     equal = new Equalizer( p_intf, audioTab );
     connect( equal, &AudioFilterControlWidget::configChanged, this, &ExtendedDialog::putAudioConfig );
@@ -186,8 +246,8 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
     m_applyButton->setEnabled( false );
     buttonBox->addButton( m_applyButton, QDialogButtonBox::ApplyRole );
 
-    buttonBox->addButton(
-        new QPushButton( qtr("&Close"), this ), QDialogButtonBox::RejectRole );
+    auto* closeButton = new QPushButton(qtr("&Close"), this);
+    buttonBox->addButton(closeButton, QDialogButtonBox::RejectRole);
     layout->addWidget( buttonBox );
 
     connect( buttonBox, &QDialogButtonBox::rejected, this, &ExtendedDialog::close );
@@ -221,6 +281,18 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
     connect(videoEffect, &ExtVideo::draftChanged, this, &ExtendedDialog::updateVideoSave);
     for (const auto* type : {"video-filter", "sub-source", "sub-filter", "video-splitter"})
         m_savedVideoChains.insert(qfu(type), savedEffectValue(qfu(type), QString()).toString());
+    auto* mainSections = new EffectsSectionPicker(mainTabW, p_intf->p_mi, N_("Effects page"));
+    auto* audioSections = new EffectsSectionPicker(audioTab, p_intf->p_mi, N_("Audio effects section"));
+    auto* videoSections = new EffectsSectionPicker(videoTab, p_intf->p_mi, N_("Video effects section"));
+    const auto refreshText = [this, audioTab, closeButton, mainSections, audioSections, videoSections] {
+        setWindowTitle(qtr("Adjustments and Effects"));
+        mainTabW->setTabText(AUDIO_TAB, qtr("Audio Effects")); mainTabW->setTabText(VIDEO_TAB, qtr("Video Effects")); mainTabW->setTabText(SYNCHRO_TAB, qtr("Synchronization"));
+        const char* labels[] = {N_("Equalizer"), N_("Compressor"), N_("Expander"), N_("Limiter"), N_("Spatializer"), N_("Stereo Widener"), N_("Advanced")};
+        for (int i = 0; i < qMin(audioTab->count(), 7); ++i) audioTab->setTabText(i, qtr(labels[i]));
+        m_applyButton->setText(qtr("&Save")); closeButton->setText(qtr("&Close")); mainSections->refresh(); audioSections->refresh(); videoSections->refresh();
+    };
+    if (auto* translator = InterfaceTranslator::instance()) connect(translator, &InterfaceTranslator::languageChanged, this, refreshText);
+    refreshText();
     refresh->start();
     refreshAudioConfig();
     refreshVideoConfig();
@@ -233,7 +305,18 @@ ExtendedDialog::~ExtendedDialog()
 
 bool ExtendedDialog::event(QEvent* event)
 {
-    if (event->type() == QEvent::Show) { refreshAudioConfig(); refreshVideoConfig(); }
+    if (event->type() == QEvent::Show) {
+        refreshAudioConfig(); refreshVideoConfig();
+        QTimer::singleShot(0, this, [this] {
+            if (!isVisible() || !screen() || isMaximized() || isFullScreen()) return;
+            const auto available = screen()->availableGeometry();
+            resize(size().boundedTo(available.size()));
+            const auto frame = frameGeometry();
+            const QPoint position(qBound(available.left(), frame.left(), qMax(available.left(), available.right() - frame.width() + 1)),
+                                  qBound(available.top(), frame.top(), qMax(available.top(), available.bottom() - frame.height() + 1)));
+            move(pos() + position - frame.topLeft());
+        });
+    }
     // The main interface also has an application-wide Ctrl+S streaming action.
     if (event->type() == QEvent::ShortcutOverride && static_cast<QKeyEvent*>(event)->matches(QKeySequence::Save)) {
         event->accept();

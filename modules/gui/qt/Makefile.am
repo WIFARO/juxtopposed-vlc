@@ -348,7 +348,7 @@ libqt_plugin_la_SOURCES = \
 	util/color_scheme_model.cpp util/color_scheme_model.hpp \
 	util/redesign_widget_theme.cpp util/redesign_widget_theme.hpp \
 	util/playlist_cover_store.hpp \
-	util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp util/media_identity_vlc.hpp util/media_identity_ml.hpp util/artwork_discovery.hpp util/artwork_store.hpp util/subtitle_matching.hpp \
+	util/filter_chain_edit.hpp util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp util/media_identity_vlc.hpp util/media_identity_ml.hpp util/artwork_discovery.hpp util/artwork_store.hpp util/subtitle_matching.hpp \
 	util/local_file_url.hpp \
 	util/gettext_translator.cpp util/gettext_translator.hpp \
 	util/interface_translator.cpp util/interface_translator.hpp \
@@ -2579,6 +2579,17 @@ test_qt_artwork_discovery_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
 test_qt_artwork_discovery_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
 test_qt_artwork_discovery_LDADD = $(QT_QTEST_COMMON_ldadd)
 test_qt_artwork_discovery_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+
+test_qt_filter_chain_edit_SOURCES = tests/test_filter_chain_edit.cpp util/filter_chain_edit.hpp
+nodist_test_qt_filter_chain_edit_SOURCES = tests/test_filter_chain_edit.moc
+BUILT_SOURCES += tests/test_filter_chain_edit.moc
+CLEANFILES += tests/test_filter_chain_edit.moc
+test_qt_filter_chain_edit_CPPFLAGS = $(QT_QTEST_COMMON_cppflags)
+test_qt_filter_chain_edit_CXXFLAGS = $(QT_QTEST_COMMON_cxxflags)
+test_qt_filter_chain_edit_LDADD = $(QT_QTEST_COMMON_ldadd)
+test_qt_filter_chain_edit_LDFLAGS = $(QT_QTEST_COMMON_ldflags)
+check_PROGRAMS += test_qt_filter_chain_edit
+TESTS += test_qt_filter_chain_edit
 
 
 endif

@@ -65,6 +65,7 @@
 #include "maininterface/mainctx.hpp"
 #include "player/player_controller.hpp"
 #include "util/qt_dirs.hpp"
+#include "util/filter_chain_edit.hpp"
 #include "widgets/native/customwidgets.hpp"
 #include "dialogs/dialogs_provider.hpp"
 #include "util/vlctick.hpp"
@@ -2312,291 +2313,151 @@ StereoPanner::StereoPanner( qt_intf_t *p_intf, QWidget *parent )
     build();
 }
 
-#include <QToolButton>
-#include <QGridLayout>
-
-#define SUBSDELAY_CFG_MODE                     "subsdelay-mode"
-#define SUBSDELAY_CFG_FACTOR                   "subsdelay-factor"
-#define SUBSDELAY_MODE_ABSOLUTE                0
-#define SUBSDELAY_MODE_RELATIVE_SOURCE_DELAY   1
-#define SUBSDELAY_MODE_RELATIVE_SOURCE_CONTENT 2
-
-SyncWidget::SyncWidget( QWidget *_parent ) : QWidget( _parent )
+SyncControls::SyncControls(qt_intf_t* intf, QWidget* parent) : QWidget(parent), p_intf(intf)
 {
-    QHBoxLayout *layout = new QHBoxLayout;
-    spinBox.setAlignment( Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter );
-    spinBox.setDecimals( 3 );
-    spinBox.setMinimum( -600.0 );
-    spinBox.setMaximum( 600.0 );
-    spinBox.setSingleStep( 0.1 );
-    spinBox.setSuffix( " s" );
-    spinBox.setButtonSymbols( QDoubleSpinBox::PlusMinus );
-    connect( &spinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-             this, &SyncWidget::valueChangedHandler );
-    layout->addWidget( &spinBox );
-    layout->addWidget( &spinLabel );
-    layout->setContentsMargins( 0, 0, 0, 0 );
-    setLayout( layout );
-}
-
-void SyncWidget::valueChangedHandler( double d )
-{
-    if ( d < 0 )
-        spinLabel.setText( qtr("(Hastened)") );
-    else if ( d > 0 )
-        spinLabel.setText( qtr("(Delayed)") );
-    else
-        spinLabel.setText( "" );
-    emit valueChanged( d );
-}
-
-void SyncWidget::setValue( double d )
-{
-    spinBox.setValue( d );
-}
-
-SyncControls::SyncControls( qt_intf_t *_p_intf, QWidget *_parent )
-    : QWidget( _parent )
-    , p_intf( _p_intf )
-    , m_SubsDelayCfgFactor(VLC_OBJECT(p_intf->intf), SUBSDELAY_CFG_FACTOR)
-{
-    QGroupBox *AVBox, *subsBox;
-    QToolButton *updateButton;
-
-    b_userAction = true;
-
-    QGridLayout *mainLayout = new QGridLayout( this );
-
-    /* AV sync */
-    AVBox = new QGroupBox( qtr( "Audio/Video" ) );
-    QGridLayout *AVLayout = new QGridLayout( AVBox );
-
-    QLabel *AVLabel = new QLabel;
-    AVLabel->setText( qtr( "Audio track synchronization:" ) );
-    AVLayout->addWidget( AVLabel, 0, 0, 1, 1 );
-
-    AVSpin = new SyncWidget( this );
-    AVLayout->addWidget( AVSpin, 0, 2, 1, 1 );
-    mainLayout->addWidget( AVBox, 1, 0, 1, 5 );
-
-    /* Subs */
-    subsBox = new QGroupBox( qtr( "Subtitles/Video" ) );
-    QGridLayout *subsLayout = new QGridLayout( subsBox );
-
-    QGroupBox *subsTrackSyncBox = new QGroupBox( qtr( "Subtitle track synchronization" ) );
-    QGridLayout *synchronizationLayout = new QGridLayout( subsTrackSyncBox );
-
-    for( int i = 0; i < 2; i++ )
-    {
-        QLabel *subsLabel = new QLabel;
-        subsLabel->setText( i == 0 ? qtr("Primary subtitle track:") : qtr("Secondary subtitle track:") );
-        synchronizationLayout->addWidget( subsLabel, i, 0, 1, 1 );
-        SyncWidget **p_subsSpin = i == 0 ? &subsSpin : &secondarySubsSpin;
-
-        *p_subsSpin = new SyncWidget( this );
-        synchronizationLayout->addWidget( *p_subsSpin, i, 2, 1, 1 );
-    }
-
-    subsLayout->addWidget( subsTrackSyncBox, 0, 0, 2, 5 );
-
-    QLabel *subSpeedLabel = new QLabel;
-    subSpeedLabel->setText( qtr( "Subtitle speed:" ) );
-    subsLayout->addWidget( subSpeedLabel, 2, 0, 1, 1 );
-
-    subSpeedSpin = new QDoubleSpinBox;
-    subSpeedSpin->setAlignment( Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter );
-    subSpeedSpin->setDecimals( 3 );
-    subSpeedSpin->setMinimum( 1 );
-    subSpeedSpin->setMaximum( 100 );
-    subSpeedSpin->setSingleStep( 0.2 );
-    subSpeedSpin->setSuffix( " fps" );
-    subSpeedSpin->setButtonSymbols( QDoubleSpinBox::PlusMinus );
-    subsLayout->addWidget( subSpeedSpin, 2, 2, 1, 1 );
-
-    QLabel *subDurationLabel = new QLabel;
-    subDurationLabel->setText( qtr( "Subtitle duration factor:" ) );
-    subsLayout->addWidget( subDurationLabel, 3, 0, 1, 1 );
-
-    subDurationSpin = new QDoubleSpinBox;
-    subDurationSpin->setAlignment( Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter );
-    subDurationSpin->setDecimals( 3 );
-    subDurationSpin->setMinimum( 0 );
-    subDurationSpin->setMaximum( 20 );
-    subDurationSpin->setSingleStep( 0.2 );
-    subDurationSpin->setButtonSymbols( QDoubleSpinBox::PlusMinus );
-    subsLayout->addWidget( subDurationSpin, 3, 2, 1, 1 );
-
-    mainLayout->addWidget( subsBox, 2, 0, 2, 5 );
-
-    updateButton = new QToolButton;
-    updateButton->setAutoRaise( true );
-    updateButton->setText("");
-    updateButton->setToolTip(qtr( "Eject the disc" ));
-    updateButton->setIcon( QIcon( ":/menu/update.svg") );
-    BUTTONACT( updateButton, &SyncControls::update );
-
-    mainLayout->addWidget( updateButton, 0, 4, 1, 1 );
-
-    /* Various Connects */
-    connect( AVSpin, &SyncWidget::valueChanged, this, &SyncControls::advanceAudio ) ;
-    connect( subsSpin, &SyncWidget::valueChanged, this, &SyncControls::advanceSubs ) ;
-    connect( secondarySubsSpin, &SyncWidget::valueChanged, this, &SyncControls::advanceSecondarySubs ) ;
-    connect( subSpeedSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &SyncControls::adjustSubsSpeed);
-    connect( subDurationSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &SyncControls::adjustSubsDuration);
-
-    connect( THEMIM, &PlayerController::subtitleDelayChanged, [this](VLCDuration value) {
-        b_userAction = false;
-        subsSpin->setValue(value.toSecf());
-        b_userAction = true;
+    setObjectName(QStringLiteral("syncControls"));
+    applyRedesignWidgetTheme(this, p_intf->p_mi);
+    auto* outer = new QVBoxLayout(this);
+    auto* scroll = new QScrollArea(this); scroll->setObjectName(QStringLiteral("syncScroll")); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* content = new QWidget(scroll); auto* list = new QVBoxLayout(content); list->setContentsMargins(0, 0, 0, 0); scroll->setWidget(content); outer->addWidget(scroll, 1);
+    QList<QVBoxLayout*> cards;
+    const auto card = [&](QLabel*& title) {
+        auto* frame = new QFrame(content); frame->setProperty("redesignCard", true);
+        auto* layout = new QVBoxLayout(frame); title = new QLabel(frame); title->setProperty("redesignSectionHeading", true); layout->addWidget(title); list->addWidget(frame); cards.append(layout); return layout;
+    };
+    struct Field { AudioFilterSpinBox* number; QLabel* label; QLabel* notice; QLabel* direction; QWidget* row; int kind; };
+    QList<Field> fields;
+    const auto addField = [&](QVBoxLayout* layout, const char* name, int kind, double minimum, double maximum, const QString& suffix) {
+        auto* row = new QWidget(layout->parentWidget()); auto* grid = new QGridLayout(row); grid->setContentsMargins(0, 0, 0, 0); grid->setColumnStretch(0, 1);
+        auto* label = new QLabel(row); label->setWordWrap(true);
+        auto* number = new AudioFilterSpinBox(row); number->setObjectName(qfu(name)); number->setDecimals(3); number->setKeyboardTracking(false); number->setRange(minimum, maximum); number->setSingleStep(.1); number->setSuffix(suffix); label->setBuddy(number);
+        auto* direction = new QLabel(row); direction->setObjectName(qfu(name) + QStringLiteral("Direction"));
+        grid->addWidget(label, 0, 0); grid->addWidget(number, 0, 1); if (kind < 3) grid->addWidget(direction, 0, 2); else direction->hide();
+        auto* notice = new QLabel(row); notice->setWordWrap(true); notice->setTextFormat(Qt::PlainText); notice->setObjectName(qfu(name) + QStringLiteral("CurrentNotice")); notice->hide(); grid->addWidget(notice, 1, 0, 1, 3);
+        layout->addWidget(row); fields.append({number, label, notice, direction, row, kind}); return number;
+    };
+    QLabel *timingTitle, *displayTitle, *durationTitle;
+    auto* timingLayout = card(timingTitle);
+    addField(timingLayout, "audioDelayValue", 0, -86400, 86400, QStringLiteral(" s"));
+    addField(timingLayout, "subtitleDelayValue", 1, -86400, 86400, QStringLiteral(" s"));
+    addField(timingLayout, "secondarySubtitleDelayValue", 2, -86400, 86400, QStringLiteral(" s"));
+    auto* timingHelp = new QLabel(timingLayout->parentWidget()); timingHelp->setWordWrap(true); timingLayout->addWidget(timingHelp);
+    auto* displayLayout = card(displayTitle);
+    auto* fps = addField(displayLayout, "subtitleFpsValue", 3, 0, 1000, QStringLiteral(" fps"));
+    auto* fpsHelp = new QLabel(displayLayout->parentWidget()); fpsHelp->setWordWrap(true); displayLayout->addWidget(fpsHelp);
+    auto* durationLayout = card(durationTitle);
+    auto* enabled = new QCheckBox(durationLayout->parentWidget()); enabled->setObjectName(QStringLiteral("subtitleDurationEnabled")); durationLayout->insertWidget(1, enabled, 0, Qt::AlignLeft);
+    auto* controls = new QWidget(durationLayout->parentWidget()); auto* durationFields = new QVBoxLayout(controls); durationFields->setContentsMargins(0, 0, 0, 0); durationLayout->addWidget(controls);
+    auto* methodRow = new QHBoxLayout; auto* methodLabel = new QLabel(controls); auto* method = new QComboBox(controls); method->setObjectName(QStringLiteral("subtitleDurationMethod")); methodLabel->setBuddy(method); methodRow->addWidget(methodLabel, 1); methodRow->addWidget(method); durationFields->addLayout(methodRow);
+    auto* factor = addField(durationFields, "subtitleDurationValue", 4, 0, 20, {});
+    auto* durationHelp = new QLabel(controls); durationHelp->setWordWrap(true); durationFields->addWidget(durationHelp);
+    auto* unavailable = new QLabel(durationLayout->parentWidget()); unavailable->setObjectName(QStringLiteral("subtitleDurationUnavailable")); unavailable->setWordWrap(true); durationLayout->addWidget(unavailable); const bool available = module_exists("subsdelay");
+    list->addStretch();
+    auto* footer = new QHBoxLayout; auto* hint = new QLabel(this); hint->setWordWrap(true); auto* reset = new QPushButton(this); reset->setObjectName(QStringLiteral("resetTiming")); reset->setAutoDefault(false); footer->addWidget(hint, 1); footer->addWidget(reset); outer->addLayout(footer);
+    const auto applyDuration = [this, available](int mode, double factor, bool enable) {
+        if (!THEMIM->isStarted()) return;
+        enable &= factor > 0;
+        if (enable && !available) return;
+        for (const auto& output : THEMIM->getVouts()) {
+            if (enable) {
+                if (!var_Type(output.get(), "subsdelay-mode")) var_Create(output.get(), "subsdelay-mode", VLC_VAR_INTEGER | VLC_VAR_DOINHERIT | VLC_VAR_ISCOMMAND);
+                if (!var_Type(output.get(), "subsdelay-factor")) var_Create(output.get(), "subsdelay-factor", VLC_VAR_FLOAT | VLC_VAR_DOINHERIT | VLC_VAR_ISCOMMAND);
+                var_SetInteger(output.get(), "subsdelay-mode", mode); var_SetFloat(output.get(), "subsdelay-factor", factor);
+            }
+            char* raw = var_GetString(output.get(), "sub-filter"); const auto old = qfu(raw ? raw : ""); free(raw);
+            const auto updated = FilterChainEdit::withFilter(old, QStringLiteral("subsdelay"), enable).first;
+            if (old != updated) var_SetString(output.get(), "sub-filter", qtu(updated));
+        }
+        update();
+    };
+    for (const auto& field : fields) connect(field.number, &QDoubleSpinBox::valueChanged, this, [this, field, method, enabled, applyDuration](double value) {
+        if (!THEMIM->isStarted()) return;
+        if (field.kind < 3) field.direction->setText(value < 0 ? qtr("Earlier") : value > 0 ? qtr("Later") : QString());
+        switch (field.kind) {
+        case 0: THEMIM->setAudioDelay(VLCDuration(vlc_tick_from_sec(value))); break;
+        case 1: THEMIM->setSubtitleDelay(VLCDuration(vlc_tick_from_sec(value))); break;
+        case 2: THEMIM->setSecondarySubtitleDelay(VLCDuration(vlc_tick_from_sec(value))); break;
+        case 3: THEMIM->setSubtitleFPS(value); break;
+        case 4: applyDuration(method->currentData().toInt(), value, enabled->isChecked()); break;
+        }
     });
-    connect( THEMIM, &PlayerController::secondarySubtitleDelayChanged, [this](VLCDuration value) {
-        b_userAction = false;
-        secondarySubsSpin->setValue(value.toSecf());
-        b_userAction = true;
+    connect(enabled, &QCheckBox::clicked, this, [method, factor, applyDuration](bool checked) { applyDuration(method->currentData().toInt(), checked && factor->value() <= 0 ? 2 : factor->value(), checked); });
+    connect(method, QOverload<int>::of(&QComboBox::activated), this, [method, factor, enabled, applyDuration] { applyDuration(method->currentData().toInt(), factor->value(), enabled->isChecked()); });
+    connect(reset, &QPushButton::clicked, this, [this, fields, method, factor, applyDuration] {
+        for (const auto& field : fields) field.number->findChild<QLineEdit*>()->setModified(false);
+        const auto zero = VLCDuration::fromMS(0); THEMIM->setAudioDelay(zero); THEMIM->setSubtitleDelay(zero); THEMIM->setSecondarySubtitleDelay(zero); THEMIM->setSubtitleFPS(0);
+        applyDuration(method->currentData().toInt(), factor->value(), false); update();
     });
-    connect( THEMIM, &PlayerController::audioDelayChanged, [this](VLCDuration value) {
-        b_userAction = false;
-        AVSpin->setValue(value.toSecf());
-        b_userAction = true;
-    });
-    connect( THEMIM, &PlayerController::subtitleFPSChanged, subSpeedSpin, &QDoubleSpinBox::setValue );
-    connect( &m_SubsDelayCfgFactor, &QVLCFloat::valueChanged, subDurationSpin, &QDoubleSpinBox::setValue);
-
-    initSubsDuration();
-
-    /* Set it */
-    update();
+    struct State { int mode = -1; bool methodConflict = false; };
+    auto state = std::make_shared<State>();
+    m_refresh = [this, fields, state, method, factor, enabled, controls, available, unavailable, durationHelp, hint, reset] {
+        std::vector<QSignalBlocker> blocks; for (const auto& field : fields) blocks.emplace_back(field.number);
+        const QSignalBlocker a(method), b(enabled);
+        const bool active = THEMIM->isStarted() && THEMIM->hasInput(); const auto output = THEMIM->getVout();
+        int selected = 0; auto* tracks = THEMIM->getSubtitleTracks(); for (int i = 0; i < tracks->rowCount(); ++i) if (tracks->data(tracks->index(i), Qt::CheckStateRole).toBool()) ++selected;
+        double mode = config_FindConfig("subsdelay-mode") ? config_GetInt("subsdelay-mode") : 1;
+        double value = config_FindConfig("subsdelay-factor") ? config_GetFloat("subsdelay-factor") : 2;
+        QString chain;
+        if (output) {
+            if (var_Type(output.get(), "subsdelay-mode")) mode = var_GetInteger(output.get(), "subsdelay-mode");
+            if (var_Type(output.get(), "subsdelay-factor")) value = var_GetFloat(output.get(), "subsdelay-factor");
+            char* raw = var_GetString(output.get(), "sub-filter"); chain = qfu(raw ? raw : ""); free(raw);
+        }
+        const int currentMode = qBound(0, int(mode), 2);
+        auto* input = factor->findChild<QLineEdit*>();
+        if (!input->isModified()) state->methodConflict = false;
+        else if (state->mode >= 0 && state->mode != currentMode) state->methodConflict = true;
+        state->mode = currentMode;
+        const bool checked = FilterChainEdit::withFilter(chain, QStringLiteral("subsdelay"), false).second;
+        enabled->setChecked(checked); enabled->setEnabled(active && bool(output) && (available || checked)); controls->setEnabled(active && bool(output) && available && checked);
+        method->setCurrentIndex(method->findData(currentMode)); unavailable->setVisible(!available); reset->setEnabled(active);
+        const QString suffix = currentMode == 0 ? QStringLiteral(" s") : currentMode == 1 ? QStringLiteral("×") : QString();
+        if (factor->suffix() != suffix) {
+            auto text = input->text(); const auto previous = factor->suffix(); if (!previous.isEmpty() && text.endsWith(previous)) text.chop(previous.size()); const int cursor = input->cursorPosition(); const bool draft = input->isModified();
+            factor->setSuffix(suffix); if (draft) { input->setText(text + suffix); input->setCursorPosition(qMin(cursor, int(text.size()))); input->setModified(true); }
+        }
+        durationHelp->setText(currentMode == 0 ? qtr("Add this time to each subtitle.") : currentMode == 1 ? qtr("Multiply the time for each subtitle by this value.") : qtr("Use the subtitle text and this value to set its display time."));
+        const double values[] = {THEMIM->getAudioDelay().toSecf(), THEMIM->getSubtitleDelay().toSecf(), THEMIM->getSecondarySubtitleDelay().toSecf(), THEMIM->getSubtitleFPS(), value};
+        for (int i = 0; i < fields.size(); ++i) {
+            const auto& field = fields[i];
+            if (i < 4) field.row->setEnabled(active && (i != 2 || selected > 1) && (i != 0 || THEMIM->getAudioTracks()->rowCount() > 0));
+            if (std::isfinite(values[i])) field.number->updateCurrent(values[i]);
+            field.direction->setText(field.number->value() < 0 ? qtr("Earlier") : field.number->value() > 0 ? qtr("Later") : QString());
+            const bool conflict = field.number->currentChangedWhileTyping() || (i == 4 && state->methodConflict);
+            field.notice->setText(i == 4 && state->methodConflict ? qtr("The method changed. Press Escape to use the current value.") : qtr("Current value: %1. Press Escape to use it.").arg(field.number->currentText())); field.notice->setVisible(conflict); field.number->setAccessibleDescription(conflict ? field.notice->text() : QString());
+            if (i == 4) field.label->setText(currentMode == 0 ? qtr("Extra time") : currentMode == 1 ? qtr("Duration multiplier") : qtr("Text factor"));
+        }
+        fields[4].number->setAccessibleName(fields[4].label->text());
+        hint->setText(!active ? qtr("Open a file to change timing.") : !output ? qtr("Open a video to set subtitle display time.") : qtr("Changes affect playback."));
+    };
+    const auto refreshText = [this, fields, timingTitle, timingHelp, displayTitle, fps, fpsHelp, durationTitle, methodLabel, method, enabled, unavailable, reset] {
+        struct Draft { QLineEdit* input; QString text; int cursor, start, length; bool modified; };
+        QList<Draft> drafts; std::vector<QSignalBlocker> blockers;
+        for (const auto& field : fields) { auto* input = field.number->findChild<QLineEdit*>(); drafts.append({input, input->text(), input->cursorPosition(), input->selectionStart(), int(input->selectedText().size()), input->isModified()}); blockers.emplace_back(field.number); }
+        timingTitle->setText(qtr("Track timing")); timingHelp->setText(qtr("Use a positive value to play a track later. Use a negative value to play it earlier."));
+        const char* labels[] = {N_("Audio delay"), N_("Primary subtitles"), N_("Secondary subtitles"), N_("Frame rate"), N_("Value")};
+        for (int i = 0; i < fields.size(); ++i) { fields[i].label->setText(qtr(labels[i])); fields[i].number->setAccessibleName(qtr(labels[i])); }
+        fields[2].row->setToolTip(qtr("Select a secondary subtitle track to set its delay."));
+        displayTitle->setText(qtr("Subtitle frame rate")); fps->setSpecialValueText(qtr("Automatic")); fpsHelp->setText(qtr("Use this for subtitles that use frame numbers. Select Automatic to use the source rate."));
+        durationTitle->setText(qtr("Subtitle display time")); enabled->setText(qtr("Enable")); enabled->setAccessibleName(qtr("Enable subtitle display time")); methodLabel->setText(qtr("Method"));
+        const QSignalBlocker block(method); const auto current = method->currentData(); method->clear(); method->addItem(qtr("Add time"), 0); method->addItem(qtr("Multiply duration"), 1); method->addItem(qtr("Use text length"), 2); method->setCurrentIndex(qMax(0, method->findData(current)));
+        unavailable->setText(qtr("This subtitle effect is not available in this build.")); reset->setText(qtr("Reset timing"));
+        for (const auto& draft : drafts) if (draft.modified) { const QSignalBlocker inputBlock(draft.input); draft.input->setText(draft.text); draft.input->setCursorPosition(draft.cursor); if (draft.start >= 0) draft.input->setSelection(draft.start, draft.length); draft.input->setModified(true); }
+        update();
+    };
+    const auto metrics = [this, outer, list, cards, fields, durationFields] {
+        const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+        outer->setContentsMargins(dp(16), dp(16), dp(16), dp(12)); outer->setSpacing(dp(12)); list->setSpacing(dp(12)); durationFields->setSpacing(dp(12));
+        for (auto* card : cards) { card->setContentsMargins(dp(12), dp(12), dp(12), dp(12)); card->setSpacing(dp(10)); }
+        for (const auto& field : fields) { field.number->setFixedWidth(dp(140)); field.direction->setMinimumWidth(dp(48)); if (auto* grid = qobject_cast<QGridLayout*>(field.row->layout())) grid->setHorizontalSpacing(dp(10)); }
+    };
+    if (p_intf->p_mi) { connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, metrics); connect(p_intf->p_mi, &MainCtx::redesignPlayerPreferencesChanged, this, &SyncControls::update); }
+    if (auto* translator = InterfaceTranslator::instance()) connect(translator, &InterfaceTranslator::languageChanged, this, refreshText);
+    connect(THEMIM, &PlayerController::audioDelayChanged, this, &SyncControls::update); connect(THEMIM, &PlayerController::subtitleDelayChanged, this, &SyncControls::update); connect(THEMIM, &PlayerController::secondarySubtitleDelayChanged, this, &SyncControls::update); connect(THEMIM, &PlayerController::subtitleFPSChanged, this, &SyncControls::update); connect(THEMIM, &PlayerController::inputChanged, this, &SyncControls::update); connect(THEMIM, &PlayerController::playingStateChanged, this, &SyncControls::update);
+    auto* timer = new QTimer(this); timer->setInterval(250); connect(timer, &QTimer::timeout, this, [this] { if (isVisible()) update(); }); timer->start();
+    QWidget* previous = fields[0].number; for (int i = 1; i < 4; ++i) { QWidget::setTabOrder(previous, fields[i].number); previous = fields[i].number; } QWidget::setTabOrder(previous, enabled); QWidget::setTabOrder(enabled, method); QWidget::setTabOrder(method, factor); QWidget::setTabOrder(factor, reset);
+    metrics(); refreshText();
 }
 
-SyncControls::~SyncControls()
-{
-    subsdelayClean();
-}
-
-void SyncControls::clean()
-{
-    b_userAction = false;
-    AVSpin->setValue( 0.0 );
-    subsSpin->setValue( 0.0 );
-    secondarySubsSpin->setValue( 0.0 );
-    subSpeedSpin->setValue( 1.0 );
-    subsdelayClean();
-    b_userAction = true;
-}
-
-void SyncControls::update()
-{
-    b_userAction = false;
-    if( THEMIM->getInput() )
-    {
-        subsSpin->setValue(THEMIM->getSubtitleDelay().toSecf());
-        secondarySubsSpin->setValue(THEMIM->getSecondarySubtitleDelay().toSecf());
-        AVSpin->setValue(THEMIM->getAudioDelay().toSecf());
-        subSpeedSpin->setValue(THEMIM->getSubtitleFPS());
-        subDurationSpin->setValue(m_SubsDelayCfgFactor.getValue());
-    }
-    b_userAction = true;
-}
-
-void SyncControls::advanceAudio( double f_advance )
-{
-    if( THEMIM->getInput() && b_userAction )
-    {
-        vlc_tick_t i_delay = vlc_tick_from_sec( f_advance );
-        THEMIM->setAudioDelay( i_delay );
-    }
-}
-
-void SyncControls::advanceSubs( double f_advance )
-{
-    if( THEMIM->getInput() && b_userAction )
-    {
-        vlc_tick_t i_delay = vlc_tick_from_sec( f_advance );
-        THEMIM->setSubtitleDelay( i_delay );
-    }
-}
-
-void SyncControls::advanceSecondarySubs( double f_advance )
-{
-    if( THEMIM->getInput() && b_userAction )
-    {
-        vlc_tick_t i_delay = vlc_tick_from_sec( f_advance );
-        THEMIM->setSecondarySubtitleDelay( i_delay );
-    }
-}
-
-void SyncControls::adjustSubsSpeed( double f_fps )
-{
-    if( THEMIM->getInput() && b_userAction )
-        THEMIM->setSubtitleFPS( f_fps );
-}
-
-void SyncControls::adjustSubsDuration( double f_factor )
-{
-    if( THEMIM->getInput() && b_userAction )
-    {
-        subsdelaySetFactor( f_factor );
-        changeVFiltersString( "subsdelay", f_factor > 0 );
-    }
-}
-
-void SyncControls::initSubsDuration()
-{
-    int i_mode = var_InheritInteger( p_intf, SUBSDELAY_CFG_MODE );
-
-    switch (i_mode)
-    {
-    default:
-    case SUBSDELAY_MODE_ABSOLUTE:
-        subDurationSpin->setToolTip( qtr( "Extend subtitle duration by this value.\n"
-                                          "Set 0 to disable." ) );
-        subDurationSpin->setSuffix( " s" );
-        break;
-    case SUBSDELAY_MODE_RELATIVE_SOURCE_DELAY:
-        subDurationSpin->setToolTip( qtr( "Multiply subtitle duration by this value.\n"
-                                          "Set 0 to disable." ) );
-        subDurationSpin->setSuffix( "" );
-        break;
-    case SUBSDELAY_MODE_RELATIVE_SOURCE_CONTENT:
-        subDurationSpin->setToolTip( qtr( "Recalculate subtitle duration according\n"
-                                          "to their content and this value.\n"
-                                          "Set 0 to disable." ) );
-        subDurationSpin->setSuffix( "" );
-        break;
-    }
-}
-
-void SyncControls::subsdelayClean()
-{
-    /* Remove subsdelay filter */
-    changeVFiltersString( "subsdelay", false );
-}
-
-void SyncControls::subsdelaySetFactor( double f_factor )
-{
-    PlayerController::VOutThreadList p_vouts = THEMIM->getVouts();
-    for( auto p_vout: p_vouts )
-    {
-        var_SetFloat( p_vout.get(), SUBSDELAY_CFG_FACTOR, f_factor );
-    }
-}
-
-void SyncControls::changeVFiltersString( const char *psz_name, bool b_add )
-{
-    const char *psz_filter_type = GetVFilterType( p_intf, psz_name );
-    if( psz_filter_type == NULL )
-        return;
-
-    QString result = ChangeFiltersString( p_intf, psz_filter_type, psz_name, b_add );
-
-    UpdateVFiltersString( p_intf, psz_filter_type, qtu( result ) );
-}
-
-
-/**********************************************************************
- * Video filters / Adjust
- **********************************************************************/
-
-/**********************************************************************
- * Extended playbak controls
- **********************************************************************/
+void SyncControls::clean() { update(); }
+void SyncControls::update() { if (m_refresh) m_refresh(); }

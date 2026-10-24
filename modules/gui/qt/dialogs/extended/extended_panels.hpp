@@ -229,53 +229,18 @@ public:
     StereoPanner( qt_intf_t *, QWidget * );
 };
 
-class SyncWidget : public QWidget
-{
-    Q_OBJECT
-public:
-    SyncWidget( QWidget * );
-    void setValue( double d );
-signals:
-    void valueChanged( double );
-private slots:
-    void valueChangedHandler( double d );
-private:
-    QDoubleSpinBox spinBox;
-    QLabel spinLabel;
-};
-
 class SyncControls : public QWidget
 {
     Q_OBJECT
     friend class ExtendedDialog;
 public:
-    SyncControls( qt_intf_t *, QWidget * );
-    virtual ~SyncControls();
+    SyncControls(qt_intf_t*, QWidget*);
 private:
-    qt_intf_t *p_intf;
-    SyncWidget *AVSpin;
-    SyncWidget *subsSpin;
-    SyncWidget *secondarySubsSpin;
-    QDoubleSpinBox *subSpeedSpin;
-    QDoubleSpinBox *subDurationSpin;
-    QVLCFloat m_SubsDelayCfgFactor;
-
-    bool b_userAction;
-
+    qt_intf_t* p_intf;
+    std::function<void()> m_refresh;
     void clean();
-
-    void initSubsDuration();
-    void subsdelayClean();
-    void subsdelaySetFactor( double );
-    void changeVFiltersString( const char *psz_name, bool b_add );
 public slots:
     void update();
-private slots:
-    void advanceAudio( double );
-    void advanceSubs( double );
-    void advanceSecondarySubs( double );
-    void adjustSubsSpeed( double );
-    void adjustSubsDuration( double );
 };
 
 #endif
