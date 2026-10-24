@@ -4,9 +4,10 @@
  <widget class="QWidget" name="updateWidget">
   <property name="geometry"><rect><x>0</x><y>0</y><width>640</width><height>500</height></rect></property>
   <property name="windowTitle"><string>VLC updates</string></property>
-  <layout class="QVBoxLayout" name="updateLayout" stretch="0,0,0,1,0,0,0,0">
+  <layout class="QVBoxLayout" name="updateLayout" stretch="0,0,0,0,1,0,0,0,0">
    <item><widget class="QLabel" name="updateTitle"><property name="text"><string>Updates</string></property><property name="textFormat"><enum>Qt::PlainText</enum></property><property name="wordWrap"><bool>true</bool></property></widget></item>
    <item><widget class="QLabel" name="updateSummary"><property name="textFormat"><enum>Qt::PlainText</enum></property><property name="wordWrap"><bool>true</bool></property><property name="textInteractionFlags"><set>Qt::TextSelectableByMouse|Qt::TextSelectableByKeyboard</set></property></widget></item>
+   <item><widget class="QLabel" name="updateSubtitle"><property name="textFormat"><enum>Qt::PlainText</enum></property><property name="wordWrap"><bool>true</bool></property><property name="textInteractionFlags"><set>Qt::TextSelectableByMouse|Qt::TextSelectableByKeyboard</set></property></widget></item>
    <item><widget class="QProgressBar" name="updateProgress"><property name="maximum"><number>0</number></property><property name="textVisible"><bool>false</bool></property></widget></item>
    <item><widget class="QWidget" name="updateReleaseDetails"><layout class="QVBoxLayout" name="releaseLayout" stretch="0,1">
     <item><widget class="QLabel" name="updateNotesHeading"><property name="text"><string>Release notes</string></property></widget></item>

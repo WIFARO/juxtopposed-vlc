@@ -122,6 +122,8 @@ public:
     Q_PROPERTY(int revision READ getRevision NOTIFY updateStatusChanged FINAL)
     Q_PROPERTY(int extra READ getExtra NOTIFY updateStatusChanged FINAL)
     Q_PROPERTY(QString version READ getVersion NOTIFY updateStatusChanged FINAL)
+    Q_PROPERTY(QString productName READ getProductName NOTIFY updateStatusChanged FINAL)
+    Q_PROPERTY(QString subtitle READ getSubtitle NOTIFY updateStatusChanged FINAL)
     Q_PROPERTY(QString assetUrl READ getAssetUrl NOTIFY updateStatusChanged FINAL)
     Q_PROPERTY(QString description READ getDescription NOTIFY updateStatusChanged FINAL)
     Q_PROPERTY(QString url READ getUrl NOTIFY updateStatusChanged FINAL)
@@ -149,6 +151,8 @@ public:
     int getRevision() const;
     int getExtra() const;
     QString getVersion() const;
+    QString getProductName() const;
+    QString getSubtitle() const;
     QString getAssetUrl() const;
     QString getDescription() const;
     QString getUrl() const;

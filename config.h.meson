@@ -530,6 +530,9 @@
 /* version major number */
 #mesondefine PACKAGE_VERSION_MAJOR
 
+/* Update generation used before comparing application versions. */
+#mesondefine PACKAGE_UPDATE_GENERATION
+
 /* version minor number */
 #mesondefine PACKAGE_VERSION_MINOR
 

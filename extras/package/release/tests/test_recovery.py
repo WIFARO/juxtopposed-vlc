@@ -215,6 +215,8 @@ class RecoveryTests(unittest.TestCase):
         (root / f'doc/releases/{VERSION}.md').parent.mkdir(parents=True)
         (root / f'doc/releases/{VERSION}.md').write_text('Release notes\n')
         (root / 'Makefile.am').write_text('EXTRA_DIST = \\\n\textras/package/release/version.py \\\n')
+        (root / 'meson.build').write_text('vlc_update_generation = 0\n')
+        (root / 'configure.ac').write_text('UPDATE_GENERATION=0\n')
         command('add', '.')
         command('-c', 'commit.gpgsign=false', 'commit', '-m', 'original')
         old = recovery.git('rev-parse', 'HEAD', root=root)
@@ -306,6 +308,11 @@ class RecoveryTests(unittest.TestCase):
             with tarfile.open(output / f'vlc-juxtopposed-{VERSION}-source.tar.gz') as archive:
                 self.assertTrue(any(name.endswith('/doc/RELEASING.md') for name in archive.getnames()))
             notes = (output / 'RELEASE_NOTES.md').read_text()
+            update_metadata = json.loads((output / 'UPDATE_METADATA.json').read_text())
+            self.assertEqual(update_metadata['version'], VERSION)
+            self.assertEqual(update_metadata['generation'], 0)
+            self.assertEqual(update_metadata['product_name'], 'VLC')
+            self.assertIn(recovery.append_metadata('', update_metadata).strip(), notes)
             self.assertIn(f'`{old}`', notes)
             self.assertIn(f'`{new}`', notes)
             for line in (output / 'SHA256SUMS.txt').read_text().splitlines():

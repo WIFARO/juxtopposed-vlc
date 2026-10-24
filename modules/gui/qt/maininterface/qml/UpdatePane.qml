@@ -81,12 +81,11 @@ T.Pane {
                 text: {
                     switch (UpdateModel.updateStatus) {
                         case UpdateModel.NeedUpdate:
-                            return qsTr("A new version of VLC is available: <font color=\"%1\">%2</font>").arg(theme.fg.positive)
-                                                                                                                  .arg(UpdateModel.version)
+                            return qsTr("A new version is available: %1 %2").arg(UpdateModel.productName).arg(UpdateModel.version)
                         case UpdateModel.UpToDate:
                             return qsTr("No newer compatible release is available for this build.")
                         case UpdateModel.CheckFailed:
-                            return qsTr("An <font color=\"%1\">error</font> occurred while checking for updates...").arg(theme.fg.negative)
+                            return qsTr("An error occurred while checking for updates...")
                         case UpdateModel.Checking:
                             return qsTr("Checking for updates...")
                         default:
@@ -103,10 +102,12 @@ T.Pane {
                 }
 
                 elide: Text.ElideRight
+                textFormat: Text.PlainText
 
                 font.pixelSize: VLCStyle.fontSize_large
 
-                color: theme.fg.primary
+                color: UpdateModel.updateStatus === UpdateModel.NeedUpdate ? theme.fg.positive
+                     : UpdateModel.updateStatus === UpdateModel.CheckFailed ? theme.fg.negative : theme.fg.primary
             }
 
             Widgets.ActionButtonOverlay {
@@ -217,6 +218,16 @@ T.Pane {
                 Navigation.parentItem: root
                 Navigation.leftItem: downloadButton
             }
+        }
+
+        Widgets.LabelExt {
+            width: parent.width
+            visible: UpdateModel.updateStatus === UpdateModel.NeedUpdate && text.length > 0
+            text: UpdateModel.subtitle
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            color: theme.fg.primary
+            font.pixelSize: VLCStyle.fontSize_normal
         }
 
         Widgets.ProgressBarExt {

@@ -19,6 +19,7 @@ EXTRA_DIST = \
 	extras/package/macosx/package.mak \
 	extras/package/win32/package.mak \
 	extras/package/release/version.py \
+	extras/package/release/release_metadata.py \
 	extras/package/release/recovery.py \
 	extras/package/release/dependency-cache.py \
 	extras/package/release/package.py \
@@ -30,6 +31,7 @@ EXTRA_DIST = \
 	extras/package/release/verify.py \
 	extras/package/release/Dockerfile.linux \
 	extras/package/release/tests/test_version.py \
+	extras/package/release/tests/test_release_metadata.py \
 	extras/package/release/tests/test_verify.py \
 	extras/package/release/tests/test_native_build.py \
 	extras/package/release/tests/test_package.py \

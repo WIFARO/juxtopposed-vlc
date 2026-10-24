@@ -33,7 +33,16 @@ def source_version(root=ROOT):
         value = re.search(rf'^VERSION_{name}=(.*)$', configure, re.MULTILINE)
         if not value or value[1].strip("\"'") != str(expected):
             raise ValueError(f'Autoconf VERSION_{name} must match {info["version"]}')
+    info['generation'] = source_generation(root)
     return info
+
+
+def source_generation(root=ROOT):
+    meson = re.search(r'^vlc_update_generation = ([0-9]+)$', (root / 'meson.build').read_text(), re.MULTILINE)
+    configure = re.search(r'^UPDATE_GENERATION=([0-9]+)$', (root / 'configure.ac').read_text(), re.MULTILINE)
+    if not meson or not configure or meson[1] != configure[1] or int(meson[1]) > 2147483647:
+        raise ValueError('Meson and Autoconf update generations must agree and be between 0 and 2147483647')
+    return int(meson[1])
 
 
 def validate_tag(tag, root=ROOT):

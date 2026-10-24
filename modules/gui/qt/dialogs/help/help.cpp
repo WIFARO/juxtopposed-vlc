@@ -751,6 +751,16 @@ QString UpdateModel::getDescription() const
     Q_D(const UpdateModel);
     return d->release ? d->release->notes : QString();
 }
+QString UpdateModel::getProductName() const
+{
+    Q_D(const UpdateModel);
+    return d->release ? d->release->productName : QString();
+}
+QString UpdateModel::getSubtitle() const
+{
+    Q_D(const UpdateModel);
+    return d->release ? d->release->subtitle : QString();
+}
 QString UpdateModel::getUrl() const
 {
     Q_D(const UpdateModel);
@@ -908,11 +918,15 @@ void UpdateDialog::updateUI()
     if (ui.updateNotes->toPlainText() != notes) ui.updateNotes->setPlainText(notes);
     const auto url = m_model->getUrl();
     if (ui.updateReleaseUrl->text() != url) ui.updateReleaseUrl->setText(url);
+    const auto subtitle = m_model->getSubtitle();
+    ui.updateSubtitle->setVisible(available && !subtitle.isEmpty());
+    ui.updateSubtitle->setText(subtitle);
     switch (status)
     {
     case UpdateModel::NeedUpdate:
         ui.updateTitle->setText(qtr("A new version is available"));
-        ui.updateSummary->setText(qtr("VLC %1\nOpen the release page in your web browser.").arg(m_model->getVersion()));
+        ui.updateSummary->setText(qtr("%1 %2\nOpen the release page in your web browser.")
+            .arg(m_model->getProductName(), m_model->getVersion()));
         break;
     case UpdateModel::UpToDate:
         ui.updateTitle->setText(qtr("No update is available"));

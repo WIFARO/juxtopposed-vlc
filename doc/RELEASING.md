@@ -240,6 +240,53 @@ remains failed.
 
 ## Create a release with a pushed tag
 
+### Update metadata
+
+Release assembly appends a hidden `vlc-update-metadata` JSON block to the GitHub
+release notes and includes the same data in `UPDATE_METADATA.json`. The updater
+reads the block from the existing releases API response; it does not fetch the
+JSON asset. Keep the block when editing the published release notes. The app
+removes it from the displayed notes.
+
+An optional `doc/releases/<version>.json` file supplies release display fields:
+
+```json
+{
+  "product_name": "VLC",
+  "package_prefix": "vlc-juxtopposed",
+  "subtitle": "A short announcement for this release"
+}
+```
+
+All three fields are optional. Without the file, the product name is `VLC`, the
+package prefix is `vlc-juxtopposed`, and no subtitle is shown. Product names and
+subtitles are plain single-line text, with limits of 128 and 512 UTF-16 code
+units respectively. The prefix contains lowercase letters/numbers separated by
+hyphens, up to 64 characters. It must agree with the packages actually built;
+changing this display file does not rename build outputs. The subtitle appears
+above the full release notes in the update window and notification pane.
+
+Assembly adds `schema: 1`, the exact version tag, and the compiled update
+generation automatically. These fields cannot be overridden by the JSON file.
+`vlc_update_generation` in `meson.build` and `UPDATE_GENERATION` in `configure.ac`
+must agree. Generation zero is the current value. Keep it unchanged for ordinary
+releases. If a later release starts a new version sequence, increase both values
+in its source before building. The updater compares generation first, then
+normal semantic versions; never decrease or reuse a generation for an older
+sequence. Stable builds continue to exclude prereleases across generations.
+
+Releases with no metadata block are treated as generation zero with the existing
+VLC package names. Invalid, duplicate, unsupported-schema or mismatched metadata
+blocks make that release ineligible. Release-page and asset URLs must still
+belong to this repository, and an uploaded package for the current platform and
+architecture must exist. Metadata does not enable automatic installation.
+
+The metadata reader first ships in `4.0.0-beta.5`; earlier clients need to install
+that version to gain these capabilities. Keep the repository release location
+stable so existing clients can continue checking it.
+
+### Tagging
+
 Before tagging, update `meson.build`'s project version and `configure.ac`'s
 `AC_INIT` / `VERSION_*` fields together. Add `doc/releases/<version>.md`, then run:
 

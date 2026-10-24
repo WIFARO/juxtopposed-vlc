@@ -12,6 +12,7 @@ import urllib.error
 import urllib.request
 
 from version import ROOT, validate_tag
+from release_metadata import append_metadata, release_metadata
 
 MACOS_ARM_RUNNERS = ('macos-15', 'macos-14', 'macos-26')
 
@@ -215,6 +216,9 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
              target='all', source='', root=ROOT, origins=None):
     if output.exists():
         raise ValueError(f'Output already exists: {output}')
+    update_metadata = release_metadata(version, root)
+    notes = (root / f'doc/releases/{version}.md').read_text().rstrip()
+    append_metadata(notes, update_metadata)  # Reject invalid/duplicate blocks before creating output.
     packages = []
     selected = selected_targets(target)
     # Validate the whole set before producing anything that looks complete.
@@ -237,6 +241,10 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
                              run_id=str(origin['run_id']),
                              asset_name=metadata['asset_name'], size=metadata['size'],
                              sha256=metadata['sha256']))
+    for package in packages:
+        expected = f'{update_metadata["package_prefix"]}-{version}-{package["target"]}.{TARGETS[package["target"]]["extension"]}'
+        if package['asset_name'] != expected:
+            raise ValueError(f'Update metadata does not match package {package["asset_name"]}')
     output.mkdir(parents=True)
     for package in packages:
         name = package['target']
@@ -262,14 +270,14 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
         with (output / filename).open('wb') as stream:
             subprocess.run(['git', '-C', str(root), 'archive', '--format=tar.gz',
                             f'--prefix=vlc-juxtopposed-{version}-source/', commit], stdout=stream, check=True)
-    notes = (root / f'doc/releases/{version}.md').read_text().rstrip()
     notes += f'\n\nRelease packaging commit: `{current}`\n\n'
     notes += '| Package | Binary source commit | Build run |\n| --- | --- | --- |\n'
     for package in packages:
         url = f'https://github.com/{repository}/actions/runs/{package["run_id"]}'
         origin = 'reused' if package['reused'] else 'built'
         notes += f'| {package["target"]} | `{package["source_commit"]}` | [{origin}]({url}) |\n'
-    (output / 'RELEASE_NOTES.md').write_text(notes)
+    (output / 'UPDATE_METADATA.json').write_text(json.dumps(update_metadata, indent=2) + '\n')
+    (output / 'RELEASE_NOTES.md').write_text(append_metadata(notes, update_metadata))
     sums = ''.join(f'{file_digest(path)}  {path.name}\n' for path in sorted(output.iterdir()))
     (output / 'SHA256SUMS.txt').write_text(sums)
     return manifest
@@ -303,6 +311,7 @@ def main():
     args = parser.parse_args()
     try:
         version = validate_tag(os.environ.get('RELEASE_TAG') or None)['version']
+        release_metadata(version)  # Validate release display fields before starting any build.
         current = git('rev-parse', 'HEAD')
         if args.command == 'plan':
             plan = build_plan(args.repository, args.previous_run, args.target, version, current,
