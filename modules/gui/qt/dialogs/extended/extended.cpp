@@ -27,6 +27,7 @@
 #include <cassert>
 
 #include "extended.hpp"
+#include "util/interface_translator.hpp"
 
 #include "maininterface/compositor.hpp" /* Needed for external MI size */
 #include "player/player_controller.hpp"
@@ -125,7 +126,11 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
     if( module_exists( "v4l2" ) )
     {
         ExtV4l2 *v4l2 = new ExtV4l2( p_intf, mainTabW );
-        mainTabW->insertTab( V4L2_TAB, v4l2, qtr( "v4l2 controls" ) );
+        mainTabW->insertTab( V4L2_TAB, v4l2, qtr( "Camera controls" ) );
+        if (auto *translator = InterfaceTranslator::instance())
+            connect(translator, &InterfaceTranslator::languageChanged, this, [this, v4l2] {
+                mainTabW->setTabText(mainTabW->indexOf(v4l2), qtr("Camera controls"));
+            });
     }
 
     layout->addWidget( mainTabW );

@@ -37,6 +37,10 @@
 #include "ui_equalizer.h"
 #include "ui_video_effects.h"
 
+class QScrollArea;
+class QVBoxLayout;
+class QTimer;
+class QHideEvent;
 class QTabWidget;
 
 #define BANDS 10
@@ -75,19 +79,29 @@ class ExtV4l2 : public QWidget
 {
     Q_OBJECT
 public:
-    ExtV4l2( qt_intf_t *, QWidget * );
-
-    void showEvent( QShowEvent *event ) override;
-
+    ExtV4l2(qt_intf_t *, QWidget *);
+protected:
+    void showEvent(QShowEvent *) override;
+    void hideEvent(QHideEvent *) override;
+    bool eventFilter(QObject *, QEvent *) override;
 private:
     qt_intf_t *p_intf;
-    QGroupBox *box;
-    QLabel *help;
-
+    vlc_object_t *m_device = nullptr; // Identity only; dereference under player lock.
+    QScrollArea *m_scroll;
+    QWidget *m_content;
+    QVBoxLayout *m_body;
+    QLabel *m_status;
+    QPushButton *m_open;
+    QPushButton *m_refresh;
+    QTimer *m_poll;
+    bool m_retry = false;
+    int m_controlCount = 0;
+    QVariant applyValue(const QString&, int type, const QVariant& value = {});
+    void updateMetrics();
+    void updateStatus();
 private slots:
-    void Refresh( void );
-    void ValueChange( int value );
-    void ValueChange( bool value );
+    void Refresh();
+    void checkDevice();
 };
 
 class FilterSliderData : public QObject

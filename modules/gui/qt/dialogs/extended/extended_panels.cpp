@@ -43,6 +43,17 @@
 #include <QRegularExpression>
 #include <QApplication>
 #include <QScreen>
+#include <QFormLayout>
+#include <QStandardItemModel>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QSignalBlocker>
+#include <QHideEvent>
+#include <QSpinBox>
+#include <QKeyEvent>
+#include <QKeySequence>
+#include "util/interface_translator.hpp"
+#include "util/redesign_widget_theme.hpp"
 
 #include "extended_panels.hpp"
 #include "dialogs/preferences/preferences.hpp"
@@ -614,221 +625,447 @@ void ExtVideo::updateFilterOptions()
  * v4l2 controls
  **********************************************************************/
 
-ExtV4l2::ExtV4l2( qt_intf_t *_p_intf, QWidget *_parent )
-    : QWidget( _parent ), p_intf( _p_intf ), box( NULL )
+namespace {
+struct CameraControl
 {
-    QVBoxLayout *layout = new QVBoxLayout( this );
-    help = new QLabel( qtr("No v4l2 instance found.\n"
-      "Please check that the device has been opened with VLC and is playing.\n\n"
-      "Controls will automatically appear here.")
-      , this );
-    help->setAlignment( Qt::AlignHCenter | Qt::AlignVCenter );
-    help->setWordWrap( true );
-    layout->addWidget( help );
-    setLayout( layout );
-}
+    QString key, label, text;
+    int type = 0;
+    qint64 value = 0, minimum = 0, maximum = 0, step = 1;
+    QList<QPair<QString, qint64>> choices;
+};
 
-void ExtV4l2::showEvent( QShowEvent *event )
+QList<CameraControl> cameraControls(vlc_object_t *device, bool& failed)
 {
-    QWidget::showEvent( event );
-    Refresh();
-}
-
-void ExtV4l2::Refresh( void )
-{
-    vlc_player_Lock(p_intf->p_player);
-    vlc_object_t *p_obj = vlc_player_GetV4l2Object(p_intf->p_player);
-    help->hide();
-    if( box )
+    QList<CameraControl> controls;
+    vlc_value_t *values = nullptr;
+    char **names = nullptr;
+    size_t count = 0;
+    failed = var_Change(device, "controls", VLC_VAR_GETCHOICES, &count, &values, &names) != VLC_SUCCESS;
+    if (failed) return controls;
+    for (size_t i = 0; i < count; ++i)
     {
-        layout()->removeWidget( box );
-        delete box;
-        box = NULL;
-    }
-
-    if( p_obj != NULL )
-    {
-        vlc_value_t *val;
-        char **text;
-        size_t count;
-
-        int i_ret = var_Change( p_obj, "controls", VLC_VAR_GETCHOICES,
-                                &count, &val, &text );
-        if( i_ret < 0 )
+        CameraControl item;
+        item.key = qfu(names[i]);
+        free(names[i]);
+        if (item.key.isEmpty()) continue;
+        const auto key = item.key.toUtf8();
+        item.type = var_Type(device, key.constData());
+        if (!item.type) continue;
+        char *label = nullptr;
+        if (var_Change(device, key.constData(), VLC_VAR_GETTEXT, &label) == VLC_SUCCESS)
+            item.label = qfut(label);
+        free(label);
+        if (item.label.isEmpty()) item.label = item.key;
+        switch (item.type & VLC_VAR_TYPE)
         {
-            msg_Err( p_intf, "Oops, v4l2 object doesn't have a 'controls' variable." );
-            help->show();
-            return;
-        }
-
-        box = new QGroupBox( this );
-        layout()->addWidget( box );
-        QVBoxLayout *layout = new QVBoxLayout( box );
-        box->setLayout( layout );
-
-        for( size_t i = 0; i < count; i++ )
-        {
-            char *vartext, *psz_var = text[i];
-            QString name;
-
-            if( !var_Change( p_obj, psz_var, VLC_VAR_GETTEXT, &vartext ) )
+            case VLC_VAR_INTEGER:
             {
-                name = qfut(vartext);
-                free(vartext);
+                item.value = var_GetInteger(device, key.constData());
+                vlc_value_t bound {};
+                var_Change(device, key.constData(), VLC_VAR_GETMIN, &bound); item.minimum = bound.i_int;
+                var_Change(device, key.constData(), VLC_VAR_GETMAX, &bound); item.maximum = bound.i_int;
+                var_Change(device, key.constData(), VLC_VAR_GETSTEP, &bound); item.step = qMax<qint64>(1, bound.i_int);
+                if (item.type & VLC_VAR_HASCHOICE)
+                {
+                    vlc_value_t *choices = nullptr;
+                    char **labels = nullptr;
+                    size_t size = 0;
+                    if (var_Change(device, key.constData(), VLC_VAR_GETCHOICES, &size, &choices, &labels) == VLC_SUCCESS)
+                    {
+                        for (size_t j = 0; j < size; ++j)
+                        {
+                            item.choices.append({labels[j] ? qfut(labels[j]) : QString::number(choices[j].i_int), choices[j].i_int});
+                            free(labels[j]);
+                        }
+                        free(labels); free(choices);
+                    }
+                }
+                break;
             }
-            else
-                name = qfu(psz_var);
+            case VLC_VAR_BOOL: item.value = var_GetBool(device, key.constData()); break;
+            case VLC_VAR_STRING:
+            {
+                char *text = var_GetString(device, key.constData());
+                item.text = qfu(text); free(text); break;
+            }
+        }
+        controls.append(item);
+    }
+    free(names); free(values);
+    return controls;
+}
+}
 
-            msg_Dbg( p_intf, "v4l2 control \"%" PRIx64 "\": %s (%s)",
-                     val[i].i_int, psz_var, qtu( name ) );
+ExtV4l2::ExtV4l2(qt_intf_t *intf, QWidget *parent) : QWidget(parent), p_intf(intf)
+{
+    setObjectName(QStringLiteral("cameraControls"));
+    auto *root = new QVBoxLayout(this);
+    auto *heading = new QLabel(qtr("Camera controls"), this);
+    heading->setTextFormat(Qt::PlainText);
+    heading->setProperty("redesignHeading", true);
+    root->addWidget(heading);
+    m_status = new QLabel(this);
+    m_status->setObjectName(QStringLiteral("cameraStatus"));
+    m_status->setTextFormat(Qt::PlainText);
+    m_status->setWordWrap(true);
+    root->addWidget(m_status);
+    auto *actions = new QHBoxLayout;
+    m_open = new QPushButton(qtr("Open capture device"), this);
+    m_open->setObjectName(QStringLiteral("cameraOpen"));
+    m_refresh = new QPushButton(qtr("Refresh"), this);
+    m_refresh->setObjectName(QStringLiteral("cameraRefresh"));
+    m_open->installEventFilter(this); m_refresh->installEventFilter(this);
+    actions->addWidget(m_open); actions->addStretch(); actions->addWidget(m_refresh);
+    root->addLayout(actions);
+    m_scroll = new QScrollArea(this);
+    m_scroll->setObjectName(QStringLiteral("cameraScroll"));
+    m_scroll->setWidgetResizable(true);
+    m_scroll->setFrameShape(QFrame::NoFrame);
+    m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_content = new QWidget;
+    m_content->setObjectName(QStringLiteral("cameraContent"));
+    m_body = new QVBoxLayout(m_content);
+    m_scroll->setWidget(m_content);
+    root->addWidget(m_scroll, 1);
+    root->addStretch(1);
+    m_poll = new QTimer(this);
+    m_poll->setInterval(2000);
+    connect(m_poll, &QTimer::timeout, this, &ExtV4l2::checkDevice);
+    connect(m_refresh, &QPushButton::clicked, this, &ExtV4l2::Refresh);
+    connect(m_open, &QPushButton::clicked, this, [] { DialogsProvider::getInstance()->openCaptureDialog(); });
+    connect(THEMIM, &PlayerController::inputChanged, this, [this] {
+        if (isVisible()) QTimer::singleShot(0, this, &ExtV4l2::Refresh);
+    });
+    connect(THEMIM, &PlayerController::playingStateChanged, this, [this](PlayerController::PlayingState state) {
+        if (isVisible() && state == PlayerController::PLAYING_STATE_STOPPED)
+            QTimer::singleShot(0, this, &ExtV4l2::Refresh);
+    });
+    if (const auto ctx = p_intf->p_mi)
+        connect(ctx, &MainCtx::intfScaleFactorChanged, this, &ExtV4l2::updateMetrics);
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, [this, heading] {
+            heading->setText(qtr("Camera controls"));
+            m_open->setText(qtr("Open capture device")); m_refresh->setText(qtr("Refresh"));
+            updateStatus();
+        });
+    applyRedesignWidgetTheme(this, p_intf->p_mi);
+    updateMetrics();
+}
 
-            int i_type = var_Type( p_obj, psz_var );
-            switch( i_type & VLC_VAR_TYPE )
+void ExtV4l2::updateStatus()
+{
+    m_status->setText(!m_device ? qtr("Open and play a camera to show its controls.")
+        : m_retry ? qtr("VLC cannot read the camera controls. Select Refresh to try again.")
+        : m_controlCount == 0 ? qtr("This camera has no controls for VLC.")
+        : qtr("Changes apply to the open camera."));
+    m_status->setAccessibleName(m_status->text());
+}
+
+void ExtV4l2::updateMetrics()
+{
+    const auto dp = [this](int value) { return qRound(value * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+    layout()->setContentsMargins(dp(16), dp(16), dp(16), dp(16));
+    layout()->setSpacing(dp(12));
+    m_body->setContentsMargins(0, 0, 0, 0); m_body->setSpacing(dp(12));
+    if (auto *card = m_content->findChild<QFrame*>(QStringLiteral("cameraControlCard")))
+    {
+        card->layout()->setContentsMargins(dp(16), dp(16), dp(16), dp(16));
+        card->layout()->setSpacing(dp(12));
+        for (auto *label : card->findChildren<QLabel*>())
+            if (label->property("cameraLabel").toBool()) { label->setMinimumWidth(dp(140)); label->setMaximumWidth(dp(200)); }
+    }
+}
+
+void ExtV4l2::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    Refresh(); m_poll->start();
+}
+
+void ExtV4l2::hideEvent(QHideEvent *event)
+{
+    m_poll->stop();
+    QWidget::hideEvent(event);
+}
+
+void ExtV4l2::checkDevice()
+{
+    if (!isVisible()) return;
+    bool changed;
+    {
+        vlc_player_locker lock(p_intf->p_player);
+        changed = vlc_player_GetV4l2Object(p_intf->p_player) != m_device;
+    }
+    if (changed || m_retry) Refresh();
+}
+
+QVariant ExtV4l2::applyValue(const QString& key, int type, const QVariant& value)
+{
+    QVariant result;
+    {
+        vlc_player_locker lock(p_intf->p_player);
+        auto *device = vlc_player_GetV4l2Object(p_intf->p_player);
+        const auto name = key.toUtf8();
+        const int actual = device ? var_Type(device, name.constData()) : 0;
+        if (device && device == m_device && (actual & VLC_VAR_TYPE) == type)
+        {
+            switch (type)
             {
                 case VLC_VAR_INTEGER:
                 {
-                    QLabel *label = new QLabel( name, box );
-                    QHBoxLayout *hlayout = new QHBoxLayout();
-                    hlayout->addWidget( label );
-                    int i_val = var_GetInteger( p_obj, psz_var );
-                    if( i_type & VLC_VAR_HASCHOICE )
+                    bool allowed = true;
+                    if (actual & VLC_VAR_HASCHOICE)
                     {
-                        QComboBox *combobox = new QComboBox( box );
-                        combobox->setObjectName( qfu( psz_var ) );
-
-                        vlc_value_t *val2;
-                        char **text2;
-                        size_t count2;
-
-                        var_Change( p_obj, psz_var, VLC_VAR_GETCHOICES,
-                                    &count2, &val2, &text2 );
-                        for( size_t j = 0; j < count2; j++ )
+                        vlc_value_t *choices = nullptr; char **labels = nullptr; size_t size = 0;
+                        allowed = false;
+                        if (var_Change(device, name.constData(), VLC_VAR_GETCHOICES, &size, &choices, &labels) == VLC_SUCCESS)
                         {
-                            combobox->addItem( text2[j],
-                                       qlonglong( val2[j].i_int) );
-                            if( i_val == val2[j].i_int )
-                                combobox->setCurrentIndex( j );
-                            free(text2[j]);
+                            for (size_t i = 0; i < size; ++i) { allowed |= choices[i].i_int == value.toLongLong(); free(labels[i]); }
+                            free(labels); free(choices);
                         }
-                        free(text2);
-                        free(val2);
-
-                        connect( combobox, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                                 this, QOverload<int>::of(&ExtV4l2::ValueChange) );
-                        hlayout->addWidget( combobox );
                     }
-                    else
-                    {
-                        QSlider *slider = new QSlider( box );
-                        slider->setObjectName( qfu( psz_var ) );
-                        slider->setOrientation( Qt::Horizontal );
-                        vlc_value_t val2;
-                        var_Change( p_obj, psz_var, VLC_VAR_GETMIN, &val2 );
-                        if( val2.i_int < INT_MIN )
-                            val2.i_int = INT_MIN; /* FIXME */
-                        slider->setMinimum( val2.i_int );
-                        var_Change( p_obj, psz_var, VLC_VAR_GETMAX, &val2 );
-                        if( val2.i_int > INT_MAX )
-                            val2.i_int = INT_MAX; /* FIXME */
-                        slider->setMaximum( val2.i_int );
-                        if( !var_Change( p_obj, psz_var, VLC_VAR_GETSTEP,
-                                         &val2 ) )
-                            slider->setSingleStep( val2.i_int );
-                        slider->setValue( i_val );
-                        connect( slider, &QSlider::valueChanged,
-                                 this, QOverload<int>::of(&ExtV4l2::ValueChange) );
-                        hlayout->addWidget( slider );
-                    }
-                    layout->addLayout( hlayout );
+                    if (allowed && var_SetInteger(device, name.constData(), value.toLongLong()) == VLC_SUCCESS)
+                        result = qlonglong(var_GetInteger(device, name.constData()));
                     break;
                 }
                 case VLC_VAR_BOOL:
-                {
-                    QCheckBox *button = new QCheckBox( name, box );
-                    button->setObjectName( qfu( psz_var ) );
-                    button->setChecked( var_GetBool( p_obj, psz_var ) );
-
-                    connect( button, &QCheckBox::clicked,
-                             this, QOverload<bool>::of(&ExtV4l2::ValueChange) );
-                    layout->addWidget( button );
+                    if (var_SetBool(device, name.constData(), value.toBool()) == VLC_SUCCESS)
+                        result = var_GetBool(device, name.constData());
                     break;
-                }
+                case VLC_VAR_STRING:
+                    if (var_SetString(device, name.constData(), value.toString().toUtf8().constData()) == VLC_SUCCESS)
+                    {
+                        char *text = var_GetString(device, name.constData()); result = qfu(text); free(text);
+                    }
+                    break;
                 case VLC_VAR_VOID:
-                {
-                    if( i_type & VLC_VAR_ISCOMMAND )
-                    {
-                        QPushButton *button = new QPushButton( name, box );
-                        button->setObjectName( qfu( psz_var ) );
-
-                        connect( button, &QPushButton::clicked,
-                                 this, QOverload<bool>::of(&ExtV4l2::ValueChange) );
-                        layout->addWidget( button );
-                    }
-                    else
-                    {
-                        QLabel *label = new QLabel( name, box );
-                        layout->addWidget( label );
-                    }
-                    break;
-                }
-                default:
-                    msg_Warn( p_intf, "Unhandled var type for %s", psz_var );
+                    if (actual & VLC_VAR_ISCOMMAND) { var_TriggerCallback(device, name.constData()); result = true; }
                     break;
             }
-            free(psz_var);
         }
-        free(text);
-        free(val);
     }
-    else
+    if (!result.isValid())
     {
-        msg_Dbg( p_intf, "Couldn't find v4l2 instance" );
-        help->show();
-        if ( isVisible() )
-            QTimer::singleShot( 2000, this, &ExtV4l2::Refresh );
+        m_status->setText(qtr("The camera controls changed. Select Refresh to try again."));
+        QTimer::singleShot(0, this, &ExtV4l2::Refresh);
     }
-    vlc_player_Unlock(p_intf->p_player);
+    return result;
 }
 
-void ExtV4l2::ValueChange( bool value )
+void ExtV4l2::Refresh()
 {
-    ValueChange( (int)value );
-}
-
-void ExtV4l2::ValueChange( int value )
-{
-    QObject *s = sender();
-    vlc_player_Lock(p_intf->p_player);
-    vlc_object_t *p_obj = vlc_player_GetV4l2Object(p_intf->p_player);
-    if( p_obj )
+    QList<CameraControl> controls;
+    vlc_object_t *device;
+    bool failed = false;
     {
-        QString var = s->objectName();
-        int i_type = var_Type( p_obj, qtu( var ) );
-        switch( i_type & VLC_VAR_TYPE )
+        // Snapshot borrowed driver data, then release the player before building UI.
+        vlc_player_locker lock(p_intf->p_player);
+        device = vlc_player_GetV4l2Object(p_intf->p_player);
+        if (device) controls = cameraControls(device, failed);
+    }
+    m_device = device; m_retry = failed; m_controlCount = controls.size();
+    const auto focus = QApplication::focusWidget();
+    const auto spin = focus ? focus->property("cameraSpinBox").value<QObject*>() : nullptr;
+    const auto focusName = focus && m_content->isAncestorOf(focus) ? (spin ? spin->objectName() : focus->objectName()) : QString();
+    const int scroll = m_scroll->verticalScrollBar()->value();
+    while (auto *item = m_body->takeAt(0)) { delete item->widget(); delete item; }
+    m_open->setVisible(!device);
+    const bool ready = device && !failed && !controls.isEmpty();
+    m_scroll->setVisible(ready);
+    auto *root = static_cast<QVBoxLayout*>(layout());
+    root->setStretch(root->count() - 1, ready ? 0 : 1);
+    updateStatus();
+    if (!device || failed || controls.isEmpty()) return;
+    auto *card = new QFrame(m_content);
+    card->setObjectName(QStringLiteral("cameraControlCard"));
+    card->setProperty("redesignCard", true);
+    auto *form = new QFormLayout(card);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignTop);
+    m_body->addWidget(card); m_body->addStretch();
+    const auto labelFor = [card](const CameraControl& control) {
+        auto *label = new QLabel(control.label, card);
+        label->setTextFormat(Qt::PlainText); label->setWordWrap(true);
+        label->setProperty("cameraLabel", true);
+        label->setObjectName(QStringLiteral("cameraLabel_") + control.key);
+        label->setMinimumWidth(0); label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        return label;
+    };
+    for (const auto& control : controls)
+    {
+        const auto objectName = QStringLiteral("cameraControl_") + control.key;
+        const int type = control.type & VLC_VAR_TYPE;
+        if (type == VLC_VAR_INTEGER && (control.type & VLC_VAR_HASCHOICE))
         {
-            case VLC_VAR_INTEGER:
-                if( i_type & VLC_VAR_HASCHOICE )
-                {
-                    QComboBox *combobox = qobject_cast<QComboBox*>( s );
-                    value = combobox->itemData( value ).toInt();
-                }
-                var_SetInteger( p_obj, qtu( var ), value );
-                break;
-            case VLC_VAR_BOOL:
-                var_SetBool( p_obj, qtu( var ), value );
-                break;
-            case VLC_VAR_VOID:
-                var_TriggerCallback( p_obj, qtu( var ) );
-                break;
+            auto *choice = new QComboBox(card);
+            choice->setObjectName(objectName); choice->setAccessibleName(control.label);
+            choice->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+            choice->setMinimumContentsLength(1); choice->setMinimumWidth(0);
+            int selected = -1;
+            for (const auto& entry : control.choices)
+            {
+                choice->addItem(entry.first, qlonglong(entry.second));
+                if (entry.second == control.value) selected = choice->count() - 1;
+            }
+            if (selected < 0)
+            {
+                selected = choice->count();
+                choice->addItem(qtr("Current value: %1").arg(control.value), qlonglong(control.value));
+                if (auto *model = qobject_cast<QStandardItemModel*>(choice->model())) model->item(selected)->setEnabled(false);
+            }
+            choice->setCurrentIndex(selected); choice->setEnabled(!control.choices.isEmpty());
+            connect(choice, QOverload<int>::of(&QComboBox::activated), this, [this, choice, control](int row) {
+                if (row < 0) return;
+                const auto actual = applyValue(control.key, VLC_VAR_INTEGER, choice->itemData(row));
+                if (actual.isValid()) { const QSignalBlocker block(choice); choice->setCurrentIndex(choice->findData(actual)); }
+            });
+            form->addRow(labelFor(control), choice);
         }
-        vlc_player_Unlock(p_intf->p_player);
+        else if (type == VLC_VAR_INTEGER && control.minimum >= INT_MIN && control.maximum <= INT_MAX
+                 && control.minimum <= control.maximum && control.step <= INT_MAX
+                 && control.value >= control.minimum && control.value <= control.maximum)
+        {
+            auto *row = new QWidget(card); auto *layout = new QHBoxLayout(row); layout->setContentsMargins(0, 0, 0, 0);
+            auto *slider = new QSlider(Qt::Horizontal, row);
+            slider->setObjectName(objectName + QStringLiteral("_slider")); slider->setAccessibleName(control.label);
+            auto *number = new QSpinBox(row);
+            number->setObjectName(objectName); number->setAccessibleName(control.label);
+            number->setKeyboardTracking(false);
+            slider->setRange(int(control.minimum), int(control.maximum)); number->setRange(int(control.minimum), int(control.maximum));
+            slider->setSingleStep(int(control.step)); number->setSingleStep(int(control.step));
+            slider->setValue(int(control.value)); number->setValue(int(control.value));
+            number->setProperty("cameraCommitted", int(control.value));
+            number->installEventFilter(this);
+            if (auto *edit = number->findChild<QLineEdit*>()) { edit->setProperty("cameraSpinBox", QVariant::fromValue<QObject*>(number)); edit->installEventFilter(this); }
+            const auto help = qtr("Range: %1 to %2. Step: %3.").arg(control.minimum).arg(control.maximum).arg(control.step);
+            number->setAccessibleDescription(help); slider->setAccessibleDescription(help);
+            connect(slider, &QSlider::valueChanged, number, &QSpinBox::setValue);
+            connect(number, QOverload<int>::of(&QSpinBox::valueChanged), slider, &QSlider::setValue);
+            connect(number, QOverload<int>::of(&QSpinBox::valueChanged), this, [this, number, slider, control](int value) {
+                const auto actual = applyValue(control.key, VLC_VAR_INTEGER, value);
+                if (actual.isValid())
+                {
+                    const QSignalBlocker a(number), b(slider);
+                    number->setValue(actual.toInt()); slider->setValue(actual.toInt());
+                    number->setProperty("cameraCommitted", actual);
+                }
+            });
+            layout->addWidget(slider, 1); layout->addWidget(number);
+            form->addRow(labelFor(control), row);
+        }
+        else if (type == VLC_VAR_INTEGER || type == VLC_VAR_STRING)
+        {
+            auto *row = new QWidget(card); auto *layout = new QVBoxLayout(row); layout->setContentsMargins(0, 0, 0, 0);
+            auto *edit = new QLineEdit(type == VLC_VAR_STRING ? control.text : QString::number(control.value), row);
+            edit->setObjectName(objectName); edit->setAccessibleName(control.label);
+            edit->setProperty("cameraCommitted", edit->text()); edit->installEventFilter(this);
+            auto *error = new QLabel(row); error->setTextFormat(Qt::PlainText); error->setWordWrap(true);
+            error->setObjectName(objectName + QStringLiteral("_error")); error->hide();
+            if (type == VLC_VAR_INTEGER)
+                edit->setAccessibleDescription(qtr("Range: %1 to %2. Step: %3.").arg(control.minimum).arg(control.maximum).arg(control.step));
+            layout->addWidget(edit); layout->addWidget(error);
+            connect(edit, &QLineEdit::textEdited, error, &QLabel::hide);
+            connect(edit, &QLineEdit::editingFinished, this, [this, edit, error, control, type] {
+                if (edit->text() == edit->property("cameraCommitted").toString()) return;
+                QVariant value = edit->text();
+                if (type == VLC_VAR_INTEGER)
+                {
+                    bool ok = false; const auto number = edit->text().toLongLong(&ok);
+                    if (!ok || number < control.minimum || number > control.maximum)
+                    {
+                        error->setText(qtr("Enter a whole number from %1 to %2.").arg(control.minimum).arg(control.maximum)); error->show(); return;
+                    }
+                    value = qlonglong(number);
+                }
+                const auto actual = applyValue(control.key, type, value);
+                if (actual.isValid()) { edit->setText(actual.toString()); edit->setProperty("cameraCommitted", edit->text()); error->hide(); }
+            });
+            form->addRow(labelFor(control), row);
+        }
+        else if (type == VLC_VAR_BOOL)
+        {
+            auto *check = new QCheckBox(card);
+            check->setObjectName(objectName); check->setAccessibleName(control.label); check->setChecked(control.value);
+            check->installEventFilter(this);
+            connect(check, &QCheckBox::clicked, this, [this, check, control](bool value) {
+                const auto actual = applyValue(control.key, VLC_VAR_BOOL, value);
+                if (actual.isValid()) { const QSignalBlocker block(check); check->setChecked(actual.toBool()); }
+            });
+            form->addRow(labelFor(control), check);
+        }
+        else if (type == VLC_VAR_VOID && (control.type & VLC_VAR_ISCOMMAND))
+        {
+            auto *button = new QPushButton(card);
+            button->setObjectName(objectName); button->setAccessibleName(control.label);
+            button->setToolTip(QStringLiteral("<qt>%1</qt>").arg(control.label.toHtmlEscaped()));
+            button->setProperty("cameraCaption", control.label); button->installEventFilter(this);
+            button->setText(QString(control.label).replace(QStringLiteral("&"), QStringLiteral("&&")));
+            button->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed); button->setMinimumWidth(0);
+            connect(button, &QPushButton::clicked, this, [this, control] {
+                if (applyValue(control.key, VLC_VAR_VOID).isValid()) QTimer::singleShot(0, this, &ExtV4l2::Refresh);
+            });
+            form->addRow(button);
+        }
+        else form->addRow(labelFor(control), new QLabel(qtr("This control is not supported."), card));
     }
-    else
+    updateMetrics();
+    QTimer::singleShot(0, this, [this, scroll, focusName] {
+        m_scroll->verticalScrollBar()->setValue(scroll);
+        if (!focusName.isEmpty()) if (auto *control = m_content->findChild<QWidget*>(focusName)) control->setFocus();
+    });
+}
+
+bool ExtV4l2::eventFilter(QObject *object, QEvent *event)
+{
+    // Keep the application's Stream shortcut out of native value editors.
+    if (event->type() == QEvent::ShortcutOverride
+        && static_cast<QKeyEvent*>(event)->matches(QKeySequence::Save)
+        && (qobject_cast<QLineEdit*>(object) || qobject_cast<QSpinBox*>(object)))
     {
-        vlc_player_Unlock(p_intf->p_player);
-        msg_Warn( p_intf, "Oops, v4l2 object isn't available anymore" );
-        Refresh();
+        event->accept(); return true;
     }
+    if (auto *button = qobject_cast<QPushButton*>(object); button && object->property("cameraCaption").isValid()
+        && (event->type() == QEvent::Resize || event->type() == QEvent::FontChange))
+    {
+        const auto caption = button->fontMetrics().elidedText(object->property("cameraCaption").toString(), Qt::ElideRight,
+            qMax(0, button->width() - button->fontMetrics().height() * 2));
+        button->setText(QString(caption).replace(QStringLiteral("&"), QStringLiteral("&&")));
+    }
+    if (event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent*>(event);
+        if (auto *button = qobject_cast<QAbstractButton*>(object);
+            button && (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter))
+        {
+            if (!key->isAutoRepeat()) button->click();
+            key->accept(); return true;
+        }
+        if (key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter
+            || key->matches(QKeySequence::Save) || key->key() == Qt::Key_Escape)
+        {
+            auto *number = qobject_cast<QSpinBox*>(object);
+            if (!number) number = qobject_cast<QSpinBox*>(object->property("cameraSpinBox").value<QObject*>());
+            if (number)
+            {
+                if (key->key() == Qt::Key_Escape) { const QSignalBlocker block(number); number->setValue(number->property("cameraCommitted").toInt()); number->clearFocus(); }
+                else number->interpretText();
+                key->accept(); return true;
+            }
+            if (auto *edit = qobject_cast<QLineEdit*>(object))
+            {
+                if (key->key() == Qt::Key_Escape)
+                {
+                    edit->setText(edit->property("cameraCommitted").toString());
+                    if (auto *error = edit->parent()->findChild<QLabel*>(edit->objectName() + QStringLiteral("_error"))) error->hide();
+                    edit->clearFocus();
+                }
+                else QMetaObject::invokeMethod(edit, "editingFinished");
+                key->accept(); return true;
+            }
+        }
+    }
+    return QWidget::eventFilter(object, event);
 }
 
 /**********************************************************************
