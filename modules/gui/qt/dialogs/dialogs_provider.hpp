@@ -223,7 +223,9 @@ public slots:
                                               const QString& title = {},
                                               const QMessageBox::StandardButtons buttons = QMessageBox::NoButton,
                                               const QMessageBox::StandardButton defaultButton = QMessageBox::NoButton,
-                                              const QMessageBox::Icon icon = QMessageBox::NoIcon);
+                                              const QMessageBox::Icon icon = QMessageBox::NoIcon,
+                                              QWidget* owner = nullptr,
+                                              const QString& acceptText = {});
     void prefsDialog();
     void prefsPageDialog(const QString& page);
     void firstRunDialog();

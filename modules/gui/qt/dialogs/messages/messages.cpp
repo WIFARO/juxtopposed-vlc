@@ -28,7 +28,9 @@
 #include <QTextBlock>
 #include <QFileDialog>
 #include <QTextStream>
-#include <QMessageBox>
+#include <QSaveFile>
+#include <QPointer>
+#include "dialogs/dialogs_provider.hpp"
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QScrollBar>
@@ -350,34 +352,40 @@ void MessagesDialog::updateActionIcon()
 bool MessagesDialog::save()
 {
     drainMessages();
-    QString saveLogFileName = QFileDialog::getSaveFileName(
-            this, qtr("Save log"),
-            QVLCUserDir( VLC_DOCUMENTS_DIR ),
-            qtr( "Texts/Logs (*.log *.txt);; All (*.*)") );
-
-    if( !saveLogFileName.isNull() )
+    QPointer<MessagesDialog> owner(this);
+    QString selected = QVLCUserDir(VLC_DOCUMENTS_DIR);
+    while (owner)
     {
+        selected = QFileDialog::getSaveFileName(this, qtr("Save log"), selected,
+            qtr("Texts/Logs (*.log *.txt);; All (*.*)"));
+        if (!owner || selected.isEmpty()) return false;
         drainMessages();
-        QFile file( saveLogFileName );
-        if ( !file.open( QFile::WriteOnly | QFile::Text ) ) {
-            QMessageBox::warning( this, qtr( "Application" ),
-                    qtr( "Cannot write to file %1:\n%2." )
-                    .arg( saveLogFileName )
-                    .arg( file.errorString() ) );
-            return false;
-        }
-
-        QTextStream out( &file );
-
-        QTextBlock block = ui.messages->document()->firstBlock();
-        while( block.isValid() )
+        QString error;
         {
-            if( block.isVisible() )
-                out << block.text() << "\n";
-
-            block = block.next();
+            // Never truncate the previous log or use a non-atomic fallback.
+            QSaveFile file(selected);
+            file.setDirectWriteFallback(false);
+            if (file.open(QFile::WriteOnly | QFile::Text))
+            {
+                bool written;
+                {
+                    QTextStream out(&file);
+                    for (auto block = ui.messages->document()->firstBlock(); block.isValid(); block = block.next())
+                        if (block.isVisible()) out << block.text() << "\n";
+                    out.flush();
+                    written = out.status() == QTextStream::Ok;
+                }
+                if (written && file.commit()) return true;
+                error = file.errorString();
+                file.cancelWriting();
+            }
+            else error = file.errorString();
         }
-        return true;
+        const auto answer = DialogsProvider::getInstance()->messageDialog(
+            qtr("VLC cannot save the log.\n\nFile: %1\n\nError: %2\n\nThe log remains in this window.")
+                .arg(selected, error), qtr("Save log"), QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel, QMessageBox::Warning, this, qtr("Choose file"));
+        if (!owner || answer != QMessageBox::Yes) return false;
     }
     return false;
 }

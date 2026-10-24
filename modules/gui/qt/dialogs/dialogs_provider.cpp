@@ -101,8 +101,8 @@ class NativeMessageDialog final : public QVLCDialog
 public:
     NativeMessageDialog(qt_intf_t *intf, const QString &text, const QString &title,
                         QMessageBox::StandardButtons buttons, QMessageBox::StandardButton defaultButton,
-                        QMessageBox::Icon icon, const QString &acceptText = {})
-        : QVLCDialog(nullptr, intf), m_ctx(intf->p_mi), m_text(text), m_acceptText(acceptText), m_iconType(icon)
+                        QMessageBox::Icon icon, const QString &acceptText = {}, QWidget *owner = nullptr)
+        : QVLCDialog(owner ? owner->window()->windowHandle() : nullptr, intf), m_ctx(intf->p_mi), m_text(text), m_acceptText(acceptText), m_iconType(icon)
     {
         setObjectName(QStringLiteral("redesignNativeMessage"));
         setWindowRole("vlc-message");
@@ -164,6 +164,11 @@ public:
             if (m_buttons->button(candidate)) { m_escape = candidate; break; }
         if (m_escape == QDialogButtonBox::NoButton && m_buttons->buttons().size() == 1)
             m_escape = m_buttons->standardButton(m_buttons->buttons().first());
+        // A stack-owned message must not become a child of its caller. Close it
+        // safely if the caller disappears during the nested modal event loop.
+        if (owner) connect(owner, &QObject::destroyed, this, [this] {
+            done(int(m_escape == QDialogButtonBox::NoButton ? QDialogButtonBox::Cancel : m_escape));
+        });
         m_copyTimer = new QTimer(this);
         m_copyTimer->setSingleShot(true);
         m_copyTimer->setInterval(2500);
@@ -193,7 +198,16 @@ public:
         root->activate();
         // Short notices use only the space they need. Long text can scroll or grow.
         const int chrome = height() - m_body->height();
-        const int content = qCeil(m_body->document()->documentLayout()->documentSize().height()) + 2;
+        // QTextBrowser lays out its live document lazily before the first show.
+        // Measure a plain document at the actual reading width instead.
+        m_body->ensurePolished();
+        QTextDocument measured;
+        measured.setDefaultFont(m_body->font());
+        measured.setDefaultTextOption(m_body->document()->defaultTextOption());
+        measured.setDocumentMargin(m_body->document()->documentMargin());
+        measured.setPlainText(text);
+        measured.setTextWidth(qMax(1, m_body->width() - 2 * m_body->frameWidth()));
+        const int content = qCeil(measured.size().height()) + dp(4);
         resize(width(), qMin(available.height(), chrome + qBound(dp(56), content, dp(320))));
     }
 
@@ -809,9 +823,10 @@ QMessageBox::StandardButton DialogsProvider::messageDialog(const QString &text,
                                                            const QString &title,
                                                            const QMessageBox::StandardButtons buttons,
                                                            const QMessageBox::StandardButton defaultButton,
-                                                           const QMessageBox::Icon icon)
+                                                           const QMessageBox::Icon icon,
+                                                           QWidget *owner, const QString &acceptText)
 {
-    NativeMessageDialog dialog(p_intf, text, title, buttons, defaultButton, icon);
+    NativeMessageDialog dialog(p_intf, text, title, buttons, defaultButton, icon, acceptText, owner);
     return static_cast<QMessageBox::StandardButton>(dialog.exec());
 }
 

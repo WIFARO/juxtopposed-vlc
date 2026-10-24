@@ -28,6 +28,7 @@
 
 #include "qt.hpp"
 #include "info_panels.hpp"
+#include "dialogs/dialogs_provider.hpp"
 #include "player/player_controller.hpp"
 #include "maininterface/mainctx.hpp"
 #include "widgets/native/interface_widgets.hpp"
@@ -327,15 +328,25 @@ bool MetaPanel::saveMeta()
     const auto input = p_input.get();
 
     if( input == NULL ) {
-        QMessageBox::warning( this, qtr("Metadata"), qtr("Not editing a file") );
+        DialogsProvider::getInstance()->messageDialog(qtr("Open a file before you save its details."),
+            qtr("Save file details"), QMessageBox::Close, QMessageBox::Close, QMessageBox::Warning, this);
         return false;
     }
 
+    const auto warn = [this, input] {
+        const auto uri = vlc::wrap_cptr(input_item_GetURI(input));
+        const QUrl url = QUrl::fromEncoded(QByteArray(uri ? uri.get() : ""));
+        const QString location = url.isLocalFile() ? url.toLocalFile() : url.toDisplayString(QUrl::RemovePassword);
+        DialogsProvider::getInstance()->messageDialog(
+            qtr("VLC cannot save the file details.\n\nLocation: %1\n\nYour changes remain in this window.")
+                .arg(location), qtr("Save file details"), QMessageBox::Close, QMessageBox::Close,
+            QMessageBox::Warning, this);
+    };
     // Keep the live item unchanged until the file write succeeds.
     const SharedInputItem edited { input_item_Copy( input ), false };
     if( !edited )
     {
-        QMessageBox::warning( this, qtr("Metadata"), qtr("Failed to save metadata") );
+        warn();
         return false;
     }
     const auto applyEdits = [this]( input_item_t *item ) {
@@ -363,7 +374,7 @@ bool MetaPanel::saveMeta()
     applyEdits( edited.get() );
     int vlcret = input_item_WriteMeta( VLC_OBJECT(p_intf), edited.get() );
     if (vlcret != VLC_SUCCESS) {
-        QMessageBox::warning( this, qtr("Metadata"), qtr("Failed to save metadata") );
+        warn();
         return false;
     }
     applyEdits( input );

@@ -44,6 +44,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QPointer>
 
 /* This Dialog has two main modes:
     - General Mode that shows the current Played item, and the stats
@@ -245,8 +246,9 @@ int MediaInfoDialog::currentTab()
 
 void MediaInfoDialog::saveMeta()
 {
+    QPointer<MediaInfoDialog> owner(this);
     if (MP->isInEditMode()) MP->saveMeta();
-    updateButtons();
+    if (owner) updateButtons();
 }
 
 void MediaInfoDialog::updateAllTabs( const SharedInputItem& p_item )
