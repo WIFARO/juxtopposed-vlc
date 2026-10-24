@@ -196,7 +196,10 @@ static int Open(vlc_object_t *obj)
         vlc_http_res_set_login(sys->resource,
                                crd.psz_username, crd.psz_password);
     else if (ret == -EINTR)
+    {
+        ret = VLC_ETIMEOUT;
         goto error;
+    }
 
     ret = VLC_EGENERIC;
 
@@ -214,7 +217,13 @@ static int Open(vlc_object_t *obj)
         if (vlc_credential_get(&crd, obj, NULL, NULL, _("HTTP authentication"),
                                _("Please enter a valid login name and "
                                  "a password for realm %s."), crd.psz_realm) != 0)
-            break;
+        {
+            /* Stop probing after credentials are declined. Another access
+             * module must not ask again for the same cancelled request.
+             * Unsupported authentication schemes still fall back above. */
+            ret = VLC_ETIMEOUT;
+            goto error;
+        }
 
         vlc_http_res_set_login(sys->resource,
                                crd.psz_username, crd.psz_password);
