@@ -69,7 +69,9 @@ C.Dialog {
         clip: true
         Keys.onEscapePressed: event => { event.accepted = control.closePolicy === C.Popup.NoAutoClose }
         C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
-        C.ScrollBar.vertical: C.ScrollBar { policy: C.ScrollBar.AsNeeded; active: true }
+        C.ScrollBar.vertical.objectName: "interactionScrollBar"
+        C.ScrollBar.vertical.policy: C.ScrollBar.AsNeeded
+        C.ScrollBar.vertical.active: true
         ColumnLayout {
             id: bodyColumn
             width: bodyScroll.availableWidth

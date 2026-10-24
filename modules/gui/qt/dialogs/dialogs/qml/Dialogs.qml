@@ -331,11 +331,12 @@ Item {
             text: qsTr("Save password")
             spacing: loginDialog.theme.dp(8)
             padding: loginDialog.theme.dp(4)
+            implicitHeight: visible ? Math.max(indicator.implicitHeight, storeLabel.implicitHeight) + topPadding + bottomPadding : 0
             indicator: Rectangle {
                 implicitWidth: loginDialog.theme.dp(16)
-                implicitHeight: implicitWidth
+                implicitHeight: loginDialog.theme.dp(16)
                 x: savePassword.leftPadding
-                y: (savePassword.height - height) / 2
+                anchors.verticalCenter: parent.verticalCenter
                 color: savePassword.checked ? loginDialog.theme.accent : loginDialog.theme.field
                 radius: loginDialog.theme.dp(3)
                 border.width: loginDialog.theme.dp(1)
@@ -347,13 +348,19 @@ Item {
                     font.pixelSize: loginDialog.theme.dp(13)
                 }
             }
-            contentItem: Text {
-                text: savePassword.text
-                textFormat: Text.PlainText
-                leftPadding: savePassword.indicator.width + savePassword.spacing
-                color: loginDialog.theme.foreground
-                font.pixelSize: loginDialog.theme.dp(14)
-                wrapMode: Text.Wrap
+            contentItem: Item {
+                implicitWidth: storeLabel.implicitWidth + savePassword.indicator.implicitWidth + savePassword.spacing
+                implicitHeight: storeLabel.implicitHeight
+                Text {
+                    id: storeLabel
+                    x: savePassword.indicator.implicitWidth + savePassword.spacing
+                    width: Math.max(0, parent.width - x)
+                    text: savePassword.text
+                    textFormat: Text.PlainText
+                    color: loginDialog.theme.foreground
+                    font.pixelSize: loginDialog.theme.dp(14)
+                    wrapMode: Text.Wrap
+                }
             }
             onActiveFocusChanged: {
                 if (!loginDialog) return
