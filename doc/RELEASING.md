@@ -104,8 +104,9 @@ commit remain in the workflow artifacts. Inspect the candidate release source
 before creating a tag:
 
 ```sh
-git log --oneline beta-3..HEAD
-git diff beta-3..HEAD -- .github/workflows extras/package/release doc/RELEASING.md doc/releases README.md
+git fetch origin tag 4.0.0-beta.4
+git log --oneline 4.0.0-beta.4..HEAD
+git diff 4.0.0-beta.4..HEAD -- .github/workflows extras/package/release doc/RELEASING.md doc/releases README.md
 ```
 
 Generated files go into ignored `build-release-*` and `contrib/contrib-*`
