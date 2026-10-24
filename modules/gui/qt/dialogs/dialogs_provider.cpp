@@ -61,6 +61,9 @@
 #include "dialogs/playlists/playlists.hpp"
 #include "medialibrary/medialib.hpp"
 #include "util/redesign_widget_theme.hpp"
+#include "util/interface_translator.hpp"
+#include "util/colorizedsvgicon.hpp"
+#include "util/color_scheme_model.hpp"
 
 #include <vlc_url.h>
 #include <vlc_playlist.h>
@@ -81,8 +84,226 @@
 #include <QScreen>
 #include <QScopeGuard>
 #include <QRegularExpression>
+#include <QTextBrowser>
+#include <QAbstractTextDocumentLayout>
+#include <QClipboard>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QTimer>
+#include <QStyle>
 #include <algorithm>
 #include <utility>
+
+namespace {
+// Keep the provider's synchronous result contract, with a bounded reading area.
+class NativeMessageDialog final : public QVLCDialog
+{
+public:
+    NativeMessageDialog(qt_intf_t *intf, const QString &text, const QString &title,
+                        QMessageBox::StandardButtons buttons, QMessageBox::StandardButton defaultButton,
+                        QMessageBox::Icon icon, const QString &acceptText = {})
+        : QVLCDialog(nullptr, intf), m_ctx(intf->p_mi), m_text(text), m_acceptText(acceptText), m_iconType(icon)
+    {
+        setObjectName(QStringLiteral("redesignNativeMessage"));
+        setWindowRole("vlc-message");
+        setWindowTitle(title.isEmpty() ? qtr("VLC media player") : title);
+        auto *root = new QVBoxLayout(this);
+        auto *headingRow = new QHBoxLayout;
+        m_icon = new QLabel(this);
+        headingRow->addWidget(m_icon, 0, Qt::AlignTop);
+        auto *heading = new QLabel(windowTitle(), this);
+        heading->setObjectName(QStringLiteral("messageHeading"));
+        heading->setTextFormat(Qt::PlainText);
+        heading->setWordWrap(true);
+        heading->setProperty("redesignHeading", true);
+        headingRow->addWidget(heading, 1);
+        root->addLayout(headingRow);
+        m_body = new QTextBrowser(this);
+        m_body->setObjectName(QStringLiteral("messageBody"));
+        m_body->setAccessibleName(windowTitle());
+        m_body->setPlainText(text);
+        m_body->setOpenLinks(false);
+        m_body->setUndoRedoEnabled(false);
+        m_body->setTabChangesFocus(true);
+        m_body->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+        m_body->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        m_body->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        m_body->installEventFilter(this);
+        root->addWidget(m_body, 1);
+        m_footer = new QWidget(this);
+        m_footer->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        m_actions = new QHBoxLayout(m_footer);
+        m_actions->setContentsMargins(0, 0, 0, 0);
+        m_copy = new QPushButton(qtr("Copy"), this);
+        m_copy->setObjectName(QStringLiteral("messageCopy"));
+        m_copy->setAutoDefault(false);
+        m_copy->setToolTip(qtr("Copy the full message."));
+        m_actions->addWidget(m_copy, 0, Qt::AlignLeft);
+        m_actions->addStretch(1);
+        if (buttons == QMessageBox::NoButton) buttons = QMessageBox::Close;
+        m_buttons = new QDialogButtonBox(QDialogButtonBox::StandardButtons(int(buttons)), this);
+        m_buttons->setObjectName(QStringLiteral("messageActions"));
+        updateNamedActions();
+        m_actions->addWidget(m_buttons);
+        root->addWidget(m_footer);
+        connect(m_buttons, &QDialogButtonBox::clicked, this, [this](QAbstractButton *button) {
+            done(int(m_buttons->standardButton(button)));
+        });
+        // QDialogButtonBox and QMessageBox share the public standard-button values.
+        for (auto *button : m_buttons->buttons())
+            static_cast<QPushButton*>(button)->setAutoDefault(false);
+        if (!buttons.testFlag(defaultButton) || defaultButton == QMessageBox::NoButton)
+            for (auto candidate : {QMessageBox::Close, QMessageBox::Cancel, QMessageBox::No, QMessageBox::Ok, QMessageBox::Yes})
+                if (buttons.testFlag(candidate)) { defaultButton = candidate; break; }
+        if (auto *button = m_buttons->button(QDialogButtonBox::StandardButton(defaultButton)))
+        {
+            button->setDefault(true);
+            button->setFocus();
+        }
+        for (auto candidate : {QDialogButtonBox::Cancel, QDialogButtonBox::Close, QDialogButtonBox::No})
+            if (m_buttons->button(candidate)) { m_escape = candidate; break; }
+        if (m_escape == QDialogButtonBox::NoButton && m_buttons->buttons().size() == 1)
+            m_escape = m_buttons->standardButton(m_buttons->buttons().first());
+        m_copyTimer = new QTimer(this);
+        m_copyTimer->setSingleShot(true);
+        m_copyTimer->setInterval(2500);
+        connect(m_copyTimer, &QTimer::timeout, this, [this] { m_copy->setText(qtr("Copy")); });
+        connect(m_copy, &QPushButton::clicked, this, [this] {
+            QGuiApplication::clipboard()->setText(m_text);
+            m_copy->setText(qtr("Copied."));
+            m_copyTimer->start();
+        });
+        const auto metrics = [this] { updateMetrics(); };
+        if (m_ctx)
+        {
+            connect(m_ctx, &MainCtx::intfScaleFactorChanged, this, metrics);
+            connect(m_ctx, &MainCtx::redesignAccentChanged, this, metrics);
+            connect(m_ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, metrics);
+        }
+        if (auto *translator = InterfaceTranslator::instance())
+            connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
+                m_copyTimer->stop();
+                m_copy->setText(qtr("Copy"));
+                m_copy->setToolTip(qtr("Copy the full message."));
+                updateMetrics();
+            });
+        updateMetrics();
+        const auto available = screen()->availableGeometry().size() - QSize(dp(32), dp(32));
+        resize(qMin(dp(520), available.width()), qMin(dp(500), available.height()));
+        root->activate();
+        // Short notices use only the space they need. Long text can scroll or grow.
+        const int chrome = height() - m_body->height();
+        const int content = qCeil(m_body->document()->documentLayout()->documentSize().height()) + 2;
+        resize(width(), qMin(available.height(), chrome + qBound(dp(56), content, dp(320))));
+    }
+
+    void reject() override
+    {
+        if (m_escape != QDialogButtonBox::NoButton) done(int(m_escape));
+    }
+
+protected:
+    void changeEvent(QEvent *event) override
+    {
+        QVLCDialog::changeEvent(event);
+        if (event->type() == QEvent::LanguageChange)
+            QTimer::singleShot(0, this, [this] {
+                // The standard button box retranslates its children first.
+                updateNamedActions();
+                updateMetrics();
+            });
+    }
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QVLCDialog::resizeEvent(event);
+        updateActions();
+    }
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (watched == m_body && (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress))
+        {
+            auto *key = static_cast<QKeyEvent*>(event);
+            if (key->matches(QKeySequence::Copy) || key->matches(QKeySequence::SelectAll))
+            {
+                if (event->type() == QEvent::KeyPress)
+                {
+                    if (key->matches(QKeySequence::Copy)) m_body->copy(); else m_body->selectAll();
+                }
+                key->accept();
+                return true;
+            }
+        }
+        return QVLCDialog::eventFilter(watched, event);
+    }
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        {
+            if (!event->isAutoRepeat())
+                if (auto *button = qobject_cast<QAbstractButton*>(focusWidget())) button->click();
+            event->accept();
+        }
+        else QVLCDialog::keyPressEvent(event);
+    }
+
+private:
+    void updateNamedActions()
+    {
+        if (m_acceptText.isEmpty()) return;
+        if (auto *button = m_buttons->button(QDialogButtonBox::Yes)) button->setText(m_acceptText);
+        if (auto *button = m_buttons->button(QDialogButtonBox::No)) button->setText(qtr("Cancel"));
+    }
+    int dp(int value) const { return qRound(value * (m_ctx ? m_ctx->getIntfScaleFactor() : 1)); }
+    void updateActions()
+    {
+        m_buttons->setOrientation(Qt::Horizontal);
+        const int available = width() - 2 * dp(24);
+        const bool vertical = m_copy->sizeHint().width() + dp(12) + m_buttons->sizeHint().width() > available;
+        m_buttons->setOrientation(vertical ? Qt::Vertical : Qt::Horizontal);
+        m_actions->setDirection(vertical ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+        int minimum = 0;
+        for (auto *button : m_buttons->buttons()) minimum = qMax(minimum, button->sizeHint().width());
+        m_buttons->setMinimumWidth(vertical ? minimum : 0);
+        m_footer->setMinimumWidth(qMax(minimum, m_copy->sizeHint().width()));
+    }
+    void updateMetrics()
+    {
+        layout()->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
+        layout()->setSpacing(dp(12));
+        setMinimumWidth(dp(360));
+        m_body->setMinimumSize(dp(240), dp(56));
+        m_body->document()->setDocumentMargin(dp(12));
+        m_actions->setSpacing(dp(12));
+        for (auto *button : m_buttons->buttons()) button->setIcon({});
+        m_copy->setMinimumWidth(qMax(m_copy->fontMetrics().horizontalAdvance(qtr("Copy")),
+            m_copy->fontMetrics().horizontalAdvance(qtr("Copied."))) + dp(32));
+        m_icon->setVisible(m_iconType != QMessageBox::NoIcon);
+        if (m_iconType != QMessageBox::NoIcon)
+        {
+            QIcon icon;
+            if (m_iconType == QMessageBox::Question || m_iconType == QMessageBox::Information)
+                icon = ColorizedSvgIcon(m_iconType == QMessageBox::Question ? QStringLiteral(":/menu/help.svg") : QStringLiteral(":/menu/info.svg"), {}, {}, {},
+                    {{QStringLiteral("#ff950d"), palette().color(QPalette::Highlight).name()}, {QStringLiteral("#fafafa"), palette().color(QPalette::Window).name()}});
+            else icon = style()->standardIcon(m_iconType == QMessageBox::Warning ? QStyle::SP_MessageBoxWarning : QStyle::SP_MessageBoxCritical);
+            m_icon->setPixmap(icon.pixmap(QSize(dp(32), dp(32)), devicePixelRatioF()));
+        }
+        updateActions();
+        if (screen()) resize(size().boundedTo(screen()->availableGeometry().size() - QSize(dp(32), dp(32))));
+    }
+    QPointer<MainCtx> m_ctx;
+    QString m_text;
+    QString m_acceptText;
+    QMessageBox::Icon m_iconType;
+    QLabel *m_icon;
+    QTextBrowser *m_body;
+    QWidget *m_footer;
+    QBoxLayout *m_actions;
+    QDialogButtonBox *m_buttons;
+    QPushButton *m_copy;
+    QTimer *m_copyTimer;
+    QDialogButtonBox::StandardButton m_escape = QDialogButtonBox::NoButton;
+};
+}
 
 #define I_OP_DIR_WINTITLE I_DIR_OR_FOLDER( N_("Open Directory"), \
                                            N_("Open Folder") )
@@ -141,13 +362,53 @@ QVariant DialogsProvider::getTextDialog(QWidget *parent,
                                         const QString &placeholder,
                                         bool *ok)
 {
-    bool _ok = false;
-    QString ret = QInputDialog::getText(parent,
-                                        title,
-                                        label,
-                                        QLineEdit::Normal,
-                                        placeholder,
-                                        ok ? ok : &_ok);
+    QInputDialog dialog(parent);
+    dialog.setObjectName(QStringLiteral("redesignTextInput"));
+    dialog.setWindowRole("vlc-text-input");
+    dialog.setWindowTitle(title);
+    dialog.setInputMode(QInputDialog::TextInput);
+    dialog.setLabelText(label);
+    dialog.setTextEchoMode(QLineEdit::Normal);
+    dialog.setTextValue(placeholder);
+    // Create the actions before applying the theme and measuring the form.
+    dialog.setOkButtonText(qtr("OK"));
+    dialog.setCancelButtonText(qtr("Cancel"));
+    for (auto *caption : dialog.findChildren<QLabel*>())
+    {
+        caption->setTextFormat(Qt::PlainText);
+        caption->setWordWrap(true);
+    }
+    QVLCDialog::setWindowTransientParent(&dialog, parent ? parent->window()->windowHandle() : nullptr, p_intf);
+    applyRedesignWidgetTheme(&dialog, p_intf->p_mi);
+    const auto metrics = [&dialog, ctx = QPointer<MainCtx>(p_intf->p_mi)] {
+        const auto dp = [ctx](int value) { return qRound(value * (ctx ? ctx->getIntfScaleFactor() : 1)); };
+        if (auto *layout = dialog.layout())
+        {
+            layout->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
+            layout->setSpacing(dp(12));
+        }
+        dialog.setMinimumWidth(dp(360));
+        for (auto *button : dialog.findChildren<QPushButton*>()) button->setIcon({});
+        if (dialog.screen()) dialog.resize(dialog.size().boundedTo(dialog.screen()->availableGeometry().size() - QSize(dp(32), dp(32))));
+    };
+    if (auto *ctx = p_intf->p_mi)
+    {
+        connect(ctx, &MainCtx::intfScaleFactorChanged, &dialog, metrics);
+        connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, &dialog, metrics);
+    }
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, &dialog, [&dialog, metrics] {
+            dialog.setOkButtonText(qtr("OK"));
+            dialog.setCancelButtonText(qtr("Cancel"));
+            metrics();
+        });
+    metrics();
+    QSize preferred(qRound(480 * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)), dialog.sizeHint().height());
+    if (dialog.screen()) preferred = preferred.boundedTo(dialog.screen()->availableGeometry().size());
+    dialog.resize(preferred);
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    const QString ret = accepted ? dialog.textValue() : QString();
+    if (ok) *ok = accepted;
 
     if (!ok)
     {
@@ -156,7 +417,7 @@ QVariant DialogsProvider::getTextDialog(QWidget *parent,
 
         QVariantMap map;
         map["text"] = ret;
-        map["ok"] = _ok;
+        map["ok"] = accepted;
         return map;
     }
     else
@@ -524,20 +785,11 @@ void DialogsProvider::mediaInfoDialog( const MLItemId& itemId )
     }
 }
 
-bool DialogsProvider::questionDialog(const QString& text, const QString &title) const
+bool DialogsProvider::questionDialog(const QString& text, const QString &title, const QString &acceptText) const
 {
-    QMessageBox messageBox;
-    messageBox.setText(text);
-    if (!title.isEmpty())
-        messageBox.setWindowTitle(title);
-    messageBox.setIcon(QMessageBox::Question);
-    messageBox.setStandardButtons(QMessageBox::StandardButtons(QMessageBox::Yes | QMessageBox::No));
-    messageBox.setDefaultButton(QMessageBox::No);
-
-    QVLCDialog::setWindowTransientParent(&messageBox, nullptr, p_intf);
-    applyRedesignWidgetTheme(&messageBox, p_intf->p_mi);
-
-    int result = messageBox.exec();
+    NativeMessageDialog dialog(p_intf, text, title, QMessageBox::Yes | QMessageBox::No,
+                               QMessageBox::No, QMessageBox::Question, acceptText);
+    int result = dialog.exec();
     return result == QMessageBox::Yes;
 }
 
@@ -557,26 +809,8 @@ QMessageBox::StandardButton DialogsProvider::messageDialog(const QString &text,
                                                            const QMessageBox::StandardButton defaultButton,
                                                            const QMessageBox::Icon icon)
 {
-    QMessageBox messageBox;
-
-    messageBox.setText(text);
-
-    if (!title.isEmpty())
-        messageBox.setWindowTitle(title);
-
-    if (icon != QMessageBox::NoIcon)
-        messageBox.setIcon(icon);
-
-    if (buttons != QMessageBox::NoButton)
-        messageBox.setStandardButtons(buttons);
-
-    if (defaultButton != QMessageBox::NoButton)
-        messageBox.setDefaultButton(defaultButton);
-
-    QVLCDialog::setWindowTransientParent(&messageBox, nullptr, p_intf);
-
-    applyRedesignWidgetTheme(&messageBox, p_intf->p_mi);
-    return static_cast<QMessageBox::StandardButton>(messageBox.exec());
+    NativeMessageDialog dialog(p_intf, text, title, buttons, defaultButton, icon);
+    return static_cast<QMessageBox::StandardButton>(dialog.exec());
 }
 
 void DialogsProvider::playlistsDialog( const QVariantList & medias, MLPlaylistListModel::PlaylistType type )

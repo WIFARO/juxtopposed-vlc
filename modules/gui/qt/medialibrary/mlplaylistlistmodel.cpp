@@ -394,7 +394,7 @@ void MLPlaylistListModel::saveSelection(const MLItemId& playlistId, const QStrin
 
     QString name = playlist->getName();
 
-    static DialogsProvider * provider = DialogsProvider::getInstance();
+    auto *provider = DialogsProvider::getInstance();
 
     bool ok = false;
 

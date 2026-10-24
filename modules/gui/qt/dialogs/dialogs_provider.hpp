@@ -150,7 +150,7 @@ public:
                                     const QString &filter = QString(),
                                     QString *selectedFilter = NULL );
 
-    Q_INVOKABLE static QVariant getTextDialog(QWidget *parent, const QString& title,
+    Q_INVOKABLE QVariant getTextDialog(QWidget *parent, const QString& title,
                                               const QString& label,
                                               const QString& placeholder,
                                               bool* ok = nullptr);
@@ -218,7 +218,7 @@ public slots:
     void mediaInfoDialog( const PlaylistItem& pItem );
     void mediaInfoDialog( const MLItemId& itemId );
     void mediaCodecDialog();
-    bool questionDialog(const QString& text, const QString& title = {}) const;
+    bool questionDialog(const QString& text, const QString& title = {}, const QString& acceptText = {}) const;
     QMessageBox::StandardButton messageDialog(const QString& text,
                                               const QString& title = {},
                                               const QMessageBox::StandardButtons buttons = QMessageBox::NoButton,

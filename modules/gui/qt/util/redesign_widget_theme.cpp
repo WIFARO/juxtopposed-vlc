@@ -90,6 +90,8 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QWidget#aboutWidget QToolButton:focus { border-color: %2; }"
             "QWidget#aboutWidget QToolButton#checkUpdatesButton:focus { border-color: %2; }"
             "QWidget#aboutWidget QPlainTextEdit#licensePage { font-family: 'DM Mono'; }"
+            "QWidget#redesignNativeMessage QTextEdit#messageBody { padding: 0; border-radius: %14px; }"
+            "QWidget#redesignNativeMessage QPushButton, QWidget#redesignTextInput QPushButton { min-height: %17px; max-height: %17px; padding: %16px %15px; border-radius: %16px; }"
             "QLabel#metadataCover { background: %4; color: %2; border-radius: %16px; }"
             "QLabel[redesignHeading=\"true\"] { color: %5; font-size: %13px; }"
             "QWidget#mediaStatistics QFrame[redesignCard=\"true\"], QWidget#redesignConvert QFrame[redesignCard=\"true\"] { background: %4; border: 1px solid %6; border-radius: %16px; }"
