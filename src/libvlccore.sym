@@ -673,6 +673,7 @@ vlc_ml_genre_list_release
 vlc_ml_group_list_release
 vlc_ml_playlist_list_release
 vlc_ml_folder_list_release
+vlc_ml_playback_states_all_release
 vlc_ml_bookmark_release
 vlc_ml_bookmark_list_release
 vlc_poll_i11e
@@ -980,6 +981,7 @@ vlc_player_SetEsIdDelay
 vlc_player_SetRecordingEnabled
 vlc_player_SetRenderer
 vlc_player_SetStartPaused
+vlc_player_SetPauseOnCork
 vlc_player_SetPlayAndPause
 vlc_player_SetRepeatCount
 vlc_player_SetSubtitleTextScale
