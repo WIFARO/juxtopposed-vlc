@@ -73,6 +73,9 @@
 #include <QSignalMapper>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QDir>
+#include <QTemporaryFile>
+#include <QSaveFile>
 #include <QUrl>
 #include <QInputDialog>
 #include <QPointer>
@@ -97,6 +100,30 @@
 #include <utility>
 
 namespace {
+// Keep the original destination until the exporter and the final write succeed.
+// The temporary file is in the destination folder so relative media paths agree.
+bool exportPlayQueue(qt_intf_t *intf, const QString &file, const char *format)
+{
+    const QFileInfo destination(file);
+    QTemporaryFile temporary(destination.dir().filePath(QStringLiteral(".vlc-export-XXXXXX")));
+    if (!temporary.open()) return false;
+    temporary.close();
+    int status;
+    {
+        vlc::playlist::vlc_playlist_locker lock { intf->p_playlist };
+        status = vlc_playlist_Export(intf->p_playlist, qtu(temporary.fileName()), format);
+    }
+    if (status != VLC_SUCCESS) return false;
+    QFile input(temporary.fileName());
+    QSaveFile output(file);
+    if (!input.open(QIODevice::ReadOnly) || !output.open(QIODevice::WriteOnly)) return false;
+    while (!input.atEnd()) {
+        const auto bytes = input.read(65536);
+        if (bytes.isEmpty() || output.write(bytes) != bytes.size()) return false;
+    }
+    return input.error() == QFile::NoError && output.commit();
+}
+
 // The clipboard can contain a list, so keep editing and review in one step.
 class NativeMediaListDialog final : public QVLCDialog
 {
@@ -1471,76 +1498,57 @@ void DialogsProvider::exportLibraryPlaylistDialog(const MLItemId& playlist, cons
 
 void DialogsProvider::savePlayingToPlaylist()
 {
-    static const struct
-    {
-        char filter_name[14];
-        char filter_patterns[5];
-        char module[12];
-    } types[] = {
-        { N_("XSPF playlist"), "xspf", "export-xspf", },
-        { N_("M3U playlist"),  "m3u",  "export-m3u", },
-        { N_("M3U8 playlist"), "m3u8", "export-m3u8", },
-        { N_("HTML playlist"), "html", "export-html", },
-    };
-
-    QStringList filters;
-    QString ext = getSettings()->value( "last-playlist-ext" ).toString();
-
-    for( size_t i = 0; i < ARRAY_SIZE(types); i++ )
-    {
-        QString tmp = qfut( types[i].filter_name ) + " (*." + types[i].filter_patterns + ")";
-        if( ext == qfu( types[i].filter_patterns ) )
-            filters.insert( 0, tmp );
-        else
-            filters.append( tmp );
-    }
-
-    QString selected;
-    QString file = getSaveFileName( NULL,
-                                    qtr( "Save play queue as..." ),
-                                    p_intf->p_mi->getDialogFilePath(), filters.join( ";;" ),
-                                    &selected );
-    const char *psz_selected_module = NULL;
-    const char *psz_last_playlist_ext = NULL;
-
-    if( file.isEmpty() )
-        return;
-
-    /* First test if the file extension is set, and different to selected filter */
-    for( size_t i = 0; i < ARRAY_SIZE(types); i++)
-    {
-        if ( file.endsWith( QString( "." ) + qfu( types[i].filter_patterns ) ) )
-        {
-            psz_selected_module = types[i].module;
-            psz_last_playlist_ext = types[i].filter_patterns;
-            break;
+    const QPointer<MainCtx> context = p_intf->p_mi;
+    if (!context) return;
+    const bool shortcuts = context->getUseGlobalShortcuts();
+    context->setUseGlobalShortcuts(false);
+    const auto restoreShortcuts = qScopeGuard([context, shortcuts] {
+        if (context) context->setUseGlobalShortcuts(shortcuts);
+    });
+    const QStringList extensions {"xspf", "m3u", "m3u8", "html"};
+    const QStringList filters {qtr("XSPF playlist (*.xspf)"), qtr("M3U playlist (*.m3u)"),
+                               qtr("M3U8 playlist (*.m3u8)"), qtr("HTML playlist (*.html)")};
+    int preferred = extensions.indexOf(getSettings()->value("last-playlist-ext").toString());
+    if (preferred < 0) preferred = 2;
+    QFileDialog dialog(nullptr, qtr("Save play queue as..."));
+    dialog.setObjectName(QStringLiteral("savePlayQueue"));
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    dialog.setFileMode(QFileDialog::AnyFile);
+    dialog.setSupportedSchemes({QStringLiteral("file")});
+    dialog.setNameFilters(filters);
+    dialog.selectNameFilter(filters[preferred]);
+    dialog.setDefaultSuffix(extensions[preferred]);
+    connect(&dialog, &QFileDialog::filterSelected, &dialog, [&dialog, filters, extensions](const QString &filter) {
+        const int index = filters.indexOf(filter);
+        if (index >= 0) dialog.setDefaultSuffix(extensions[index]);
+    });
+    auto directory = context->getDialogFilePath();
+    if (directory.isLocalFile() && QFileInfo(directory.toLocalFile()).isFile())
+        directory = directory.adjusted(QUrl::RemoveFilename);
+    dialog.setDirectoryUrl(directory);
+    if (auto *buttons = dialog.findChild<QDialogButtonBox*>())
+        if (auto *save = buttons->button(QDialogButtonBox::Save)) save->setProperty("redesignPrimary", true);
+    applyRedesignWidgetTheme(&dialog, context);
+    QVLCDialog::setWindowTransientParent(&dialog, nullptr, p_intf);
+    while (context && dialog.exec() == QDialog::Accepted) {
+        if (!context || dialog.selectedUrls().isEmpty()) return;
+        const QUrl file = dialog.selectedUrls().first();
+        if (!file.isLocalFile()) return;
+        int index = extensions.indexOf(QFileInfo(file.toLocalFile()).suffix().toLower());
+        if (index < 0) index = filters.indexOf(dialog.selectedNameFilter());
+        if (index < 0) return;
+        const QByteArray format = QByteArray("export-") + extensions[index].toLatin1();
+        if (exportPlayQueue(p_intf, file.toLocalFile(), format.constData())) {
+            context->setDialogFilePath(file);
+            getSettings()->setValue("last-playlist-ext", extensions[index]);
+            return;
         }
-    }
-
-    /* otherwise apply the selected extension */
-    if ( !psz_last_playlist_ext )
-    {
-        for( size_t i = 0; i < ARRAY_SIZE(types); i++)
-        {
-            if ( selected.startsWith( qfut( types[i].filter_name ) ) )
-            {
-                psz_selected_module = types[i].module;
-                psz_last_playlist_ext = types[i].filter_patterns;
-                /* Fix file extension */
-                file = file.append( QString( "." ) + qfu( psz_last_playlist_ext ) );
-                break;
-            }
-        }
-    }
-
-    if ( psz_selected_module )
-    {
-        vlc_playlist_Lock( p_intf->p_playlist  );
-        vlc_playlist_Export( p_intf->p_playlist,
-                             qtu( toNativeSeparators( file ) ),
-                             psz_selected_module );
-        vlc_playlist_Unlock( p_intf->p_playlist  );
-        getSettings()->setValue( "last-playlist-ext", psz_last_playlist_ext );
+        const auto answer = messageDialog(
+            qtr("VLC cannot save this file.\n\n%1\n\nVLC did not change the play queue. Select another file or folder.")
+                .arg(toNativeSeparators(file.toLocalFile())),
+            qtr("Save play queue"), QMessageBox::Yes | QMessageBox::Cancel,
+            QMessageBox::Cancel, QMessageBox::Warning, nullptr, qtr("Select file"));
+        if (answer != QMessageBox::Yes) return;
     }
 }
 
