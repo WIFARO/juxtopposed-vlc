@@ -50,6 +50,9 @@
 #include <QSignalBlocker>
 #include <QHideEvent>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QLineEdit>
+#include <QLocale>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include "util/interface_translator.hpp"
@@ -318,8 +321,11 @@ void ExtVideo::clean()
 static QString ChangeFiltersString( qt_intf_t *p_intf, const char *psz_filter_type, const char *psz_name, bool b_add )
 {
     char *psz_chain = nullptr;
-    if (const auto vout = THEMIM->getVout(); vout != nullptr)
-        psz_chain = var_GetString( vout.get(), psz_filter_type );
+    if (!strcmp(psz_filter_type, "audio-filter")) {
+        if (const auto output = THEMIM->getAout()) psz_chain = var_GetString(output.get(), psz_filter_type);
+        if (!psz_chain) psz_chain = var_InheritString(p_intf, psz_filter_type);
+    } else if (const auto vout = THEMIM->getVout(); vout != nullptr)
+        psz_chain = var_GetString(vout.get(), psz_filter_type);
 
     QString const chain = QString( psz_chain ? psz_chain : "" );
     QStringList list = chain.split( ':', Qt::SkipEmptyParts );
@@ -1169,54 +1175,268 @@ void AudioFilterControlWidget::connectConfigChanged( FilterSliderData *slider )
     connect( slider, &FilterSliderData::configChanged, this, &AudioFilterControlWidget::configChanged );
 }
 
+namespace {
+double audioFilterValue(float value)
+{
+    // Do not expose binary float noise in values such as 0.3 or 30 percent.
+    return QString::number(value, 'g', 7).toDouble();
+}
+
+class AudioFilterSpinBox final : public QDoubleSpinBox
+{
+public:
+    explicit AudioFilterSpinBox(QWidget* parent) : QDoubleSpinBox(parent) { lineEdit()->installEventFilter(this); }
+    void setResetValue(QSlider* slider, double value) { m_slider = slider; m_reset = value; slider->installEventFilter(this); }
+    void resetValue() { setValue(m_reset); }
+protected:
+    QString textFromValue(double value) const override
+    {
+        auto format = locale();
+        format.setNumberOptions(format.numberOptions() | QLocale::OmitGroupSeparator);
+        auto text = format.toString(value, 'f', decimals());
+        while (text.contains(format.decimalPoint()) && text.endsWith(format.zeroDigit())) text.chop(format.zeroDigit().size());
+        if (text.endsWith(format.decimalPoint())) text.chop(format.decimalPoint().size());
+        return text;
+    }
+    bool event(QEvent* event) override
+    {
+        if (event->type() == QEvent::ShortcutOverride) {
+            const auto key = static_cast<QKeyEvent*>(event)->key();
+            if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Escape || static_cast<QKeyEvent*>(event)->matches(QKeySequence::Save)) {
+                event->accept();
+                return true;
+            }
+        }
+        return QDoubleSpinBox::event(event);
+    }
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (watched == m_slider && event->type() == QEvent::MouseButtonDblClick) { resetValue(); return true; }
+        if (watched == lineEdit() && event->type() == QEvent::KeyPress && handleKey(static_cast<QKeyEvent*>(event))) return true;
+        return QDoubleSpinBox::eventFilter(watched, event);
+    }
+    void keyPressEvent(QKeyEvent* event) override
+    {
+        if (!handleKey(event)) QDoubleSpinBox::keyPressEvent(event);
+    }
+private:
+    QPointer<QSlider> m_slider;
+    double m_reset = 0;
+    bool handleKey(QKeyEvent* event)
+    {
+        if (event->matches(QKeySequence::Save)) {
+            if (hasAcceptableInput()) {
+                interpretText();
+                if (auto* save = window()->findChild<QPushButton*>(QStringLiteral("saveEffects")); save && save->isVisible()) save->click();
+            }
+        } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            if (hasAcceptableInput()) interpretText();
+            lineEdit()->selectAll();
+        } else if (event->key() == Qt::Key_Escape) {
+            setValue(value());
+            lineEdit()->setModified(false);
+            clearFocus();
+        } else return false;
+        event->accept();
+        return true;
+    }
+};
+
+const char* audioFilterTitle(const QString& name)
+{
+    if (name == QLatin1String("compressor")) return N_("Compressor");
+    if (name == QLatin1String("expander")) return N_("Expander");
+    if (name == QLatin1String("limiter")) return N_("Limiter");
+    if (name == QLatin1String("spatializer")) return N_("Spatializer");
+    if (name == QLatin1String("stereo_widen")) return N_("Stereo widening");
+    if (name == QLatin1String("scaletempo_pitch")) return N_("Pitch shift");
+    return N_("Stereo pan");
+}
+
+const char* audioFilterDescription(const QString& name)
+{
+    if (name == QLatin1String("compressor")) return N_("Reduce the level of loud sounds.");
+    if (name == QLatin1String("expander")) return N_("Reduce the level of quiet sounds.");
+    if (name == QLatin1String("limiter")) return N_("Keep loud sounds below a set level.");
+    if (name == QLatin1String("spatializer")) return N_("Add room sound to the audio.");
+    if (name == QLatin1String("stereo_widen")) return N_("Change how wide stereo sound is.");
+    if (name == QLatin1String("scaletempo_pitch")) return N_("Change the pitch of the sound.");
+    return N_("Move sound between the left and right channels.");
+}
+}
+
 void AudioFilterControlWidget::build()
 {
-    QFont smallFont = QApplication::font();
-    smallFont.setPointSize( smallFont.pointSize() + i_smallfont );
+    setObjectName(QStringLiteral("audioFilterControls"));
+    setProperty("audioFilterName", name);
+    auto* ctx = p_intf->p_mi;
+    applyRedesignWidgetTheme(this, ctx);
+    auto* layout = new QVBoxLayout(this);
+    auto* heading = new QHBoxLayout;
+    auto* title = new QLabel(this);
+    title->setProperty("redesignSectionHeading", true);
+    auto* enabled = new QCheckBox(this);
+    enabled->setObjectName(QStringLiteral("audioFilterEnabled"));
+    heading->addWidget(title, 1);
+    heading->addWidget(enabled);
+    layout->addLayout(heading);
+    auto* description = new QLabel(this);
+    description->setWordWrap(true);
+    layout->addWidget(description);
+    auto* unavailable = new QLabel(this);
+    unavailable->setObjectName(QStringLiteral("audioFilterUnavailable"));
+    unavailable->setWordWrap(true);
+    const bool available = module_exists(qtu(name));
+    unavailable->setVisible(!available);
+    enabled->setEnabled(available);
+    layout->addWidget(unavailable);
 
-    QVBoxLayout *layout = new QVBoxLayout( this );
-    slidersBox = new QGroupBox( qtr( "Enable" ) );
-    slidersBox->setCheckable( true );
-    layout->addWidget( slidersBox );
-
-    QGridLayout *ctrlLayout = new QGridLayout( slidersBox );
-
-    int i = 0;
-    foreach( const FilterSliderData::slider_data_t &data, controls )
+    auto* scroll = new QScrollArea(this);
+    scroll->setObjectName(QStringLiteral("audioFilterScroll"));
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* content = new QWidget(scroll);
+    auto* body = new QVBoxLayout(content);
+    body->setContentsMargins(0, 0, 0, 0);
+    scroll->setWidget(content);
+    layout->addWidget(scroll, 1);
+    QVector<QDoubleSpinBox*> editors;
+    QVector<QGridLayout*> rows;
+    for (const auto& data : controls)
     {
-        QSlider *slider = new QSlider( Qt::Vertical );
-        QLabel *valueLabel = new QLabel();
-        valueLabel->setFont( smallFont );
-        valueLabel->setAlignment( Qt::AlignHCenter );
-        QLabel *nameLabel = new QLabel();
-        nameLabel->setFont( smallFont );
-        nameLabel->setAlignment( Qt::AlignHCenter );
-        FilterSliderData *filter =
-            new FilterSliderData( this, p_intf,
-                                  slider, valueLabel, nameLabel, & data );
-        ctrlLayout->addWidget( slider, 0, i, Qt::AlignHCenter );
-        ctrlLayout->addWidget( valueLabel, 1, i, Qt::AlignHCenter );
-        ctrlLayout->addWidget( nameLabel, 2, i, Qt::AlignHCenter );
-        i++;
-        sliderDatas << filter;
-        connectConfigChanged( filter );
+        auto* card = new QFrame(content);
+        card->setProperty("redesignCard", true);
+        auto* row = new QGridLayout(card);
+        rows.append(row);
+        auto* label = new QLabel(card);
+        label->setObjectName(data.name + QStringLiteral("Label"));
+        label->setWordWrap(true);
+        auto* slider = new QSlider(Qt::Horizontal, card);
+        slider->setObjectName(data.name + QStringLiteral("Slider"));
+        slider->setMinimum(qRound(data.f_min / data.f_resolution));
+        slider->setMaximum(qRound(data.f_max / data.f_resolution));
+        slider->setSingleStep(1);
+        auto* value = new AudioFilterSpinBox(card);
+        value->setObjectName(data.name + QStringLiteral("Value"));
+        value->setDecimals(6);
+        value->setKeyboardTracking(false);
+        value->setRange(audioFilterValue(data.f_min) * data.f_visual_multiplier, audioFilterValue(data.f_max) * data.f_visual_multiplier);
+        value->setSingleStep(audioFilterValue(data.f_resolution) * data.f_visual_multiplier);
+        const auto* original = config_FindConfig(qtu(data.name));
+        value->setResetValue(slider, audioFilterValue(original && original->i_type == CONFIG_ITEM_FLOAT
+            ? original->orig.f : data.f_value) * data.f_visual_multiplier);
+        double initial = data.f_value;
+        if (const auto output = THEMIM->getAout(); output && var_Type(output.get(), qtu(data.name)) == VLC_VAR_FLOAT)
+            initial = var_GetFloat(output.get(), qtu(data.name));
+        else if (config_FindConfig(qtu(data.name))) initial = config_GetFloat(qtu(data.name));
+        if (!std::isfinite(initial)) initial = data.f_value;
+        value->setValue(audioFilterValue(initial) * data.f_visual_multiplier);
+        slider->setValue(qRound(initial / data.f_resolution));
+        editors.append(value);
+        label->setBuddy(value);
+        row->addWidget(label, 0, 0, 1, 2);
+        row->addWidget(slider, 1, 0);
+        row->addWidget(value, 1, 1);
+        row->setColumnStretch(0, 1);
+        body->addWidget(card);
+        connect(slider, &QSlider::valueChanged, value, [value, data](int position) {
+            value->setValue(position * double(data.f_resolution) * data.f_visual_multiplier);
+        });
+        connect(value, &QDoubleSpinBox::valueChanged, this, [this, slider, data](double displayed) {
+            const float actual = displayed / data.f_visual_multiplier;
+            const QSignalBlocker block(slider);
+            slider->setValue(qRound(actual / data.f_resolution));
+            if (const auto output = THEMIM->getAout()) {
+                if (var_Type(output.get(), qtu(data.name)) == 0)
+                    var_Create(output.get(), qtu(data.name), VLC_VAR_FLOAT | VLC_VAR_DOINHERIT);
+                var_SetFloat(output.get(), qtu(data.name), actual);
+            }
+            emit configChanged(data.name, QVariant(actual));
+        });
     }
-
-    char *psz_af = var_InheritString( p_intf, "audio-filter" );
-
-    if( psz_af && filterIsPresent( qfu(psz_af), name ) )
-        slidersBox->setChecked( true );
-    else
-        slidersBox->setChecked( false );
-    connect( slidersBox, &QGroupBox::toggled, this, &AudioFilterControlWidget::enable );
-
-    free( psz_af );
+    body->addStretch();
+    auto* footer = new QHBoxLayout;
+    auto* hint = new QLabel(this);
+    hint->setWordWrap(true);
+    auto* reset = new QPushButton(this);
+    reset->setObjectName(QStringLiteral("resetAudioFilter"));
+    reset->setAutoDefault(false);
+    footer->addWidget(hint, 1);
+    footer->addWidget(reset);
+    layout->addLayout(footer);
+    const auto refreshText = [this, title, description, enabled, unavailable, hint, reset, editors] {
+        title->setText(qtr(audioFilterTitle(name)));
+        description->setText(qtr(audioFilterDescription(name)));
+        enabled->setText(qtr("Enable"));
+        enabled->setAccessibleName(qtr("Enable %1").arg(title->text()));
+        unavailable->setText(qtr("This audio filter is not available in this build."));
+        hint->setText(qtr("Changes apply now. Select Save to keep them."));
+        reset->setText(qtr("Reset values"));
+        reset->setAccessibleName(qtr("Reset %1").arg(title->text()));
+        for (int i = 0; i < controls.size(); ++i) {
+            const auto& data = controls[i];
+            const auto label = qtr(qtu(data.descs));
+            findChild<QLabel*>(data.name + QStringLiteral("Label"))->setText(label);
+            auto* editor = editors[i];
+            // Keep a value that is still being typed when the language changes.
+            auto* input = editor->findChild<QLineEdit*>();
+            const bool draft = input->isModified();
+            auto text = input->text();
+            const auto oldSuffix = editor->suffix();
+            if (!oldSuffix.isEmpty() && text.endsWith(oldSuffix)) text.chop(oldSuffix.size());
+            const int cursor = input->cursorPosition();
+            const int selection = input->selectionStart();
+            const int selected = input->selectedText().size();
+            const auto space = data.units == QLatin1String(":1") || data.units == QLatin1String("%") ? QString() : QStringLiteral(" ");
+            editor->setSuffix(data.units.isEmpty() ? QString() : space + qtr(qtu(data.units)));
+            if (draft) {
+                input->setText(text + editor->suffix());
+                input->setCursorPosition(qMin(cursor, text.size()));
+                if (selection >= 0) input->setSelection(selection, qMin(selected, text.size() - selection));
+                input->setModified(true);
+            }
+            editor->setAccessibleName(label);
+            findChild<QSlider*>(data.name + QStringLiteral("Slider"))->setAccessibleName(label);
+        }
+    };
+    const auto metrics = [ctx, layout, body, rows, editors, scroll] {
+        const auto dp = [ctx](int n) { return qRound(n * (ctx ? ctx->getIntfScaleFactor() : 1.0)); };
+        layout->setContentsMargins(dp(16), dp(16), dp(16), dp(16));
+        layout->setSpacing(dp(12));
+        body->setSpacing(dp(8));
+        scroll->setMinimumHeight(dp(120));
+        for (auto* row : rows) { row->setContentsMargins(dp(12), dp(10), dp(12), dp(10)); row->setVerticalSpacing(dp(6)); }
+        for (auto* editor : editors) editor->setFixedWidth(dp(140));
+    };
+    if (ctx) connect(ctx, &MainCtx::intfScaleFactorChanged, this, metrics);
+    if (auto* translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, refreshText);
+    refreshText();
+    metrics();
+    char* chain = nullptr;
+    if (const auto output = THEMIM->getAout()) chain = var_GetString(output.get(), "audio-filter");
+    if (!chain) chain = var_InheritString(p_intf, "audio-filter");
+    enabled->setChecked(filterIsPresent(qfu(chain ? chain : ""), name));
+    enabled->setEnabled(available || enabled->isChecked());
+    free(chain);
+    content->setEnabled(available && enabled->isChecked());
+    reset->setEnabled(available && enabled->isChecked());
+    connect(enabled, &QCheckBox::toggled, this, [content, reset, enabled, available](bool checked) {
+        content->setEnabled(available && checked);
+        reset->setEnabled(available && checked);
+        enabled->setEnabled(available || checked);
+    });
+    connect(enabled, &QCheckBox::toggled, this, &AudioFilterControlWidget::enable);
+    connect(reset, &QPushButton::clicked, this, [this, editors] {
+        for (auto* editor : editors) static_cast<AudioFilterSpinBox*>(editor)->resetValue();
+    });
 }
 
 void AudioFilterControlWidget::enable( bool b_enable )
 {
     module_t *p_obj = module_find( qtu(name) );
-    if( !p_obj )
+    if( b_enable && !p_obj )
     {
         msg_Err( p_intf, "Unable to find filter module \"%s\".", qtu(name) );
         return;
@@ -1224,6 +1444,9 @@ void AudioFilterControlWidget::enable( bool b_enable )
 
     QString result = ChangeFiltersString( p_intf, "audio-filter", qtu(name),
                                           b_enable );
+    if (var_Type(p_intf, "audio-filter") == 0)
+        var_Create(p_intf, "audio-filter", VLC_VAR_STRING | VLC_VAR_DOINHERIT);
+    var_SetString(p_intf, "audio-filter", qtu(result));
     emit configChanged( qfu("audio-filter"), result );
     vlc_player_aout_EnableFilter( p_intf->p_player, qtu(name), b_enable );
 }
@@ -1545,13 +1768,13 @@ Compressor::Compressor( qt_intf_t *p_intf, QWidget *parent )
     i_smallfont = -2;
     const FilterSliderData::slider_data_t a[7] =
     {
-        { "compressor-rms-peak",    qtr("RMS/peak"),         "",       0.0f,   1.0f,   0.00f, 0.001f, 1.0 },
-        { "compressor-attack",      qtr("Attack"),       qtr("ms"),   1.5f, 400.0f,  25.00f, 0.100f, 1.0 },
-        { "compressor-release",     qtr("Release"),      qtr("ms"),   2.0f, 800.0f, 100.00f, 0.100f, 1.0 },
-        { "compressor-threshold",   qtr("Threshold"),    qtr("dB"), -30.0f,   0.0f, -11.00f, 0.010f, 1.0 },
-        { "compressor-ratio",       qtr("Ratio"),            ":1",     1.0f,  20.0f,   8.00f, 0.010f, 1.0 },
-        { "compressor-knee",        qtr("Knee\nradius"), qtr("dB"),   1.0f,  10.0f,   2.50f, 0.010f, 1.0 },
-        { "compressor-makeup-gain", qtr("Makeup\ngain"), qtr("dB"),   0.0f,  24.0f,   7.00f, 0.010f, 1.0 },
+        { "compressor-rms-peak",    qfu(N_("RMS/peak")),         "",       0.0f,   1.0f,   0.00f, 0.001f, 1.0 },
+        { "compressor-attack",      qfu(N_("Attack")),       qfu(N_("ms")),   1.5f, 400.0f,  25.00f, 0.100f, 1.0 },
+        { "compressor-release",     qfu(N_("Release")),      qfu(N_("ms")),   2.0f, 800.0f, 100.00f, 0.100f, 1.0 },
+        { "compressor-threshold",   qfu(N_("Threshold")),    qfu(N_("dB")), -30.0f,   0.0f, -11.00f, 0.010f, 1.0 },
+        { "compressor-ratio",       qfu(N_("Ratio")),            ":1",     1.0f,  20.0f,   8.00f, 0.010f, 1.0 },
+        { "compressor-knee",        qfu(N_("Knee radius")), qfu(N_("dB")),   1.0f,  10.0f,   2.50f, 0.010f, 1.0 },
+        { "compressor-makeup-gain", qfu(N_("Makeup gain")), qfu(N_("dB")),   0.0f,  24.0f,   7.00f, 0.010f, 1.0 },
     };
     for( int i=0; i<7 ;i++ ) controls.append( a[i] );
     build();
@@ -1567,13 +1790,13 @@ Expander::Expander( qt_intf_t *p_intf, QWidget *parent )
     i_smallfont = -2;
     const FilterSliderData::slider_data_t a[7] =
     {
-        { "expander-rms-peak",    qtr("RMS/peak"),         "",       0.0f,   1.0f,   0.20f, 0.001f, 1.0 },
-        { "expander-attack",      qtr("Attack"),       qtr("ms"),   1.5f, 400.0f,  25.00f, 0.100f, 1.0 },
-        { "expander-release",     qtr("Release"),      qtr("ms"),   2.0f, 800.0f, 100.00f, 0.100f, 1.0 },
-        { "expander-threshold",   qtr("Threshold"),    qtr("dB"), -60.0f,   0.0f, -25.00f, 0.010f, 1.0 },
-        { "expander-ratio",       qtr("Ratio"),            ":1",     1.0f,  20.0f,   2.00f, 0.010f, 1.0 },
-        { "expander-knee",        qtr("Knee\nradius"), qtr("dB"),   1.0f,  10.0f,   5.00f, 0.010f, 1.0 },
-        { "expander-makeup-gain", qtr("Makeup\ngain"), qtr("dB"),   0.0f,  24.0f,   0.00f, 0.010f, 1.0 },
+        { "expander-rms-peak",    qfu(N_("RMS/peak")),         "",       0.0f,   1.0f,   0.20f, 0.001f, 1.0 },
+        { "expander-attack",      qfu(N_("Attack")),       qfu(N_("ms")),   1.5f, 400.0f,  25.00f, 0.100f, 1.0 },
+        { "expander-release",     qfu(N_("Release")),      qfu(N_("ms")),   2.0f, 800.0f, 100.00f, 0.100f, 1.0 },
+        { "expander-threshold",   qfu(N_("Threshold")),    qfu(N_("dB")), -60.0f,   0.0f, -25.00f, 0.010f, 1.0 },
+        { "expander-ratio",       qfu(N_("Ratio")),            ":1",     1.0f,  20.0f,   2.00f, 0.010f, 1.0 },
+        { "expander-knee",        qfu(N_("Knee radius")), qfu(N_("dB")),   1.0f,  10.0f,   5.00f, 0.010f, 1.0 },
+        { "expander-makeup-gain", qfu(N_("Makeup gain")), qfu(N_("dB")),   0.0f,  24.0f,   0.00f, 0.010f, 1.0 },
     };
     for( int i=0; i<7 ;i++ ) controls.append( a[i] );
     build();
@@ -1589,13 +1812,13 @@ Limiter::Limiter( qt_intf_t *p_intf, QWidget *parent )
     i_smallfont = -2;
     const FilterSliderData::slider_data_t a[7] =
     {
-        { "limiter-rms-peak",    qtr("RMS/peak"),         "",       0.0f,   1.0f,   1.00f, 0.001f, 1.0 },
-        { "limiter-attack",      qtr("Attack"),       qtr("ms"),   1.5f, 400.0f,   1.50f, 0.100f, 1.0 },
-        { "limiter-release",     qtr("Release"),      qtr("ms"),   2.0f, 800.0f,  50.00f, 0.100f, 1.0 },
-        { "limiter-threshold",   qtr("Threshold"),    qtr("dB"), -60.0f,   0.0f,  -3.00f, 0.010f, 1.0 },
-        { "limiter-ratio",       qtr("Ratio"),            ":1",     1.0f,  20.0f,  20.00f, 0.010f, 1.0 },
-        { "limiter-knee",        qtr("Knee\nradius"), qtr("dB"),   1.0f,  10.0f,   1.00f, 0.010f, 1.0 },
-        { "limiter-makeup-gain", qtr("Makeup\ngain"), qtr("dB"),   0.0f,  24.0f,   0.00f, 0.010f, 1.0 },
+        { "limiter-rms-peak",    qfu(N_("RMS/peak")),         "",       0.0f,   1.0f,   1.00f, 0.001f, 1.0 },
+        { "limiter-attack",      qfu(N_("Attack")),       qfu(N_("ms")),   1.5f, 400.0f,   1.50f, 0.100f, 1.0 },
+        { "limiter-release",     qfu(N_("Release")),      qfu(N_("ms")),   2.0f, 800.0f,  50.00f, 0.100f, 1.0 },
+        { "limiter-threshold",   qfu(N_("Threshold")),    qfu(N_("dB")), -60.0f,   0.0f,  -3.00f, 0.010f, 1.0 },
+        { "limiter-ratio",       qfu(N_("Ratio")),            ":1",     1.0f,  20.0f,  20.00f, 0.010f, 1.0 },
+        { "limiter-knee",        qfu(N_("Knee radius")), qfu(N_("dB")),   1.0f,  10.0f,   1.00f, 0.010f, 1.0 },
+        { "limiter-makeup-gain", qfu(N_("Makeup gain")), qfu(N_("dB")),   0.0f,  24.0f,   0.00f, 0.010f, 1.0 },
     };
     for( int i=0; i<7 ;i++ ) controls.append( a[i] );
     build();
@@ -1611,11 +1834,11 @@ Spatializer::Spatializer( qt_intf_t *p_intf, QWidget *parent )
     i_smallfont = -1;
     const FilterSliderData::slider_data_t a[5] =
     {
-        { "spatializer-roomsize",   qtr("Size"),    "", 0.0f, 1.1f, 0.85f, 0.1f, 10.0 },
-        { "spatializer-width",      qtr("Width"),   "", 0.0f, 1.0f, 1.0f, 0.1f, 10.0 },
-        { "spatializer-wet",        qtr("Wet"),     "", 0.0f, 1.0f, 0.4f, 0.1f, 10.0 },
-        { "spatializer-dry",        qtr("Dry"),     "", 0.0f, 1.0f, 0.5f, 0.1f, 10.0 },
-        { "spatializer-damp",       qtr("Damp"),    "", 0.0f, 1.0f, 0.5f, 0.1f, 10.0 },
+        { "spatializer-roomsize",   qfu(N_("Room size")),    "", 0.0f, 1.1f, 0.85f, 0.1f, 1.0 },
+        { "spatializer-width",      qfu(N_("Width")),   "", 0.0f, 1.0f, 1.0f, 0.1f, 1.0 },
+        { "spatializer-wet",        qfu(N_("Room sound")),     "", 0.0f, 1.0f, 0.4f, 0.1f, 1.0 },
+        { "spatializer-dry",        qfu(N_("Source sound")),     "", 0.0f, 1.0f, 0.5f, 0.1f, 1.0 },
+        { "spatializer-damp",       qfu(N_("Damping")),    "", 0.0f, 1.0f, 0.5f, 0.1f, 1.0 },
     };
     for( int i=0; i<5 ;i++ ) controls.append( a[i] );
     build();
@@ -1631,10 +1854,10 @@ StereoWidener::StereoWidener( qt_intf_t *p_intf, QWidget *parent )
     i_smallfont = -1;
     const FilterSliderData::slider_data_t a[4] =
     {
-        { "stereowiden-delay",     qtr("Delay time"),    "ms", 1.0, 100,  20, 1.0, 1.0 },
-        { "stereowiden-feedback",  qtr("Feedback gain"), "%",  0.0, 0.9, 0.3, 0.1, 1.0 },
-        { "stereowiden-crossfeed", qtr("Crossfeed"),     "%",  0.0, 0.8, 0.3, 0.1, 1.0 },
-        { "stereowiden-dry-mix",   qtr("Dry mix"),       "%",  0.0, 1.0, 0.8, 0.1, 1.0 },
+        { "stereowiden-delay",     qfu(N_("Delay time")),    "ms", 1.0, 100,  20, 1.0, 1.0 },
+        { "stereowiden-feedback",  qfu(N_("Feedback gain")), "%",  0.0, 0.9, 0.3, 0.1, 100.0 },
+        { "stereowiden-crossfeed", qfu(N_("Crossfeed")),     "%",  0.0, 0.8, 0.3, 0.1, 100.0 },
+        { "stereowiden-dry-mix",   qfu(N_("Dry mix")),       "%",  0.0, 1.0, 0.8, 0.1, 100.0 },
     };
     for( int i=0; i<4 ;i++ ) controls.append( a[i] );
     build();
@@ -1648,16 +1871,16 @@ PitchShifter::PitchShifter( qt_intf_t *p_intf, QWidget *parent )
     : AudioFilterControlWidget( p_intf, parent, "scaletempo_pitch" )
 {
     i_smallfont = -1;
-    controls.append( { "pitch-shift", qtr("Adjust pitch"), "semitones",
+    controls.append( { "pitch-shift", qfu(N_("Adjust pitch")), qfu(N_("semitones")),
                         -12.0, 12.0, 0.0, 0.25, 1.0 } );
     build();
 }
 
 StereoPanner::StereoPanner( qt_intf_t *p_intf, QWidget *parent )
-    : AudioFilterControlWidget( p_intf, parent, "stereo_pan" )
+    : AudioFilterControlWidget( p_intf, parent, "stereopan" )
 {
     i_smallfont = -1;
-    controls.append( { "pan-control", qtr("Adjust pan"), "", 0.0, 1.0,
+    controls.append( { "pan-control", qfu(N_("Adjust pan")), "", 0.0, 1.0,
             0.5, 0.1, 1.0 } );
     build();
 }

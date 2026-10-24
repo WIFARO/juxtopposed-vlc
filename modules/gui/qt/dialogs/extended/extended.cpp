@@ -28,6 +28,7 @@
 
 #include "extended.hpp"
 #include "util/interface_translator.hpp"
+#include "dialogs/dialogs_provider.hpp"
 
 #include "maininterface/compositor.hpp" /* Needed for external MI size */
 #include "player/player_controller.hpp"
@@ -37,6 +38,8 @@
 #include <QDialogButtonBox>
 #include <QPushButton>
 #include <QWindow>
+#include <QKeyEvent>
+#include <QAbstractSpinBox>
 #include <vlc_configuration.h>
 #include <vlc_modules.h>
 
@@ -140,6 +143,7 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
     QDialogButtonBox *buttonBox = new QDialogButtonBox( Qt::Horizontal, this );
 
     m_applyButton = new QPushButton( qtr("&Save"), this );
+    m_applyButton->setObjectName(QStringLiteral("saveEffects"));
     m_applyButton->setEnabled( false );
     buttonBox->addButton( m_applyButton, QDialogButtonBox::ApplyRole );
 
@@ -168,6 +172,35 @@ ExtendedDialog::ExtendedDialog( qt_intf_t *_p_intf )
 ExtendedDialog::~ExtendedDialog()
 {
     getSettings()->setValue("EPanel/geometry", saveGeometry());
+}
+
+bool ExtendedDialog::event(QEvent* event)
+{
+    // The main interface also has an application-wide Ctrl+S streaming action.
+    if (event->type() == QEvent::ShortcutOverride && static_cast<QKeyEvent*>(event)->matches(QKeySequence::Save)) {
+        event->accept();
+        return true;
+    }
+    return QVLCDialog::event(event);
+}
+
+void ExtendedDialog::keyPressEvent(QKeyEvent* event)
+{
+    if (event->matches(QKeySequence::Save)) {
+        if (m_applyButton->isVisible()) {
+            for (auto* focus = focusWidget(); focus && focus != this; focus = focus->parentWidget()) {
+                if (auto* field = qobject_cast<QAbstractSpinBox*>(focus)) {
+                    if (!field->hasAcceptableInput()) { field->setFocus(); event->accept(); return; }
+                    field->interpretText();
+                    break;
+                }
+            }
+            m_applyButton->click();
+        }
+        event->accept();
+        return;
+    }
+    QVLCDialog::keyPressEvent(event);
 }
 
 void ExtendedDialog::showTab( int i )
@@ -241,7 +274,12 @@ void ExtendedDialog::saveConfig()
                 vlc_assert_unreachable();
         }
     }
-    config_SaveConfigFile( p_intf );
+    if (config_SaveConfigFile(p_intf) != VLC_SUCCESS) {
+        DialogsProvider::getInstance()->messageDialog(
+            qtr("VLC cannot save these settings.\n\nYour changes stay in this window. Select Save to try again."),
+            qtr("Save effects"), QMessageBox::Close, QMessageBox::Close, QMessageBox::Warning, this);
+        return;
+    }
     hashConfig->clear();
     m_applyButton->setEnabled( false );
 }

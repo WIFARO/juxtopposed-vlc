@@ -48,6 +48,10 @@ public:
     ExtendedDialog( qt_intf_t * );
     virtual ~ExtendedDialog();
 
+protected:
+    bool event(QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
+
 private:
     SyncControls *syncW;
     ExtVideo *videoEffect;
