@@ -84,10 +84,11 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QWidget#aboutWidget QLabel#title { color: %5; font-size: %13px; font-weight: 600; }"
             "QWidget#aboutWidget QTabBar::tab { padding: %14px %15px; }"
             "QWidget#aboutWidget QTextEdit, QWidget#aboutWidget QPlainTextEdit { padding: %15px; border-radius: %14px; }"
-            "QWidget#aboutWidget QPushButton#checkUpdatesButton { background: transparent; border-color: %6; }"
-            "QWidget#aboutWidget QPushButton#checkUpdatesButton:hover { background: %8; }"
-            "QWidget#aboutWidget QPushButton#checkUpdatesButton:focus { border-color: %7; }"
-            "QWidget#aboutWidget QToolButton:checked { background: %4; border-color: %7; }"
+            "QWidget#aboutWidget QToolButton { background: transparent; border: 1px solid transparent; padding: %21px; border-radius: %16px; }"
+            "QWidget#aboutWidget QToolButton:hover, QWidget#aboutWidget QToolButton:pressed, QWidget#aboutWidget QToolButton:checked { background: %8; color: %5; }"
+            "QWidget#aboutWidget QToolButton#checkUpdatesButton[redesignCompact=\"false\"] { border-color: %6; }"
+            "QWidget#aboutWidget QToolButton:focus { border-color: %2; }"
+            "QWidget#aboutWidget QToolButton#checkUpdatesButton:focus { border-color: %2; }"
             "QWidget#aboutWidget QPlainTextEdit#licensePage { font-family: 'DM Mono'; }"
             "QLabel#metadataCover { background: %4; color: %2; border-radius: %16px; }"
             "QLabel[redesignHeading=\"true\"] { color: %5; font-size: %13px; }"
@@ -175,7 +176,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }"
             "QScrollArea, QScrollArea > QWidget > QWidget { background: %3; border: none; }")
             .arg(dp(14)).arg(foreground, background, field, bright, border, accent, hover)
-            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)).arg(dp(16)).arg((dp(14) + 1) / 2));
+            .arg(dp(18)).arg(dp(24)).arg(dp(32)).arg(light ? "light" : "dark").arg(dp(20)).arg(dp(8)).arg(dp(16)).arg(dp(6)).arg(compactButtonContentHeight).arg(dp(2)).arg(dp(16)).arg((dp(14) + 1) / 2).arg(dp(4)));
         // Reapply explicit palette roles after the stylesheet repolishes the window.
         widget->setPalette(colors);
         // Wizard headers and rulers paint with their palette rather than QSS.

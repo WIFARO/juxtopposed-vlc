@@ -273,7 +273,7 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
         ui.buildDetails->setVisible(show);
     });
 #ifdef UPDATE_CHECK
-    connect(ui.checkUpdatesButton, &QPushButton::clicked, this, [this] {
+    connect(ui.checkUpdatesButton, &QToolButton::clicked, this, [this] {
         // About is modal. Close it before presenting the shared update window.
         accept();
         p_intf->p_mi->getUpdateModel()->checkUpdate(true);
@@ -301,6 +301,7 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
         ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.licensePage), qtr("License"));
         ui.copyVersionButton->setToolTip(qtr("Copy this version to the clipboard."));
         ui.copyVersionButton->setAccessibleName(qtr("Copy version"));
+        ui.checkUpdatesButton->setAccessibleName(qtr("Check for updates"));
         ui.buildDetailsButton->setToolTip(qtr("Show information about this build."));
         ui.buildDetailsButton->setAccessibleName(qtr("Build details"));
         ui.buildDetails->setAccessibleName(qtr("Build details"));
@@ -335,6 +336,7 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
             button->setFixedSize(helpDp(p_intf, 32), helpDp(p_intf, 32));
         }
         ui.checkUpdatesButton->setIconSize(iconSize);
+        ui.checkUpdatesButton->setFixedHeight(helpDp(p_intf, 32));
         ui.buildDetails->setFixedHeight(helpDp(p_intf, 128));
         const auto today = QDate::currentDate();
         const bool april = today.month() == 4 && today.day() == 1 && var_InheritBool(p_intf,"qt-icon-change");
@@ -352,12 +354,7 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
     {
         connect(ctx, &MainCtx::intfScaleFactorChanged, this, metrics);
         const auto colors = [this] {
-            const auto color = palette().color(QPalette::Text);
-            ui.copyVersionButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/icons/copy.svg"), color));
-            ui.buildDetailsButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/icons/info.svg"), {}, {}, {},
-                {{QStringLiteral("#212121"), color.name()}}));
-            ui.checkUpdatesButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/menu/redesign/refresh.svg"), {}, {}, {},
-                {{QStringLiteral("#8F8F8F"), color.name()}}));
+            updateHeaderIcons();
             colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link));
         };
         colors();
@@ -377,6 +374,14 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
                       static_cast<QWidget*>(ui.creditPage), static_cast<QWidget*>(ui.licensePage)})
         setTabOrder(view, ui.closeButton);
     setTabOrder(ui.closeButton, ui.version);
+    for (auto *button : {ui.copyVersionButton, ui.buildDetailsButton, ui.checkUpdatesButton})
+    {
+        button->installEventFilter(this);
+        const auto refresh = [this] { updateHeaderIcons(); };
+        connect(button, &QToolButton::pressed, this, refresh);
+        connect(button, &QToolButton::released, this, refresh);
+        connect(button, &QToolButton::toggled, this, refresh);
+    }
     // Read-only text shortcuts belong to the dialog, before player shortcuts.
     for (auto *view : {static_cast<QWidget*>(ui.MainBlabla), static_cast<QWidget*>(ui.authorsPage),
                       static_cast<QWidget*>(ui.creditPage), static_cast<QWidget*>(ui.licensePage),
@@ -385,15 +390,39 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
 
 void AboutDialog::updateHeaderLayout()
 {
-    const int required = ui.identityLayout->sizeHint().width() + ui.checkUpdatesButton->sizeHint().width()
-        + ui.headerLayout->spacing();
-    const bool stacked = contentsRect().width() - layout()->contentsMargins().left()
+    // Measure the full caption regardless of the currently displayed style.
+    ui.checkUpdatesButton->setMinimumWidth(0);
+    ui.checkUpdatesButton->setMaximumWidth(QWIDGETSIZE_MAX);
+    ui.checkUpdatesButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    const int fullWidth = ui.checkUpdatesButton->sizeHint().width();
+    const int compactWidth = helpDp(p_intf, 32);
+    const int required = ui.identityLayout->sizeHint().width() + fullWidth + ui.headerLayout->spacing();
+    const bool compact = contentsRect().width() - layout()->contentsMargins().left()
         - layout()->contentsMargins().right() < required;
-    ui.headerLayout->setDirection(stacked ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
-    ui.headerLayout->setStretch(0, stacked ? 0 : 1);
-    // Keep each stacked row readable without imposing the combined row width.
-    ui.aboutHeader->setMinimumWidth(qMax(ui.identityLayout->minimumSize().width(),
-        ui.checkUpdatesButton->minimumSizeHint().width()));
+    ui.checkUpdatesButton->setToolButtonStyle(compact ? Qt::ToolButtonIconOnly : Qt::ToolButtonTextBesideIcon);
+    ui.checkUpdatesButton->setFixedWidth(compact ? compactWidth : fullWidth);
+    if (ui.checkUpdatesButton->property("redesignCompact") != QVariant(compact))
+    {
+        ui.checkUpdatesButton->setProperty("redesignCompact", compact);
+        ui.checkUpdatesButton->style()->unpolish(ui.checkUpdatesButton);
+        ui.checkUpdatesButton->style()->polish(ui.checkUpdatesButton);
+    }
+    ui.headerLayout->setAlignment(ui.checkUpdatesButton, Qt::AlignRight | (compact ? Qt::AlignTop : Qt::AlignVCenter));
+    // Reserve room for the icon so it stays beside the identity at small sizes.
+    ui.aboutHeader->setMinimumWidth(ui.identityLayout->minimumSize().width() + compactWidth + ui.headerLayout->spacing());
+}
+
+void AboutDialog::updateHeaderIcons(QToolButton *hoveredButton, bool hovered)
+{
+    const auto apply = [this, hoveredButton, hovered](QToolButton *button, const QString &path) {
+        const bool active = (button == hoveredButton ? hovered : button->underMouse()) || button->isDown() || button->isChecked();
+        const auto color = palette().color(!button->isEnabled() ? QPalette::Mid : active ? QPalette::Text : QPalette::WindowText);
+        button->setIcon(ColorizedSvgIcon(path, color, {}, {},
+            {{QStringLiteral("#212121"), color.name()}, {QStringLiteral("#8F8F8F"), color.name()}}));
+    };
+    apply(ui.copyVersionButton, QStringLiteral(":/icons/copy.svg"));
+    apply(ui.buildDetailsButton, QStringLiteral(":/icons/info.svg"));
+    apply(ui.checkUpdatesButton, QStringLiteral(":/menu/redesign/refresh.svg"));
 }
 
 void AboutDialog::resizeEvent(QResizeEvent *event)
@@ -409,6 +438,11 @@ AboutDialog::~AboutDialog()
 
 bool AboutDialog::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == ui.copyVersionButton || watched == ui.buildDetailsButton || watched == ui.checkUpdatesButton)
+    {
+        if (event->type() == QEvent::Enter || event->type() == QEvent::Leave)
+            updateHeaderIcons(static_cast<QToolButton*>(watched), event->type() == QEvent::Enter);
+    }
     if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
     {
         auto *key = static_cast<QKeyEvent*>(event);

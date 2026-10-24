@@ -85,6 +85,7 @@ protected:
 
 private:
     void updateHeaderLayout();
+    void updateHeaderIcons(QToolButton *hoveredButton = nullptr, bool hovered = false);
     Ui::aboutWidget ui;
 };
 

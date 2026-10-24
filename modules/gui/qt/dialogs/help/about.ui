@@ -120,12 +120,15 @@
        </layout>
       </item>
       <item alignment="Qt::AlignVCenter|Qt::AlignRight">
-       <widget class="QPushButton" name="checkUpdatesButton">
+       <widget class="QToolButton" name="checkUpdatesButton">
         <property name="text">
          <string>Check for updates</string>
         </property>
-        <property name="autoDefault">
-         <bool>false</bool>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextBesideIcon</enum>
+        </property>
+        <property name="focusPolicy">
+         <enum>Qt::StrongFocus</enum>
         </property>
        </widget>
       </item>
