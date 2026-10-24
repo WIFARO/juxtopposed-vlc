@@ -113,6 +113,7 @@ check_PROGRAMS = \
 	test_modules_visualization_resize \
 	test_modules_video_filter_puzzle \
 	test_modules_video_filter_rotate \
+	test_modules_video_filter_sepia \
 	test_modules_audio_filter_gain \
 	test_modules_packetizer_helpers \
 	test_modules_packetizer_hxxx \
@@ -933,3 +934,6 @@ test_modules_audio_filter_gain_LDADD = $(LIBVLCCORE) $(LIBVLC)
 
 test_modules_mux_mp4_drain_SOURCES = modules/mux/mp4_drain.c
 test_modules_mux_mp4_drain_LDADD = $(LIBVLCCORE) $(LIBVLC)
+
+test_modules_video_filter_sepia_SOURCES = modules/video_filter/sepia.c
+test_modules_video_filter_sepia_LDADD = $(LIBVLCCORE) $(LIBVLC)

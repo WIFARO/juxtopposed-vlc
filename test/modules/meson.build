@@ -488,3 +488,12 @@ vlc_tests += {
     'module_depends': ['mux_mp4'],
     'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
 }
+
+vlc_tests += {
+    'name': 'test_modules_video_filter_sepia',
+    'sources': files('video_filter/sepia.c'),
+    'suite': ['modules', 'test_modules'],
+    'link_with': [libvlc, libvlccore],
+    'module_depends': ['sepia'],
+    'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+}

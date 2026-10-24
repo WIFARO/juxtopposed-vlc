@@ -119,6 +119,12 @@ static int Create( filter_t *p_filter )
 {
     filter_sys_t *p_sys;
 
+    /* Sepia changes colors, not the picture format. Let the filter chain
+     * add a converter when the preceding filter has a different chroma. */
+    if( !video_format_IsSameChroma( &p_filter->fmt_in.video,
+                                   &p_filter->fmt_out.video ) )
+        return VLC_EGENERIC;
+
     /* Allocate structure */
     p_sys = p_filter->p_sys = malloc( sizeof( filter_sys_t ) );
     if( p_filter->p_sys == NULL )
@@ -449,7 +455,8 @@ static void RVSepia( picture_t *p_pic, picture_t *p_outpic, int i_intensity )
             /* for rv32 we take 4 chunks at the time */
             if (b_isRV32) {
                 /* alpha channel or undefined stays the same */
-                p_out[i_aindex] = p_in[i_aindex];
+                if( i_aindex >= 0 )
+                    p_out[i_aindex] = p_in[i_aindex];
                 p_in += 4;
                 p_out += 4;
             } else {
