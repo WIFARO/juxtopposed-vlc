@@ -59,10 +59,15 @@ private:
     QTabWidget *mainTabW;
     QPushButton *m_applyButton;
     QHash<QString, QVariant> m_hashConfigs[2];
+    QHash<QString, QVariant> m_savedAudioValues;
+    QString m_savedAudioChain;
+    bool m_audioSaveFailed = false;
 private slots:
     void changedItem(PlayerController::PlayingState );
     void currentTabChanged( int );
     void saveConfig();
+    void refreshAudioConfig();
+    void updateAudioSave();
     void putAudioConfig( const QString& name, const QVariant value );
     void putVideoConfig( const QString& name, const QVariant value );
 };

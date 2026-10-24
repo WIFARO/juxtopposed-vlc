@@ -29,6 +29,7 @@
 #include <math.h>
 
 #include <algorithm>
+#include <vector>
 
 #include <QLabel>
 #include <QVariant>
@@ -1170,6 +1171,11 @@ AudioFilterControlWidget::AudioFilterControlWidget
     i_smallfont(0)
 {}
 
+void AudioFilterControlWidget::refreshAudioValues(const QHash<QString, QVariant>& pending)
+{
+    if (m_refreshAudioValues) m_refreshAudioValues(pending);
+}
+
 void AudioFilterControlWidget::connectConfigChanged( FilterSliderData *slider )
 {
     connect( slider, &FilterSliderData::configChanged, this, &AudioFilterControlWidget::configChanged );
@@ -1185,9 +1191,39 @@ double audioFilterValue(float value)
 class AudioFilterSpinBox final : public QDoubleSpinBox
 {
 public:
-    explicit AudioFilterSpinBox(QWidget* parent) : QDoubleSpinBox(parent) { lineEdit()->installEventFilter(this); }
+    explicit AudioFilterSpinBox(QWidget* parent) : QDoubleSpinBox(parent)
+    {
+        lineEdit()->installEventFilter(this);
+        connect(lineEdit(), &QLineEdit::textEdited, this, [this] { m_draft = true; m_draftApplied = false; m_draftValid = hasAcceptableInput(); });
+        connect(this, &QDoubleSpinBox::valueChanged, this, [this] { if (m_draft) m_draftApplied = true; });
+        connect(this, &QDoubleSpinBox::editingFinished, this, [this] {
+            const bool apply = m_draft && m_draftValid && !m_draftApplied;
+            m_draft = false; m_draftApplied = false;
+            // Explicitly keeping the current value must also allow Save when
+            // another control changed that live value without saving defaults.
+            if (apply) emit valueChanged(value());
+        });
+    }
     void setResetValue(QSlider* slider, double value) { m_slider = slider; m_reset = value; slider->installEventFilter(this); }
     void resetValue() { setValue(m_reset); }
+    void updateCurrent(double current)
+    {
+        auto* input = lineEdit();
+        const bool draft = input->isModified();
+        if (!draft) { m_currentChanged = false; m_draft = false; m_draftApplied = false; }
+        if (value() == current) return;
+        const auto text = input->text();
+        const int cursor = input->cursorPosition(), selection = input->selectionStart(), length = input->selectedText().size();
+        const QSignalBlocker block(this);
+        setValue(current);
+        if (draft) {
+            input->setText(text); input->setCursorPosition(cursor);
+            if (selection >= 0) input->setSelection(selection, length);
+            input->setModified(true); m_currentChanged = true;
+        }
+    }
+    bool currentChangedWhileTyping() const { return lineEdit()->isModified() && m_currentChanged; }
+    QString currentText() const { return textFromValue(value()) + suffix(); }
 protected:
     QString textFromValue(double value) const override
     {
@@ -1222,17 +1258,22 @@ protected:
 private:
     QPointer<QSlider> m_slider;
     double m_reset = 0;
+    bool m_currentChanged = false;
+    bool m_draft = false;
+    bool m_draftApplied = false;
+    bool m_draftValid = false;
     bool handleKey(QKeyEvent* event)
     {
         if (event->matches(QKeySequence::Save)) {
             if (hasAcceptableInput()) {
-                interpretText();
+                interpretText(); lineEdit()->setModified(false); emit editingFinished();
                 if (auto* save = window()->findChild<QPushButton*>(QStringLiteral("saveEffects")); save && save->isVisible()) save->click();
             }
         } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
-            if (hasAcceptableInput()) interpretText();
+            if (hasAcceptableInput()) { interpretText(); lineEdit()->setModified(false); emit editingFinished(); }
             lineEdit()->selectAll();
         } else if (event->key() == Qt::Key_Escape) {
+            m_draft = false; m_draftApplied = false;
             setValue(value());
             lineEdit()->setModified(false);
             clearFocus();
@@ -1261,7 +1302,7 @@ const char* audioFilterDescription(const QString& name)
     if (name == QLatin1String("spatializer")) return N_("Add room sound to the audio.");
     if (name == QLatin1String("stereo_widen")) return N_("Change how wide stereo sound is.");
     if (name == QLatin1String("scaletempo_pitch")) return N_("Change the pitch of the sound.");
-    return N_("Move sound between the left and right channels.");
+    return N_("Move sound to the left or right.");
 }
 }
 
@@ -1303,6 +1344,7 @@ void AudioFilterControlWidget::build()
     layout->addWidget(scroll, 1);
     QVector<QDoubleSpinBox*> editors;
     QVector<QGridLayout*> rows;
+    QVector<QLabel*> notices;
     for (const auto& data : controls)
     {
         auto* card = new QFrame(content);
@@ -1321,13 +1363,15 @@ void AudioFilterControlWidget::build()
         value->setObjectName(data.name + QStringLiteral("Value"));
         value->setDecimals(6);
         value->setKeyboardTracking(false);
+        connect(value->findChild<QLineEdit*>(), &QLineEdit::textEdited, this, &AudioFilterControlWidget::draftChanged);
+        connect(value, &QDoubleSpinBox::editingFinished, this, &AudioFilterControlWidget::draftChanged);
         value->setRange(audioFilterValue(data.f_min) * data.f_visual_multiplier, audioFilterValue(data.f_max) * data.f_visual_multiplier);
         value->setSingleStep(audioFilterValue(data.f_resolution) * data.f_visual_multiplier);
         const auto* original = config_FindConfig(qtu(data.name));
         value->setResetValue(slider, audioFilterValue(original && original->i_type == CONFIG_ITEM_FLOAT
             ? original->orig.f : data.f_value) * data.f_visual_multiplier);
         double initial = data.f_value;
-        if (const auto output = THEMIM->getAout(); output && var_Type(output.get(), qtu(data.name)) == VLC_VAR_FLOAT)
+        if (const auto output = THEMIM->getAout(); output && (var_Type(output.get(), qtu(data.name)) & VLC_VAR_CLASS) == VLC_VAR_FLOAT)
             initial = var_GetFloat(output.get(), qtu(data.name));
         else if (config_FindConfig(qtu(data.name))) initial = config_GetFloat(qtu(data.name));
         if (!std::isfinite(initial)) initial = data.f_value;
@@ -1335,9 +1379,13 @@ void AudioFilterControlWidget::build()
         slider->setValue(qRound(initial / data.f_resolution));
         editors.append(value);
         label->setBuddy(value);
-        row->addWidget(label, 0, 0, 1, 2);
-        row->addWidget(slider, 1, 0);
-        row->addWidget(value, 1, 1);
+        row->addWidget(label, 0, 0);
+        row->addWidget(value, 0, 1);
+        row->addWidget(slider, 1, 0, 1, 2);
+        auto* notice = new QLabel(card);
+        notice->setObjectName(data.name + QStringLiteral("CurrentNotice"));
+        notice->setWordWrap(true); notice->hide(); notices.append(notice);
+        row->addWidget(notice, 2, 0, 1, 2);
         row->setColumnStretch(0, 1);
         body->addWidget(card);
         connect(slider, &QSlider::valueChanged, value, [value, data](int position) {
@@ -1427,6 +1475,35 @@ void AudioFilterControlWidget::build()
         reset->setEnabled(available && checked);
         enabled->setEnabled(available || checked);
     });
+    m_refreshAudioValues = [this, enabled, content, reset, available, editors, notices](const QHash<QString, QVariant>& pending) {
+        const auto output = THEMIM->getAout();
+        char* raw = output ? var_GetString(output.get(), "audio-filter") : nullptr;
+        if (!raw && !pending.contains(QStringLiteral("audio-filter"))) raw = var_InheritString(p_intf, "audio-filter");
+        const auto chain = raw ? qfu(raw) : pending.contains(QStringLiteral("audio-filter"))
+            ? pending.value(QStringLiteral("audio-filter")).toString() : QString();
+        free(raw);
+        const bool checked = filterIsPresent(chain, name);
+        const QSignalBlocker block(enabled);
+        enabled->setChecked(checked); enabled->setEnabled(available || checked);
+        std::vector<QSignalBlocker> fieldBlocks;
+        fieldBlocks.reserve(editors.size());
+        for (auto* editor : editors) fieldBlocks.emplace_back(editor);
+        content->setEnabled(available && checked); reset->setEnabled(available && checked);
+        for (int i = 0; i < controls.size(); ++i) {
+            const auto& data = controls[i];
+            double current = config_FindConfig(qtu(data.name)) ? config_GetFloat(qtu(data.name)) : data.f_value;
+            if (output && (var_Type(output.get(), qtu(data.name)) & VLC_VAR_CLASS) == VLC_VAR_FLOAT) current = var_GetFloat(output.get(), qtu(data.name));
+            else if (pending.contains(data.name)) current = pending.value(data.name).toFloat();
+            if (!std::isfinite(current)) continue;
+            auto* editor = static_cast<AudioFilterSpinBox*>(editors[i]);
+            editor->updateCurrent(audioFilterValue(current) * data.f_visual_multiplier);
+            auto* slider = findChild<QSlider*>(data.name + QStringLiteral("Slider"));
+            const QSignalBlocker sliderBlock(slider); slider->setValue(qRound(current / data.f_resolution));
+            notices[i]->setVisible(editor->currentChangedWhileTyping());
+            notices[i]->setText(qtr("Current value: %1. Press Escape to use it.").arg(editor->currentText()));
+            editor->setAccessibleDescription(editor->currentChangedWhileTyping() ? notices[i]->text() : QString());
+        }
+    };
     connect(enabled, &QCheckBox::toggled, this, &AudioFilterControlWidget::enable);
     connect(reset, &QPushButton::clicked, this, [this, editors] {
         for (auto* editor : editors) static_cast<AudioFilterSpinBox*>(editor)->resetValue();

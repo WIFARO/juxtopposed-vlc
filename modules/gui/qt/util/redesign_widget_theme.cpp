@@ -105,6 +105,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QWidget#cameraControls QSlider::handle:horizontal:hover, QWidget#audioFilterControls QSlider::handle:horizontal:hover { background: %5; }"
             "QWidget#cameraControls QSlider::handle:horizontal:pressed, QWidget#audioFilterControls QSlider::handle:horizontal:pressed { background: %7; border-color: %7; }"
             "QWidget#cameraControls QSlider::handle:horizontal:focus, QWidget#audioFilterControls QSlider::handle:horizontal:focus { border-color: %7; }"
+            "QWidget#audioFilterControls QLabel:disabled, QWidget#audioFilterControls QDoubleSpinBox:disabled, QWidget#audioFilterControls QPushButton:disabled { color: %2; }"
             "QWidget#audioFilterControls QSlider::sub-page:horizontal:disabled { background: %6; }"
             "QWidget#audioFilterControls QSlider::handle:horizontal:disabled { background: %6; border-color: %6; }"
             "QWidget#cameraControls QCheckBox::indicator, QWidget#audioFilterControls QCheckBox::indicator { width: %1px; height: %1px; }"

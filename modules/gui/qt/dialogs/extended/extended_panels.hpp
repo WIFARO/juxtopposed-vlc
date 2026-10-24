@@ -29,6 +29,7 @@
 #endif
 
 #include <vlc_common.h>
+#include <functional>
 
 #include "qt.hpp"
 #include "util/variables.hpp"
@@ -151,6 +152,10 @@ class AudioFilterControlWidget : public QWidget
 
 public:
     AudioFilterControlWidget( qt_intf_t *, QWidget *, const char *name );
+    void refreshAudioValues(const QHash<QString, QVariant>& pending);
+
+private:
+    std::function<void(const QHash<QString, QVariant>&)> m_refreshAudioValues;
 
 protected:
     virtual void build();
@@ -167,6 +172,7 @@ protected slots:
 
 signals:
     void configChanged( QString name, QVariant value );
+    void draftChanged();
 };
 
 class EqualizerSliderData : public FilterSliderData
