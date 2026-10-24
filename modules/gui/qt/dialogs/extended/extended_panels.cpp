@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <vector>
+#include <memory>
 
 #include <QColorDialog>
 #include <QToolButton>
@@ -41,11 +42,8 @@
 #include <QComboBox>
 #include <QTimer>
 #include <QFileDialog>
-#include <QGraphicsScene>
-#include <QPainter>
 #include <QRegularExpression>
 #include <QApplication>
-#include <QScreen>
 #include <QFormLayout>
 #include <QStandardItemModel>
 #include <QScrollArea>
@@ -1167,92 +1165,6 @@ bool ExtV4l2::eventFilter(QObject *object, QEvent *event)
  * Sliders
  **********************************************************************/
 
-FilterSliderData::FilterSliderData( QObject *parent, QSlider *_slider ) :
-    QObject( parent ), slider( _slider )
-{
-    slider->installEventFilter(this);
-}
-
-FilterSliderData::FilterSliderData( QObject *parent,
-                                    qt_intf_t *_p_intf,
-                                    QSlider *_slider,
-                                    QLabel *_label, QLabel *_nameLabel,
-                                    const slider_data_t *_p_data ):
-    QObject( parent ), slider( _slider ), valueLabel( _label ),
-    nameLabel( _nameLabel ), p_data( _p_data ), p_intf( _p_intf )
-{
-    slider->setMinimum( p_data->f_min / p_data->f_resolution );
-    slider->setMaximum( p_data->f_max / p_data->f_resolution );
-    nameLabel->setText( p_data->descs );
-    connect( slider, &QSlider::valueChanged, this, &FilterSliderData::updateText );
-    setValue( initialValue() );
-    /* In case current == min|max text would not be first updated */
-    if ( slider->value() == slider->maximum() ||
-         slider->value() == slider->minimum() )
-        updateText( slider->value() );
-    
-    slider->installEventFilter(this);
-    connect( slider, &QSlider::valueChanged, this, &FilterSliderData::onValueChanged );
-}
-
-void FilterSliderData::setValue( float f )
-{
-    slider->setValue( f / p_data->f_resolution );
-}
-
-void FilterSliderData::updateText( int i )
-{
-    float f = ((float) i) * p_data->f_resolution * p_data->f_visual_multiplier;
-    valueLabel->setText( QString( p_data->units )
-                    .prepend( "%1 " )
-                    .arg( QString::number( f, 'f', 1 ) ) );
-}
-
-float FilterSliderData::initialValue()
-{
-    SharedAOut p_aout = THEMIM->getAout();
-    float f = p_data->f_value;
-    if( p_aout )
-    {
-        if ( var_Type( p_aout.get(), qtu(p_data->name) ) != 0 )
-            return var_GetFloat( p_aout.get(), qtu(p_data->name) );
-    }
-
-    //* Not found, will try in config */
-    if ( ! config_FindConfig( qtu(p_data->name) ) )
-        return f;
-
-    f = config_GetFloat( qtu(p_data->name) );
-    return f;
-}
-
-void FilterSliderData::onValueChanged( int i )
-{
-    float f = ((float) i) * p_data->f_resolution;
-    SharedAOut p_aout = THEMIM->getAout();
-    if ( p_aout )
-    {
-        var_SetFloat( p_aout.get(), qtu(p_data->name), f );
-    }
-    writeToConfig();
-}
-
-void FilterSliderData::writeToConfig()
-{
-    float f = ((float) slider->value()) * p_data->f_resolution;
-    emit configChanged( p_data->name, QVariant( f ) );
-}
-
-bool FilterSliderData::eventFilter(QObject *watched, QEvent *event)
-{
-    if (event->type() == QEvent::MouseButtonDblClick)
-    {
-        setValue(p_data->f_value);
-        return true;
-    }
-    return false;
-}
-
 AudioFilterControlWidget::AudioFilterControlWidget
 ( qt_intf_t *_p_intf, QWidget *parent, const char *_name ) :
     QWidget( parent ), slidersBox( NULL ), p_intf( _p_intf ), name( _name ),
@@ -1262,11 +1174,6 @@ AudioFilterControlWidget::AudioFilterControlWidget
 void AudioFilterControlWidget::refreshAudioValues(const QHash<QString, QVariant>& pending)
 {
     if (m_refreshAudioValues) m_refreshAudioValues(pending);
-}
-
-void AudioFilterControlWidget::connectConfigChanged( FilterSliderData *slider )
-{
-    connect( slider, &FilterSliderData::configChanged, this, &AudioFilterControlWidget::configChanged );
 }
 
 namespace {
@@ -2031,304 +1938,248 @@ void AudioFilterControlWidget::enable( bool b_enable )
  * Equalizer
  **********************************************************************/
 
-EqualizerSliderData::EqualizerSliderData( QObject *parent, qt_intf_t *_p_intf,
-                                          QSlider *slider, QLabel *_label,
-                                          QLabel *_nameLabel, const slider_data_t *_p_data,
-                                          int _index )
-    : FilterSliderData( parent, slider ), index( _index )
-{
-    p_intf = _p_intf;
-    valueLabel = _label;
-    nameLabel = _nameLabel;
-    p_data = _p_data;
-
-    slider->setMinimum( p_data->f_min / p_data->f_resolution );
-    slider->setMaximum( p_data->f_max / p_data->f_resolution );
-    nameLabel->setText( p_data->descs );
-    connect( slider, &QSlider::valueChanged, this, &EqualizerSliderData::updateText );
-    setValue( initialValue() );
-    updateText( slider->value() );
-    connect( slider, &QSlider::valueChanged, this, &EqualizerSliderData::onValueChanged );
-}
-
-QStringList EqualizerSliderData::getBandsFromAout() const
-{
-    SharedAOut p_aout = THEMIM->getAout();
-    QStringList bands;
-    if( p_aout )
-    {
-        if ( var_Type( p_aout.get(), qtu(p_data->name) ) == VLC_VAR_STRING )
-        {
-            char *psz_bands = var_GetString( p_aout.get(), qtu(p_data->name) );
-            if ( psz_bands )
-            {
-                bands = QString( psz_bands ).split( " ", Qt::SkipEmptyParts );
-                free( psz_bands );
-            }
-        }
-    }
-
-    if ( bands.count() ) return bands;
-    /* Or try config then */
-
-    if ( ! config_FindConfig( qtu(p_data->name) ) )
-        return bands;
-
-    char *psz_bands = config_GetPsz( qtu(p_data->name) );
-    if ( psz_bands )
-    {
-        bands = QString( psz_bands ).split( " ", Qt::SkipEmptyParts );
-        free( psz_bands );
-    }
-
-    return bands;
-}
-
-float EqualizerSliderData::initialValue()
-{
-    float f = p_data->f_value;
-    QStringList bands = getBandsFromAout();
-
-    if ( bands.count() > index )
-        f = QLocale( QLocale::C ).toFloat( bands[ index ] );
-
-    return f;
-}
-
-void EqualizerSliderData::onValueChanged( int i )
-{
-    QStringList bands = getBandsFromAout();
-    if ( bands.count() > index )
-    {
-        float f = ((float) i) * p_data->f_resolution;
-        bands[ index ] = QLocale( QLocale::C ).toString( f );
-        SharedAOut p_aout = THEMIM->getAout();
-        if ( p_aout )
-        {
-            var_SetString( p_aout.get(), qtu(p_data->name), qtu(bands.join( " " )) );
-        }
-        writeToConfig();
-    }
-}
-
-void EqualizerSliderData::writeToConfig()
-{
-    QStringList bands = getBandsFromAout();
-    if ( bands.count() > index )
-    {
-        float f = (float) slider->value() * p_data->f_resolution;
-        bands[ index ] = QLocale( QLocale::C ).toString( f );
-        emit configChanged( p_data->name, QVariant( bands.join( " " ) ) );
-    }
-}
-
-bool EqualizerSliderData::eventFilter(QObject *watched, QEvent *event)
-{
-    if (event->type() == QEvent::MouseButtonDblClick)
-    {    
-        SharedAOut p_aout = THEMIM->getAout();
-        if (p_aout)
-        {
-            char *psz_preset = var_GetString(p_aout.get(), "equalizer-preset");
-            if (psz_preset)
-            {
-                int j = -1;
-                for (int i = 0; i < NB_PRESETS; ++i)
-                {
-                    if (!strcmp(psz_preset, preset_list[i]))
-                    {
-                        j = i;
-                        break;
-                    }
-                }
-                free(psz_preset);
-
-                if (j >= 0 && index < eqz_preset_10b[j].i_band)
-                {
-                    setValue(eqz_preset_10b[j].f_amp[index]);
-                    return true;
-                }
-            }
-        }
-    }
-    return FilterSliderData::eventFilter(watched, event);
-}
-
 Equalizer::Equalizer( qt_intf_t *p_intf, QWidget *parent )
     : AudioFilterControlWidget( p_intf, parent, "equalizer" )
 {
-    i_smallfont = -3;
     bool b_vlcBands = var_InheritBool( p_intf, "equalizer-vlcfreqs" );
 
-    const FilterSliderData::slider_data_t vlc_bands[10] =
+    const AudioFilterSliderData vlc_bands[10] =
     {
         { "equalizer-bands", qtr("60 Hz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
         { "equalizer-bands", qtr("170 Hz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
         { "equalizer-bands", qtr("310 Hz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
         { "equalizer-bands", qtr("600 Hz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("1 KHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("3 KHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("6 KHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("12 KHz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("14 KHz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("16 KHz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("1 kHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("3 kHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("6 kHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("12 kHz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("14 kHz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("16 kHz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
     };
-    const FilterSliderData::slider_data_t iso_bands[10] =
+    const AudioFilterSliderData iso_bands[10] =
     {
         { "equalizer-bands", qtr("31 Hz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
         { "equalizer-bands", qtr("63 Hz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
         { "equalizer-bands", qtr("125 Hz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
         { "equalizer-bands", qtr("250 Hz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
         { "equalizer-bands", qtr("500 Hz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("1 KHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("2 KHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("4 KHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("8 KHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
-        { "equalizer-bands", qtr("16 KHz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("1 kHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("2 kHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("4 kHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("8 kHz"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
+        { "equalizer-bands", qtr("16 kHz"), qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 },
     };
-    const FilterSliderData::slider_data_t preamp_vals =
-        { "equalizer-preamp", qtr("Preamp"),  qtr("dB"), -20.0f, 20.0f, 0.0f, 0.1f, 1.0 };
-
     for( int i=0; i<10 ;i++ ) controls.append( (b_vlcBands) ? vlc_bands[i] : iso_bands[i] );
-    preamp_values = preamp_vals;
     build();
 }
 
 void Equalizer::build()
 {
-    QFont smallFont = QApplication::font();
-    smallFont.setPointSize( smallFont.pointSize() + i_smallfont );
-
-    Ui::EqualizerWidget ui;
-    ui.setupUi( this );
-
-    QGridLayout *ctrlLayout = new QGridLayout( ui.slidersPlaceholder );
-
-    /* set up preamp control */
-    ui.preampLabel->setFont( smallFont );
-    ui.preampValue->setFont( smallFont );
-    preamp = new FilterSliderData( this, p_intf,
-        ui.preampSlider, ui.preampValue, ui.preampLabel, & preamp_values );
-    connectConfigChanged( preamp );
-
-    /* fix sliders spacing accurately */
-    int i_width = qMax( QFontMetrics( smallFont ).horizontalAdvance( "500 Hz" ),
-                        QFontMetrics( smallFont ).horizontalAdvance( "-20.0 dB" ) );
-    int i = 0;
-    foreach( const FilterSliderData::slider_data_t &data, controls )
-    {
-        QSlider *slider = new QSlider( Qt::Vertical );
-        slider->setMinimumWidth( i_width );
-        QLabel *valueLabel = new QLabel();
-        valueLabel->setFont( smallFont );
-        valueLabel->setAlignment( Qt::AlignHCenter );
-        QLabel *nameLabel = new QLabel();
-        nameLabel->setFont( smallFont );
-        nameLabel->setAlignment( Qt::AlignHCenter );
-        EqualizerSliderData *filter =
-            new EqualizerSliderData( this, p_intf,
-                                     slider, valueLabel, nameLabel, & data, i );
-        ctrlLayout->addWidget( slider, 0, i, Qt::AlignHCenter );
-        ctrlLayout->addWidget( valueLabel, 2, i, Qt::AlignHCenter );
-        ctrlLayout->addWidget( nameLabel, 1, i, Qt::AlignHCenter );
-        sliderDatas << filter; /* keep track for applying presets */
-        i++;
-        connectConfigChanged( filter );
+    setObjectName(QStringLiteral("audioFilterControls"));
+    setProperty("audioFilterName", name);
+    applyRedesignWidgetTheme(this, p_intf->p_mi);
+    auto* layout = new QVBoxLayout(this);
+    auto* heading = new QHBoxLayout;
+    auto* title = new QLabel(this); title->setProperty("redesignSectionHeading", true);
+    auto* enabled = new QCheckBox(this); enabled->setObjectName(QStringLiteral("enableCheck"));
+    title->hide(); heading->addWidget(enabled); layout->addLayout(heading);
+    const bool available = module_exists("equalizer");
+    auto* missing = new QLabel(this); missing->setWordWrap(true); missing->setObjectName(QStringLiteral("equalizerUnavailable")); missing->setVisible(!available); layout->addWidget(missing);
+    auto* scroll = new QScrollArea(this); scroll->setObjectName(QStringLiteral("equalizerScroll")); scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame); scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto* content = new QWidget(scroll); auto* body = new QVBoxLayout(content); body->setContentsMargins(0, 0, 0, 0); scroll->setWidget(content); layout->addWidget(scroll, 1);
+    auto* presetLabel = new QLabel(this); auto* presets = new QComboBox(this); presets->setObjectName(QStringLiteral("presetsCombo")); presetLabel->setBuddy(presets);
+    auto* twice = new QCheckBox(this); twice->setObjectName(QStringLiteral("eq2PassCheck"));
+    auto* preampLabel = new QLabel(this); auto* preamp = new AudioFilterSpinBox(this); preamp->setObjectName(QStringLiteral("equalizer-preampValue")); preampLabel->setBuddy(preamp);
+    auto* preampSlider = new QSlider(Qt::Horizontal, this); preampSlider->setObjectName(QStringLiteral("preampSlider")); preampSlider->setRange(-200, 200);
+    auto* preampNotice = new QLabel(this); preampNotice->setTextFormat(Qt::PlainText); preampNotice->setWordWrap(true); preampNotice->setObjectName(QStringLiteral("equalizer-preampCurrentNotice"));
+    heading->insertWidget(0, presetLabel); heading->insertWidget(1, presets, 1);
+    auto* bandsCard = new QFrame(content); bandsCard->setProperty("redesignCard", true); auto* bandsLayout = new QVBoxLayout(bandsCard);
+    auto* bandsTitle = new QLabel(bandsCard); bandsTitle->setProperty("redesignSectionHeading", true); auto* bandsHeading = new QHBoxLayout; bandsHeading->addWidget(bandsTitle, 1); bandsHeading->addWidget(twice); bandsLayout->addLayout(bandsHeading);
+    auto* graph = new QWidget(bandsCard); auto* graphLayout = new QGridLayout(graph); graphLayout->setContentsMargins(0, 0, 0, 0); bandsLayout->addWidget(graph, 1);
+    QList<QWidget*> columns; QList<QSlider*> sliders; QList<QPushButton*> gainButtons;
+    auto* preampColumn = new QWidget(graph); auto* preampColumnLayout = new QVBoxLayout(preampColumn); preampColumnLayout->setContentsMargins(0, 0, 0, 0);
+    preampSlider->setOrientation(Qt::Vertical); preampSlider->setProperty("equalizerBand", -1); preampSlider->installEventFilter(this);
+    auto* preampGain = new QPushButton(preampColumn); preampGain->setObjectName(QStringLiteral("equalizerPreampGain")); preampGain->setAutoDefault(false); preampGain->setFlat(true);
+    preampLabel->setAlignment(Qt::AlignCenter); preampColumnLayout->addWidget(preampSlider, 1, Qt::AlignHCenter); preampColumnLayout->addWidget(preampLabel); preampColumnLayout->addWidget(preampGain); graphLayout->addWidget(preampColumn, 0, 0); columns.append(preampColumn);
+    for (int i = 0; i < 10; ++i) {
+        auto* column = new QWidget(graph); column->setObjectName(QStringLiteral("equalizerColumn%1").arg(i)); auto* columnLayout = new QVBoxLayout(column); columnLayout->setContentsMargins(0, 0, 0, 0);
+        auto* slider = new QSlider(Qt::Vertical, column); slider->setObjectName(QStringLiteral("equalizerBand%1Slider").arg(i)); slider->setProperty("equalizerBand", i); slider->setRange(-200, 200); slider->installEventFilter(this);
+        auto* frequency = new QLabel(controls[i].descs, column); frequency->setAlignment(Qt::AlignCenter); frequency->setBuddy(slider);
+        auto* gain = new QPushButton(column); gain->setObjectName(QStringLiteral("equalizerBand%1Gain").arg(i)); gain->setAutoDefault(false); gain->setFlat(true);
+        columnLayout->addWidget(slider, 1, Qt::AlignHCenter); columnLayout->addWidget(frequency); columnLayout->addWidget(gain);
+        graphLayout->addWidget(column, 0, i + 1); columns.append(column); sliders.append(slider); gainButtons.append(gain);
     }
-
-    /* Add the listed presets */
-    ui.presetsCombo->addItem( "", QVariant() ); /* 1st entry = custom/modified */
-    for( i = 0 ; i < NB_PRESETS ; i ++ )
-    {
-        QGraphicsScene scene;
-        qreal f_ratio = QApplication::primaryScreen()->devicePixelRatio();
-        QPixmap icon( 40 * f_ratio, 40 * f_ratio );
-        icon.fill( Qt::transparent );
-        QPainter painter( &icon );
-        for ( int j = 0; j < eqz_preset_10b[i].i_band; j++ )
-        {
-            float f_value = eqz_preset_10b[i].f_amp[j];
-            if ( f_value > 20.0 ) f_value = 20.0;
-            if ( f_value < -20.0 ) f_value = -20.0;
-            QRectF shape( j, 20.0 - f_value, 1, f_value );
-            scene.addRect( shape, QPen(), palette().brush( QPalette::WindowText ) );
+    auto* gainRow = new QHBoxLayout; auto* gainLabel = new QLabel(bandsCard); auto* gain = new AudioFilterSpinBox(bandsCard); gain->setObjectName(QStringLiteral("equalizerBandValue")); gainLabel->setBuddy(gain); gainRow->addWidget(gainLabel, 1); gainRow->addWidget(gain); gainRow->addWidget(preamp); bandsLayout->addLayout(gainRow); bandsLayout->addWidget(preampNotice);
+    auto* gainNotice = new QLabel(bandsCard); gainNotice->setTextFormat(Qt::PlainText); gainNotice->setWordWrap(true); gainNotice->setObjectName(QStringLiteral("equalizerBandCurrentNotice")); bandsLayout->addWidget(gainNotice); body->addWidget(bandsCard, 1);
+    auto* footer = new QHBoxLayout; auto* hint = new QLabel(this); hint->setWordWrap(true); auto* reset = new QPushButton(this); reset->setObjectName(QStringLiteral("resetEqualizer")); reset->setAutoDefault(false); footer->addWidget(hint, 1); footer->addWidget(reset); layout->addLayout(footer);
+    struct State { QHash<QString, QVariant> values; int selected = 0; };
+    auto state = std::make_shared<State>();
+    const auto read = [this, state](const QString& key) -> QVariant {
+        const auto output = THEMIM->getAout(); const auto bytes = key.toUtf8();
+        if (output) switch (var_Type(output.get(), bytes.constData()) & VLC_VAR_CLASS) {
+        case VLC_VAR_FLOAT: return var_GetFloat(output.get(), bytes.constData());
+        case VLC_VAR_BOOL: return var_GetBool(output.get(), bytes.constData());
+        case VLC_VAR_STRING: { char* raw = var_GetString(output.get(), bytes.constData()); const auto result = qfu(raw ? raw : ""); free(raw); return result; }
         }
-        scene.addLine( 0.0, 20.0, eqz_preset_10b[i].i_band, 20.0,
-                       palette().color( QPalette::WindowText ) );
-        scene.setSceneRect( 0.0, 0.0, eqz_preset_10b[i].i_band , 40.0 );
-        scene.render( &painter, icon.rect(), scene.sceneRect(), Qt::IgnoreAspectRatio );
-        ui.presetsCombo->addItem( icon, qfut( preset_list_text[i] ),
-                                     QVariant( preset_list[i] ) );
+        return state->values.value(key);
+    };
+    const auto values = [read] {
+        const auto parts = read(QStringLiteral("equalizer-bands")).toString().split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts);
+        const auto preset = read(QStringLiteral("equalizer-preset")).toString();
+        const eqz_preset_t* fallback = nullptr;
+        for (const auto& row : eqz_preset_10b) if (preset == qfu(row.psz_name)) fallback = &row;
+        QList<double> result;
+        for (int i = 0; i < 10; ++i) {
+            bool valid = false; double value = i < parts.size() ? QLocale::c().toDouble(parts[i], &valid) : 0;
+            if (!valid || !std::isfinite(value)) value = fallback ? fallback->f_amp[i] : 0;
+            result.append(qBound(-20.0, value, 20.0));
+        }
+        return result;
+    };
+    const auto write = [this, state](const QString& key, const QVariant& value) {
+        state->values.insert(key, value);
+        if (const auto output = THEMIM->getAout()) {
+            const auto bytes = key.toUtf8(); const int type = config_GetType(bytes.constData()) & VLC_VAR_CLASS;
+            if (!var_Type(output.get(), bytes.constData())) var_Create(output.get(), bytes.constData(), type | VLC_VAR_DOINHERIT);
+            if (type == VLC_VAR_FLOAT) var_SetFloat(output.get(), bytes.constData(), value.toFloat());
+            else if (type == VLC_VAR_BOOL) var_SetBool(output.get(), bytes.constData(), value.toBool());
+            else if (key == QLatin1String("equalizer-preset") && value.toString().isEmpty()) {
+                // Custom has no DSP preset callback. Clear only its name.
+                vlc_value_t custom; custom.psz_string = const_cast<char*>("");
+                var_Change(output.get(), bytes.constData(), VLC_VAR_SETVALUE, custom);
+            } else var_SetString(output.get(), bytes.constData(), qtu(value.toString()));
+        }
+        emit configChanged(key, value);
+    };
+    const auto editBand = [this, state, values, write](int index, double value) {
+        auto current = values(); current[index] = value; QStringList bands;
+        for (const auto gain : current) bands.append(QString::number(gain, 'g', 9));
+        write(QStringLiteral("equalizer-preset"), QString()); write(QStringLiteral("equalizer-bands"), bands.join(QLatin1Char(' '))); refreshAudioValues(state->values);
+    };
+    for (auto* number : {preamp, gain}) {
+        number->setDecimals(6); number->setRange(-20, 20); number->setSingleStep(.1); number->setKeyboardTracking(false);
+        connect(number->findChild<QLineEdit*>(), &QLineEdit::textEdited, this, &AudioFilterControlWidget::draftChanged);
+        connect(number, &QDoubleSpinBox::editingFinished, this, &AudioFilterControlWidget::draftChanged);
     }
-    connect( ui.presetsCombo, QOverload<int>::of(&QComboBox::activated), this, &Equalizer::setCorePreset );
-
-    /* Set enable checkbox */
-    SharedAOut p_aout = THEMIM->getAout();
-    char *psz_af;
-    if( p_aout )
-        psz_af = var_GetNonEmptyString( p_aout.get(), "audio-filter" );
-    else
-        psz_af = var_InheritString( p_intf, "audio-filter" );
-
-    /* To enable or disable subwidgets */
-    /* If that list grows, better iterate over layout's children */
-    connect( ui.enableCheck, &QCheckBox::toggled, [=]( bool checked ) {
-        ui.presetsCombo->setEnabled( checked );
-        ui.presetLabel->setEnabled( checked );
-        ui.eq2PassCheck->setEnabled( checked );
-        ui.slidersPlaceholder->setEnabled( checked );
-        ui.preampSlider->setEnabled( checked );
-        ui.preampValue->setEnabled( checked );
-        ui.preampLabel->setEnabled( checked );
-    } );
-
-    if( psz_af && filterIsPresent( qfu(psz_af), name ) )
-        ui.enableCheck->setChecked( true );
-    else
-        ui.enableCheck->setChecked( false );
-
-    /* workaround for non emitted toggle() signal */
-    ui.enableCheck->toggle(); ui.enableCheck->toggle();
-
-    free( psz_af );
-    connect( ui.enableCheck, &QCheckBox::toggled, this, &Equalizer::enable );
-
-    /* Connect and set 2 Pass checkbox */
-    ui.eq2PassCheck->setChecked( var_InheritBool( p_aout.get(), "equalizer-2pass" ) );
-    connect( ui.eq2PassCheck, &QCheckBox::toggled, this, &Equalizer::enable2Pass );
+    preamp->setResetValue(preampSlider, config_FindConfig("equalizer-preamp")->orig.f);
+    const auto selectionText = [this, state, gainLabel, gain, preamp] {
+        const auto caption = state->selected < 0 ? qtr("Preamp") : qtr("%1 gain").arg(controls[state->selected].descs); gainLabel->setText(caption); gain->setAccessibleName(caption); preamp->setVisible(state->selected < 0); gain->setVisible(state->selected >= 0);
+    };
+    m_selectBand = [state, values, read, gain, preamp, selectionText](int index, bool edit) {
+        if (index != state->selected) { state->selected = index; auto* editor = index < 0 ? preamp : gain; const QSignalBlocker block(editor); editor->setValue(index < 0 ? read(QStringLiteral("equalizer-preamp")).toDouble() : values()[index]); editor->findChild<QLineEdit*>()->setModified(false); }
+        selectionText();
+        if (edit) { auto* editor = index < 0 ? preamp : gain; editor->setFocus(); editor->selectAll(); }
+    };
+    connect(preampGain, &QPushButton::clicked, this, [this] { m_selectBand(-1, true); });
+    for (int i = 0; i < 10; ++i) {
+        connect(sliders[i], &QSlider::valueChanged, this, [this, i, editBand](int position) { m_selectBand(i, false); editBand(i, position / 10.0); });
+        connect(gainButtons[i], &QPushButton::clicked, this, [this, i] { m_selectBand(i, true); });
+    }
+    connect(gain, &QDoubleSpinBox::valueChanged, this, [state, editBand](double value) { if (state->selected >= 0) editBand(state->selected, value); });
+    connect(preampSlider, &QSlider::valueChanged, preamp, [preamp](int position) { preamp->setValue(position / 10.0); });
+    connect(preamp, &QDoubleSpinBox::valueChanged, this, [this, state, write](double value) { write(QStringLiteral("equalizer-preset"), QString()); write(QStringLiteral("equalizer-preamp"), value); refreshAudioValues(state->values); });
+    const auto applyPreset = [this, state, write](int index) {
+        if (index < 0 || index >= NB_PRESETS) return;
+        const auto& preset = eqz_preset_10b[index]; QStringList bands;
+        for (int i = 0; i < 10; ++i) bands.append(QString::number(preset.f_amp[i], 'g', 9));
+        write(QStringLiteral("equalizer-preset"), qfu(preset.psz_name)); write(QStringLiteral("equalizer-bands"), bands.join(QLatin1Char(' '))); write(QStringLiteral("equalizer-preamp"), preset.f_preamp); refreshAudioValues(state->values);
+    };
+    connect(presets, QOverload<int>::of(&QComboBox::activated), this, [applyPreset](int index) { applyPreset(index - 1); });
+    connect(reset, &QPushButton::clicked, this, [applyPreset] { for (int i = 0; i < NB_PRESETS; ++i) if (!strcmp(eqz_preset_10b[i].psz_name, "flat")) { applyPreset(i); break; } });
+    connect(twice, &QCheckBox::toggled, this, [this, state, write](bool checked) { write(QStringLiteral("equalizer-2pass"), checked); refreshAudioValues(state->values); });
+    connect(enabled, &QCheckBox::clicked, this, [this, state](bool checked) { enable(checked); char* raw = var_InheritString(p_intf, "audio-filter"); state->values.insert(QStringLiteral("audio-filter"), qfu(raw ? raw : "")); free(raw); refreshAudioValues(state->values); });
+    m_refreshAudioValues = [this, state, read, values, enabled, available, content, reset, presets, twice, preamp, gain, preampSlider, sliders, gainButtons, preampGain, preampNotice, gainNotice, hint, selectionText](const QHash<QString, QVariant>& pending) {
+        for (const auto* key : {"equalizer-bands", "equalizer-preset", "equalizer-preamp", "equalizer-2pass", "audio-filter"}) {
+            const auto name = qfu(key); const int type = config_GetType(key) & VLC_VAR_CLASS; QVariant saved;
+            if (type == VLC_VAR_STRING) { char* raw = config_GetPsz(key); saved = qfu(raw ? raw : ""); free(raw); }
+            else if (type == VLC_VAR_FLOAT) saved = config_GetFloat(key); else saved = bool(config_GetInt(key));
+            state->values.insert(name, pending.value(name, saved));
+        }
+        const QSignalBlocker a(enabled), b(twice), c(presets), d(preamp), e(gain), f(preampSlider);
+        const bool checked = filterIsPresent(read(QStringLiteral("audio-filter")).toString(), QStringLiteral("equalizer"));
+        enabled->setChecked(checked); enabled->setEnabled(available || checked); content->setEnabled(available && checked); reset->setEnabled(available && checked);
+        const auto bands = values();
+        double amplification = read(QStringLiteral("equalizer-preamp")).toDouble(); if (!std::isfinite(amplification)) amplification = 0;
+        preamp->updateCurrent(audioFilterValue(amplification)); preampSlider->setValue(qRound(amplification * 10)); if (state->selected >= 0) gain->updateCurrent(bands[state->selected]);
+        preampGain->setText(QString::number(amplification, 'f', 1)); preampGain->setAccessibleDescription(qtr("Current gain: %1 dB").arg(QString::number(amplification, 'g', 7)));
+        for (int i = 0; i < 10; ++i) { const QSignalBlocker block(sliders[i]); sliders[i]->setValue(qRound(bands[i] * 10)); gainButtons[i]->setText(QString::number(bands[i], 'f', 1)); gainButtons[i]->setAccessibleDescription(qtr("Current gain: %1 dB").arg(QString::number(bands[i], 'g', 7))); }
+        twice->setChecked(read(QStringLiteral("equalizer-2pass")).toBool());
+        int selected = 0; const auto presetName = read(QStringLiteral("equalizer-preset")).toString();
+        for (int i = 0; i < NB_PRESETS; ++i) {
+            const auto& preset = eqz_preset_10b[i]; if (presetName != qfu(preset.psz_name) || qAbs(amplification - preset.f_preamp) > .00001) continue;
+            bool same = true; for (int band = 0; band < 10; ++band) if (qAbs(bands[band] - preset.f_amp[band]) > .00001) same = false;
+            if (same) selected = i + 1;
+        }
+        presets->setCurrentIndex(selected);
+        for (int i = 0; i < 10; ++i) sliders[i]->setProperty("equalizerResetGain", selected > 0 ? eqz_preset_10b[selected - 1].f_amp[i] : 0.0f);
+        for (auto pair : {qMakePair(preamp, preampNotice), qMakePair(gain, gainNotice)}) {
+            const auto* number = pair.first; pair.second->setText(qtr("Current value: %1. Press Escape to use it.").arg(number->currentText())); pair.second->setVisible(number->isVisible() && number->currentChangedWhileTyping()); pair.first->setAccessibleDescription(number->currentChangedWhileTyping() ? pair.second->text() : QString());
+        }
+        hint->setText(THEMIM->getAout() ? qtr("Select Save to keep these settings.") : qtr("Select Save before you open a file.")); selectionText();
+    };
+    const auto refreshText = [this, title, enabled, missing, presetLabel, presets, twice, preampLabel, preamp, bandsTitle, gain, reset, sliders, gainButtons, preampGain, selectionText] {
+        struct Draft { QLineEdit* input; QString text; int cursor, start, length; bool modified; };
+        QList<Draft> drafts;
+        const QSignalBlocker preampBlock(preamp), gainBlock(gain);
+        for (auto* number : {preamp, gain}) {
+            auto* input = number->findChild<QLineEdit*>();
+            drafts.append({input, input->text(), input->cursorPosition(), input->selectionStart(), int(input->selectedText().size()), input->isModified()});
+        }
+        title->setText(qtr("Equalizer")); enabled->setText(qtr("Enable")); enabled->setAccessibleName(qtr("Enable Equalizer")); missing->setText(qtr("This audio filter is not available in this build.")); presetLabel->setText(qtr("Preset"));
+        const QSignalBlocker block(presets); const auto current = presets->currentData(); presets->clear(); presets->addItem(qtr("Custom"), QString()); for (int i = 0; i < NB_PRESETS; ++i) presets->addItem(qfut(preset_list_text[i]), qfu(preset_list[i])); presets->setCurrentIndex(qMax(0, presets->findData(current)));
+        twice->setText(qtr("Two passes")); twice->setToolTip(qtr("Apply the equalizer twice.")); preampLabel->setText(qtr("Preamp")); preamp->setAccessibleName(qtr("Preamp")); preampGain->setAccessibleName(qtr("Enter preamp gain")); preamp->setSuffix(QStringLiteral(" dB")); gain->setSuffix(QStringLiteral(" dB")); bandsTitle->setText(qtr("Gain (dB)")); reset->setText(qtr("Reset to Flat"));
+        for (int i = 0; i < 10; ++i) { sliders[i]->setAccessibleName(controls[i].descs); gainButtons[i]->setAccessibleName(qtr("Enter gain for %1").arg(controls[i].descs)); gainButtons[i]->setToolTip(qtr("Enter gain for %1").arg(controls[i].descs)); }
+        selectionText();
+        for (const auto& draft : drafts) if (draft.modified) {
+            const QSignalBlocker block(draft.input);
+            draft.input->setText(draft.text); draft.input->setCursorPosition(draft.cursor);
+            if (draft.start >= 0) draft.input->setSelection(draft.start, draft.length);
+            draft.input->setModified(true);
+        }
+    };
+    m_layoutBands = [this, graph, graphLayout, columns, scroll] {
+        const double scale = p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.0;
+        const int minimum = qRound(42 * scale);
+        const int available = scroll->viewport()->width() - qRound(24 * scale);
+        const int count = available >= 11 * minimum + 10 * graphLayout->horizontalSpacing() ? 10
+            : qBound(1, (available + graphLayout->horizontalSpacing()) / (minimum + graphLayout->horizontalSpacing()) - 1, 5);
+        if (graph->property("bandColumns").toInt() == count) return;
+        graph->setProperty("bandColumns", count);
+        for (auto* column : columns) graphLayout->removeWidget(column);
+        graphLayout->addWidget(columns[0], 0, 0, (10 + count - 1) / count, 1);
+        for (int i = 1; i < columns.size(); ++i) graphLayout->addWidget(columns[i], (i - 1) / count, (i - 1) % count + 1);
+    };
+    graph->setProperty("equalizerGraph", true); graph->installEventFilter(this); scroll->viewport()->setProperty("equalizerGraph", true); scroll->viewport()->installEventFilter(this);
+    const auto metrics = [this, layout, body, bandsLayout, graphLayout, sliders, gainButtons, columns, preampSlider, preampGain, gain, preamp] {
+        const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+        layout->setContentsMargins(dp(12), dp(12), dp(12), dp(12)); layout->setSpacing(dp(10)); body->setSpacing(dp(10)); bandsLayout->setContentsMargins(dp(10), dp(10), dp(10), dp(10)); bandsLayout->setSpacing(dp(6)); graphLayout->setHorizontalSpacing(dp(4)); graphLayout->setVerticalSpacing(dp(10));
+        for (auto* slider : sliders) slider->setMinimumHeight(dp(80));
+        preampSlider->setMinimumHeight(dp(80));
+        for (auto* column : columns) for (auto* label : column->findChildren<QLabel*>()) { auto font = label->font(); font.setPixelSize(dp(12)); label->setFont(font); }
+        auto buttons = gainButtons; buttons.append(preampGain); for (auto* button : buttons) { auto font = button->font(); font.setPixelSize(dp(12)); button->setFont(font); button->setContentsMargins(0, 0, 0, 0); }
+        gain->setFixedWidth(dp(140)); preamp->setFixedWidth(dp(140)); m_layoutBands();
+    };
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, metrics);
+    if (auto* translator = InterfaceTranslator::instance()) connect(translator, &InterfaceTranslator::languageChanged, this, refreshText);
+    QWidget* previous = enabled; for (auto* next : {static_cast<QWidget*>(presets), static_cast<QWidget*>(twice), static_cast<QWidget*>(preampSlider)}) { QWidget::setTabOrder(previous, next); previous = next; }
+    QWidget::setTabOrder(previous, preampGain); previous = preampGain;
+    for (int i = 0; i < 10; ++i) { QWidget::setTabOrder(previous, sliders[i]); QWidget::setTabOrder(sliders[i], gainButtons[i]); previous = gainButtons[i]; } QWidget::setTabOrder(previous, gain); QWidget::setTabOrder(gain, preamp); QWidget::setTabOrder(preamp, reset);
+    refreshText(); metrics(); refreshAudioValues({});
 }
 
-void Equalizer::setCorePreset( int i_preset )
+bool Equalizer::eventFilter(QObject* object, QEvent* event)
 {
-    if( i_preset < 1 )
-        return;
-
-    i_preset--;/* 1st in index was an empty entry */
-
-    preamp->setValue( eqz_preset_10b[i_preset].f_preamp );
-    for ( int i=0; i< qMin( eqz_preset_10b[i_preset].i_band,
-                            sliderDatas.count() ) ; i++ )
-        sliderDatas[i]->setValue( eqz_preset_10b[i_preset].f_amp[i] );
-    
-    SharedAOut p_aout = THEMIM->getAout();
-    if( p_aout )
-    {
-        var_SetString( p_aout.get() , "equalizer-preset" , preset_list[i_preset] );
+    if (object->property("equalizerGraph").toBool() && event->type() == QEvent::Resize)
+        QTimer::singleShot(0, this, [this] { if (m_layoutBands) m_layoutBands(); });
+    if (object->property("equalizerBand").isValid() && event->type() == QEvent::MouseButtonDblClick) {
+        if (auto* slider = qobject_cast<QSlider*>(object)) slider->setValue(qRound(slider->property("equalizerResetGain").toDouble() * 10));
+        return true;
     }
-    emit configChanged( qfu( "equalizer-preset" ), QVariant( qfu( preset_list[i_preset] ) ) );
+    if (object->property("equalizerBand").isValid() && event->type() == QEvent::FocusIn && m_selectBand)
+        m_selectBand(object->property("equalizerBand").toInt(), false);
+    return AudioFilterControlWidget::eventFilter(object, event);
 }
 
-/* Function called when the set2Pass button is activated */
-void Equalizer::enable2Pass( bool b_enable )
-{
-    SharedAOut p_aout= THEMIM->getAout();
-
-    if( p_aout )
-    {
-        var_SetBool( p_aout.get(), "equalizer-2pass", b_enable );
-    }
-    emit configChanged( qfu( "equalizer-2pass" ), QVariant( b_enable ) );
-}
 
 /**********************************************************************
  * Audio filters
@@ -2342,7 +2193,7 @@ Compressor::Compressor( qt_intf_t *p_intf, QWidget *parent )
     : AudioFilterControlWidget( p_intf, parent, "compressor" )
 {
     i_smallfont = -2;
-    const FilterSliderData::slider_data_t a[7] =
+    const AudioFilterSliderData a[7] =
     {
         { "compressor-rms-peak",    qfu(N_("RMS/peak")),         "",       0.0f,   1.0f,   0.00f, 0.001f, 1.0 },
         { "compressor-attack",      qfu(N_("Attack")),       qfu(N_("ms")),   1.5f, 400.0f,  25.00f, 0.100f, 1.0 },
@@ -2364,7 +2215,7 @@ Expander::Expander( qt_intf_t *p_intf, QWidget *parent )
     : AudioFilterControlWidget( p_intf, parent, "expander" )
 {
     i_smallfont = -2;
-    const FilterSliderData::slider_data_t a[7] =
+    const AudioFilterSliderData a[7] =
     {
         { "expander-rms-peak",    qfu(N_("RMS/peak")),         "",       0.0f,   1.0f,   0.20f, 0.001f, 1.0 },
         { "expander-attack",      qfu(N_("Attack")),       qfu(N_("ms")),   1.5f, 400.0f,  25.00f, 0.100f, 1.0 },
@@ -2386,7 +2237,7 @@ Limiter::Limiter( qt_intf_t *p_intf, QWidget *parent )
     : AudioFilterControlWidget( p_intf, parent, "limiter" )
 {
     i_smallfont = -2;
-    const FilterSliderData::slider_data_t a[7] =
+    const AudioFilterSliderData a[7] =
     {
         { "limiter-rms-peak",    qfu(N_("RMS/peak")),         "",       0.0f,   1.0f,   1.00f, 0.001f, 1.0 },
         { "limiter-attack",      qfu(N_("Attack")),       qfu(N_("ms")),   1.5f, 400.0f,   1.50f, 0.100f, 1.0 },
@@ -2408,7 +2259,7 @@ Spatializer::Spatializer( qt_intf_t *p_intf, QWidget *parent )
     : AudioFilterControlWidget( p_intf, parent, "spatializer" )
 {
     i_smallfont = -1;
-    const FilterSliderData::slider_data_t a[5] =
+    const AudioFilterSliderData a[5] =
     {
         { "spatializer-roomsize",   qfu(N_("Room size")),    "", 0.0f, 1.1f, 0.85f, 0.1f, 1.0 },
         { "spatializer-width",      qfu(N_("Width")),   "", 0.0f, 1.0f, 1.0f, 0.1f, 1.0 },
@@ -2428,7 +2279,7 @@ StereoWidener::StereoWidener( qt_intf_t *p_intf, QWidget *parent )
     : AudioFilterControlWidget( p_intf, parent, "stereo_widen" )
 {
     i_smallfont = -1;
-    const FilterSliderData::slider_data_t a[4] =
+    const AudioFilterSliderData a[4] =
     {
         { "stereowiden-delay",     qfu(N_("Delay time")),    "ms", 1.0, 100,  20, 1.0, 1.0 },
         { "stereowiden-feedback",  qfu(N_("Feedback gain")), "%",  0.0, 0.9, 0.3, 0.1, 100.0 },

@@ -607,7 +607,6 @@ nodist_libqt_plugin_la_SOURCES = \
 	widgets/native/softwarebackdropblur.moc.cpp
 
 nodist_libqt_plugin_la_SOURCES += \
-	dialogs/extended/ui_equalizer.h \
 	dialogs/extended/ui_video_effects.h \
 	dialogs/fingerprint/ui_fingerprintdialog.h \
 	dialogs/help/ui_about.h \
@@ -825,7 +824,6 @@ MOC_CPPFLAGS += -D_WIN32
 endif
 
 libqt_plugin_la_UI = \
-	dialogs/extended/equalizer.ui \
 	dialogs/extended/video_effects.ui \
 	dialogs/fingerprint/fingerprintdialog.ui \
 	dialogs/help/about.ui \

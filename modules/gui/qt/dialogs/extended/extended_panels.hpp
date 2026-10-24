@@ -35,7 +35,6 @@
 #include "util/variables.hpp"
 
 /* Auto-generated from .ui files */
-#include "ui_equalizer.h"
 #include "ui_video_effects.h"
 
 class QScrollArea;
@@ -43,8 +42,6 @@ class QVBoxLayout;
 class QTimer;
 class QHideEvent;
 class QTabWidget;
-
-#define BANDS 10
 
 class QSignalMapper;
 
@@ -121,45 +118,16 @@ private slots:
     void checkDevice();
 };
 
-class FilterSliderData : public QObject
+struct AudioFilterSliderData
 {
-    Q_OBJECT
-
-public:
-    typedef struct
-    {
-        QString name;
-        QString descs;
-        QString units;
-        float f_min;      // min
-        float f_max;      // max
-        float f_value;    // value
-        float f_resolution; // resolution
-        float f_visual_multiplier; // only for display (f_value *)
-    } slider_data_t;
-    FilterSliderData( QObject *parent, qt_intf_t *p_intf,
-                      QSlider *slider,
-                      QLabel *valueLabel, QLabel *nameLabel,
-                      const slider_data_t *p_data );
-    void setValue( float f );
-
-protected:
-    FilterSliderData( QObject *parent, QSlider *slider );
-    virtual float initialValue();
-    virtual void writeToConfig();
-    QSlider *slider;
-    QLabel *valueLabel;
-    QLabel *nameLabel;
-    const slider_data_t *p_data;
-    qt_intf_t *p_intf;
-    bool eventFilter(QObject *watched, QEvent *event) override;
-
-public slots:
-    virtual void onValueChanged( int i );
-    virtual void updateText( int i );
-
-signals:
-    void configChanged( QString name, QVariant value );
+    QString name;
+    QString descs;
+    QString units;
+    float f_min;
+    float f_max;
+    float f_value;
+    float f_resolution;
+    float f_visual_multiplier;
 };
 
 class AudioFilterControlWidget : public QWidget
@@ -170,14 +138,11 @@ public:
     AudioFilterControlWidget( qt_intf_t *, QWidget *, const char *name );
     void refreshAudioValues(const QHash<QString, QVariant>& pending);
 
-private:
+protected:
     std::function<void(const QHash<QString, QVariant>&)> m_refreshAudioValues;
 
-protected:
     virtual void build();
-    void connectConfigChanged( FilterSliderData *slider );
-    QVector<FilterSliderData::slider_data_t> controls;
-    QVector<FilterSliderData *> sliderDatas;
+    QVector<AudioFilterSliderData> controls;
     QGroupBox *slidersBox;
     qt_intf_t *p_intf;
     QString name; // filter's module name
@@ -191,27 +156,6 @@ signals:
     void draftChanged();
 };
 
-class EqualizerSliderData : public FilterSliderData
-{
-    Q_OBJECT
-
-public:
-    EqualizerSliderData( QObject *parent, qt_intf_t *p_intf,
-                         QSlider *slider,
-                         QLabel *valueLabel, QLabel *nameLabel,
-                         const slider_data_t *p_data, int index );
-
-protected:
-    float initialValue() override;
-    int index;
-    QStringList getBandsFromAout() const;
-    void writeToConfig() override;
-    bool eventFilter(QObject* watched, QEvent* event) override;
-
-public slots:
-    void onValueChanged( int i ) override;
-};
-
 class Equalizer: public AudioFilterControlWidget
 {
     Q_OBJECT
@@ -223,12 +167,10 @@ protected:
     void build() override;
 
 private:
-    FilterSliderData *preamp;
-    FilterSliderData::slider_data_t preamp_values;
+    bool eventFilter(QObject*, QEvent*) override;
+    std::function<void(int, bool)> m_selectBand;
+    std::function<void()> m_layoutBands;
 
-private slots:
-    void setCorePreset( int );
-    void enable2Pass( bool );
 };
 
 class Compressor: public AudioFilterControlWidget

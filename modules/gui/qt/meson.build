@@ -673,7 +673,6 @@ if host_system == 'windows'
 endif
 
 ui_sources = files(
-    'dialogs/extended/equalizer.ui',
     'dialogs/extended/video_effects.ui',
     'dialogs/fingerprint/fingerprintdialog.ui',
     'dialogs/help/about.ui',

@@ -318,7 +318,8 @@ void ExtendedDialog::refreshAudioConfig()
         // A later defaults change supersedes this window's older pending value.
         // Failed local saves update the snapshot but retain the retry state.
         const bool superseded = saved != m_savedAudioValues.value(it.key());
-        if (superseded || (!m_audioSaveFailed && current.isValid() && current == saved)) {
+        if (superseded || (!m_audioSaveFailed
+            && (current.isValid() ? current == saved : it.value() == saved))) {
             m_savedAudioValues.remove(it.key()); it = pending.erase(it); continue;
         }
         if (current.isValid()) it.value() = current;

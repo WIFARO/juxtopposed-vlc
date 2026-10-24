@@ -3030,7 +3030,14 @@ bool RedesignPreferences::save()
         }
     }
     if (previous.contains(QStringLiteral("audio-filter"))) {
-        const auto before = previous.value(QStringLiteral("audio-filter")).toString().split(QLatin1Char(':'), Qt::SkipEmptyParts);
+        auto before = previous.value(QStringLiteral("audio-filter")).toString().split(QLatin1Char(':'), Qt::SkipEmptyParts);
+        if (const auto output = vlc_player_aout_Hold(player)) {
+            // Native effects can differ from saved defaults. Apply an explicit
+            // saved chain against what is playing, so removed effects stop.
+            char* current = var_GetString(output, "audio-filter");
+            before = qfu(current ? current : "").split(QLatin1Char(':'), Qt::SkipEmptyParts);
+            free(current); aout_Release(output);
+        }
         const auto after = value(QStringLiteral("audio-filter")).toString().split(QLatin1Char(':'), Qt::SkipEmptyParts);
         for (const auto& filter : before)
             if (!after.contains(filter)) vlc_player_aout_EnableFilter(player, filter.toUtf8().constData(), false);
