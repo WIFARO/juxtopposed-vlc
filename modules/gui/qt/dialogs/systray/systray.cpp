@@ -20,8 +20,14 @@
 #include "notification_policy.hpp"
 
 #include <QImageReader>
+#include <QStyleHints>
 
 #include "maininterface/mainctx.hpp"
+#include "maininterface/compositor.hpp"
+#include "menus/redesign_menu_style.hpp"
+#include "util/colorizedsvgicon.hpp"
+#include "util/color_scheme_model.hpp"
+#include "util/interface_translator.hpp"
 #include "menus/menus.hpp"
 #include "playlist/playlist_controller.hpp"
 #include "player/player_controller.hpp"
@@ -49,7 +55,11 @@ VLCSystray::VLCSystray(MainCtx* ctx, QObject* parent)
 
     m_menu = std::make_unique<VLCMenu>( qtr( "VLC media player"), m_intf );
     m_menu->setIcon( iconVLC );
+    m_menu->setObjectName(QStringLiteral("redesignTrayMenu"));
+    styleRedesignMenus(m_menu.get(), m_ctx);
+    createMenu();
     setContextMenu(m_menu.get());
+    connect(m_menu.get(), &QMenu::aboutToShow, this, &VLCSystray::update);
     update();
     show();
 
@@ -62,6 +72,16 @@ VLCSystray::VLCSystray(MainCtx* ctx, QObject* parent)
     /* Connect PLAY_STATUS on the systray */
     connect( m_intf->p_mainPlayerController, &PlayerController::playingStateChanged,
             this, &VLCSystray::update );
+    connect(m_intf->p_mainPlayerController, &PlayerController::inputChanged, this, &VLCSystray::update);
+    connect(m_intf->p_mainPlayerController, &PlayerController::soundMuteChanged, this, &VLCSystray::update);
+    connect(m_intf->p_mainPlayerController, &PlayerController::recordingChanged, this, &VLCSystray::update);
+    connect(m_intf->p_mainPlaylistController, &PlaylistController::isEmptyChanged, this, &VLCSystray::update);
+    connect(m_ctx, &MainCtx::intfScaleFactorChanged, this, &VLCSystray::update);
+    connect(m_ctx, &MainCtx::redesignAccentChanged, this, &VLCSystray::update);
+    connect(m_ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, &VLCSystray::update);
+    connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, &VLCSystray::update);
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, &VLCSystray::update);
 }
 
 VLCSystray::~VLCSystray()
@@ -170,46 +190,84 @@ void VLCSystray::updateTooltipName( const QString& name )
     update();
 }
 
-void VLCSystray::update()
+void VLCSystray::createMenu()
 {
-    // explictly delete submenus, see QTBUG-11070
-    for (QAction *action : m_menu->actions()) {
-        if (action->menu()) {
-            delete action->menu();
-        }
-    }
-    m_menu->clear();
-
 #ifndef Q_OS_MAC
-    /* Hide / Show VLC and cone */
-    if( m_ctx->interfaceVisibility() != QWindow::Hidden )
-    {
-        m_menu->addAction(
-            QIcon( ":/logo/vlc16.png" ), qtr( "&Hide VLC media player in taskbar" ),
-            this, &VLCSystray::hideUpdateMenu);
-    }
-    else
-    {
-        m_menu->addAction(
-            QIcon( ":/logo/vlc16.png" ), qtr( "Sho&w VLC media player" ),
-            this, &VLCSystray::showUpdateMenu);
-    }
+    auto *visibility = m_menu->addAction(qtr("&Hide VLC"), this, [this] {
+        if (m_ctx->interfaceVisibility() == QWindow::Hidden) showUpdateMenu();
+        else hideUpdateMenu();
+    });
+    visibility->setObjectName(QStringLiteral("trayVisibility"));
     m_menu->addSeparator();
 #endif
-
-    VLCMenuBar::PopupMenuPlaylistEntries( m_menu.get(), m_intf );
-    VLCMenuBar::PopupMenuControlEntries( m_menu.get(), m_intf, false );
-
-    VLCMenuBar::VolumeEntries( m_intf, m_menu.get() );
+    VLCMenuBar::PopupMenuPlaylistEntries(m_menu.get(), m_intf);
+    VLCMenuBar::PopupMenuControlEntries(m_menu.get(), m_intf, false);
+    VLCMenuBar::VolumeEntries(m_intf, m_menu.get());
     m_menu->addSeparator();
-    m_menu->addAction(
-        QIcon(":/menu/file.svg"), qtr( "&Open Media" ),
-        THEDP, &DialogsProvider::openFileDialog);
+    m_menu->addAction(qtr("&Open Media"), THEDP, &DialogsProvider::openFileDialog)->setObjectName(QStringLiteral("trayOpen"));
+    m_menu->addAction(qtr("&Quit"), THEDP, &DialogsProvider::quit)->setObjectName(QStringLiteral("trayQuit"));
+}
 
-    m_menu->addAction(
-        QIcon(":/menu/exit.svg"), qtr( "&Quit" ),
-        THEDP, &DialogsProvider::quit);
-
-    /* Set the menu */
-    setContextMenu( m_menu.get() );
+void VLCSystray::update()
+{
+    // Retain actions and submenus while playback changes. Rebuilding here used
+    // to destroy an open submenu and the keyboard's active action.
+    auto *window = m_intf->p_compositor ? m_intf->p_compositor->interfaceMainWindow() : nullptr;
+    if (window != m_window)
+    {
+        if (m_window) disconnect(m_window, nullptr, this, nullptr);
+        m_window = window;
+        if (window) connect(window, &QWindow::visibilityChanged, this, [this] { update(); }, Qt::QueuedConnection);
+    }
+    styleRedesignMenus(m_menu.get(), m_ctx);
+    const auto set = [this](const char *name, const QString& text, [[maybe_unused]] const QString& icon = {}) {
+        if (auto *action = m_menu->findChild<QAction*>(QLatin1String(name)))
+        {
+            if (action->text() != text) action->setText(text);
+#ifndef __APPLE__
+            if (!icon.isEmpty())
+            {
+                const auto foreground = m_menu->palette().text().color();
+                const auto accent = m_ctx->redesignAccent();
+                const auto mutedAccent = accent == QColor(QStringLiteral("#d37918"))
+                    ? QColor(QStringLiteral("#ab6314")) : accent.darker(123);
+                action->setIcon(icon.endsWith(QLatin1String(".svg"))
+                    ? QIcon(ColorizedSvgIcon(icon, foreground, {}, accent,
+                        {{QStringLiteral("#8F8F8F"), foreground.name()},
+                         {QStringLiteral("#747474"), foreground.name()},
+                         {QStringLiteral("#f0f"), foreground.name()},
+                         {QStringLiteral("#D37918"), accent.name()},
+                         {QStringLiteral("#ff950d"), accent.name()},
+                         {QStringLiteral("fill=\"red\""), QStringLiteral("fill=\"%1\"").arg(accent.name())},
+                         {QStringLiteral("#AB6314"), mutedAccent.name()}}))
+                    : QIcon(icon));
+            }
+#endif
+            return action;
+        }
+        return static_cast<QAction*>(nullptr);
+    };
+    auto *player = m_intf->p_mainPlayerController;
+    const bool hasInput = player->hasInput();
+    const bool started = player->isStarted();
+    const bool playing = hasInput && player->getPlayingState() == PlayerController::PLAYING_STATE_PLAYING;
+#ifndef Q_OS_MAC
+    set("trayVisibility", m_ctx->interfaceVisibility() == QWindow::Hidden ? qtr("&Show VLC") : qtr("&Hide VLC"), QStringLiteral(":/logo/vlc16.png"));
+#endif
+    set("vlcMenuPlayPause", playing ? qtr("Pause") : qtr("&Play"), playing
+        ? QStringLiteral(":/menu/ic_pause_filled.svg") : QStringLiteral(":/menu/redesign/play.svg"));
+    if (auto *stop = set("vlcMenuStop", qtr("&Stop"), QStringLiteral(":/menu/redesign/stop.svg"))) stop->setEnabled(started);
+    set("vlcMenuPrevious", qtr("Pre&vious"), QStringLiteral(":/menu/redesign/previous.svg"));
+    set("vlcMenuNext", qtr("Ne&xt"), QStringLiteral(":/menu/redesign/next.svg"));
+    if (auto *record = set("vlcMenuRecord", player->isRecording() ? qtr("Stop recording") : qtr("Record"), QStringLiteral(":/menu/redesign/record.svg"))) record->setEnabled(started);
+    if (auto *speed = m_menu->findChild<QMenu*>(QStringLiteral("vlcMenuSpeed"))) speed->setTitle(qtr("Sp&eed"));
+    set("vlcMenuSpeedFasterFine", qtr("Faster (fine)"), QStringLiteral(":/menu/ic_fluent_fast_forward.svg"));
+    set("vlcMenuSpeedNormal", qtr("N&ormal Speed"));
+    set("vlcMenuSpeedSlowerFine", qtr("Slower (fine)"), QStringLiteral(":/menu/ic_fluent_rewind.svg"));
+    set("vlcMenuVolumeUp", qtr("&Increase Volume"), QStringLiteral(":/menu/volume-high.svg"));
+    set("vlcMenuVolumeDown", qtr("&Decrease Volume"), QStringLiteral(":/menu/volume-low.svg"));
+    set("vlcMenuMute", player->isMuted() ? qtr("&Unmute") : qtr("&Mute"), player->isMuted()
+        ? QStringLiteral(":/menu/volume-high.svg") : QStringLiteral(":/menu/volume-muted.svg"));
+    set("trayOpen", qtr("&Open Media"), QStringLiteral(":/menu/redesign/open.svg"));
+    set("trayQuit", qtr("&Quit"), QStringLiteral(":/menu/redesign/quit.svg"));
 }

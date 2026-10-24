@@ -409,9 +409,13 @@ void VLCMenuBar::VolumeEntries( qt_intf_t *p_intf, QMenu *current )
 {
     current->addSeparator();
 
-    current->addAction( QIcon( ":/menu/volume-high.svg" ), qtr( "&Increase Volume" ), THEMIM, &PlayerController::setVolumeUp );
-    current->addAction( QIcon( ":/menu/volume-low.svg" ), qtr( "&Decrease Volume" ), THEMIM, &PlayerController::setVolumeDown );
-    current->addAction( QIcon( ":/menu/volume-muted.svg" ), qtr( "&Mute" ), THEMIM, &PlayerController::toggleMuted );
+    // QAction::triggered(bool) must not become the integer step count (zero
+    // for these non-checkable actions). Use the controller's default step.
+    current->addAction(QIcon(":/menu/volume-high.svg"), qtr("&Increase Volume"), THEMIM,
+        [controller = THEMIM] { controller->setVolumeUp(); })->setObjectName(QStringLiteral("vlcMenuVolumeUp"));
+    current->addAction(QIcon(":/menu/volume-low.svg"), qtr("&Decrease Volume"), THEMIM,
+        [controller = THEMIM] { controller->setVolumeDown(); })->setObjectName(QStringLiteral("vlcMenuVolumeDown"));
+    current->addAction( QIcon( ":/menu/volume-muted.svg" ), qtr( "&Mute" ), THEMIM, &PlayerController::toggleMuted )->setObjectName(QStringLiteral("vlcMenuMute"));
 }
 
 /**
@@ -591,28 +595,23 @@ void VLCMenuBar::PopupMenuPlaylistEntries( QMenu *menu, qt_intf_t *p_intf )
     QAction *action;
     bool hasInput = THEMIM->hasInput();
 
-    /* Play or Pause action and icon */
-    if( !hasInput || THEMIM->getPlayingState() != PlayerController::PLAYING_STATE_PLAYING )
-    {
-        action = menu->addAction( qtr( "&Play" ), [p_intf]() {
-            if ( THEMPL->isEmpty() )
-                THEDP->openFileDialog();
-            else
-                THEMPL->togglePlayPause();
-        });
-#ifndef __APPLE__ /* No icons in menus in Mac */
-        action->setIcon( ColorizedSvgIcon::colorizedIconForWidget( QStringLiteral(":/menu/ic_fluent_play_filled.svg"), menu ) );
+    /* Resolve playback state when triggered, so a retained tray action also
+     * works after the queue becomes empty or the current input changes. */
+    const bool playing = hasInput && THEMIM->getPlayingState() == PlayerController::PLAYING_STATE_PLAYING;
+    action = menu->addAction(playing ? qtr("Pause") : qtr("&Play"), [p_intf] {
+        if (THEMPL->isEmpty() && !THEMIM->hasInput()) THEDP->openFileDialog();
+        else THEMPL->togglePlayPause();
+    });
+    action->setObjectName(QStringLiteral("vlcMenuPlayPause"));
+#ifndef __APPLE__
+    action->setIcon(ColorizedSvgIcon::colorizedIconForWidget(playing
+        ? QStringLiteral(":/menu/ic_pause_filled.svg") : QStringLiteral(":/menu/ic_fluent_play_filled.svg"), menu));
 #endif
-    }
-    else
-    {
-        action = addMPLStaticEntry( p_intf, menu, qtr( "Pause" ),
-                ":/menu/ic_pause_filled.svg", &PlaylistController::togglePlayPause );
-    }
 
     /* Stop */
     action = addMPLStaticEntry( p_intf, menu, qtr( "&Stop" ),
             ":/menu/ic_fluent_stop.svg", &PlaylistController::stop );
+    action->setObjectName(QStringLiteral("vlcMenuStop"));
     if( !hasInput )
         action->setEnabled( false );
 
@@ -620,15 +619,18 @@ void VLCMenuBar::PopupMenuPlaylistEntries( QMenu *menu, qt_intf_t *p_intf )
     bool bPlaylistEmpty = THEMPL->isEmpty();
     QAction* previousAction = addMPLStaticEntry( p_intf, menu, qtr( "Pre&vious" ),
             ":/menu/ic_fluent_previous.svg", &PlaylistController::prev );
+    previousAction->setObjectName(QStringLiteral("vlcMenuPrevious"));
     previousAction->setEnabled( !bPlaylistEmpty );
     connect( THEMPL, &PlaylistController::isEmptyChanged, previousAction, &QAction::setDisabled);
 
     QAction* nextAction = addMPLStaticEntry( p_intf, menu, qtr( "Ne&xt" ),
             ":/menu/ic_fluent_next.svg", &PlaylistController::next );
+    nextAction->setObjectName(QStringLiteral("vlcMenuNext"));
     nextAction->setEnabled( !bPlaylistEmpty );
     connect( THEMPL, &PlaylistController::isEmptyChanged, nextAction, &QAction::setDisabled);
 
     action = menu->addAction( qtr( "Record" ), THEMIM, &PlayerController::toggleRecord );
+    action->setObjectName(QStringLiteral("vlcMenuRecord"));
     action->setIcon( QIcon( ":/menu/ic_fluent_record.svg" ) );
     if( !hasInput )
         action->setEnabled( false );
@@ -640,6 +642,7 @@ void VLCMenuBar::PopupMenuControlEntries( QMenu *menu, qt_intf_t *p_intf,
 {
     QAction *action;
     QMenu *rateMenu = new QMenu( qtr( "Sp&eed" ), menu );
+    rateMenu->setObjectName(QStringLiteral("vlcMenuSpeed"));
     // QMenu windows do not inherit their parent menu's palette automatically.
     rateMenu->setPalette(menu->palette());
     rateMenu->setTearOffEnabled( true );
@@ -656,12 +659,15 @@ void VLCMenuBar::PopupMenuControlEntries( QMenu *menu, qt_intf_t *p_intf,
 
     action = rateMenu->addAction( ColorizedSvgIcon::colorizedIconForWidget( ":/menu/ic_fluent_fast_forward.svg", rateMenu ), qtr( "Faster (fine)" ), THEMIM,
                               &PlayerController::littlefaster );
+    action->setObjectName(QStringLiteral("vlcMenuSpeedFasterFine"));
 
     action = rateMenu->addAction( qtr( "N&ormal Speed" ), THEMIM,
                               &PlayerController::normalRate );
+    action->setObjectName(QStringLiteral("vlcMenuSpeedNormal"));
 
     action = rateMenu->addAction( ColorizedSvgIcon::colorizedIconForWidget( ":/menu/ic_fluent_rewind.svg", rateMenu ), qtr( "Slower (fine)" ), THEMIM,
                               &PlayerController::littleslower );
+    action->setObjectName(QStringLiteral("vlcMenuSpeedSlowerFine"));
 
     if( b_normal )
     {

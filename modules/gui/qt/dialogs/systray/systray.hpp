@@ -21,6 +21,8 @@
 
 #include <QWidget>
 #include <QSystemTrayIcon>
+#include <QPointer>
+class QWindow;
 
 class MainCtx;
 struct qt_intf_t;
@@ -49,7 +51,9 @@ private:
     MainCtx* m_ctx = nullptr;
     qt_intf_t* m_intf = nullptr;
 
+    void createMenu();
     std::unique_ptr<QMenu> m_menu;
+    QPointer<QWindow> m_window;
 };
 
 #endif // SYSTRAY_HPP

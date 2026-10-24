@@ -16,6 +16,7 @@
 #include <QEvent>
 #include <QScopedValueRollback>
 #include <QStringList>
+#include <QScreen>
 
 namespace {
 QString shortcutText(const QString& text)
@@ -40,12 +41,19 @@ public:
 protected:
     bool eventFilter(QObject* object, QEvent* event) override
     {
-        if (event->type() == QEvent::Resize) {
+        if (event->type() == QEvent::Resize || event->type() == QEvent::Show) {
             auto* menu = static_cast<QMenu*>(object);
             QPainterPath outline;
             const auto radius = menu->property("redesignMenuRadius").toReal();
             outline.addRoundedRect(menu->rect(), radius, radius);
             menu->setMask(QRegion(outline.toFillPolygon().toPolygon()));
+            if (menu->isVisible() && menu->screen()) {
+                const auto available = menu->screen()->availableGeometry();
+                auto position = menu->pos();
+                position.setY(qBound(available.top(), position.y(),
+                    qMax(available.top(), available.bottom() - menu->height() + 1)));
+                if (position != menu->pos()) menu->move(position);
+            }
         }
         return false;
     }
@@ -238,6 +246,12 @@ void styleRedesignMenus(QMenu* root, MainCtx* ctx)
         auto* style = static_cast<RedesignMenuStyle*>(menu->findChild<QProxyStyle*>(QStringLiteral("redesignMenuStyle"), Qt::FindDirectChildrenOnly));
         if (!style) style = new RedesignMenuStyle(menu);
         style->configure(ctx);
+        // Qt resizes visible menus to their full size hint when an action or
+        // font changes. Keep that resize bounded; Qt still owns the scrollers.
+        if (const auto* screen = menu->screen()) {
+            const int frame = style->pixelMetric(QStyle::PM_MenuDesktopFrameWidth, nullptr, menu);
+            menu->setMaximumHeight(qMax(1, screen->availableGeometry().height() - 2 * frame));
+        }
         menu->setStyle(style);
         menu->setPalette(style->menuPalette(menu->palette()));
         menu->setFont(font);
@@ -269,6 +283,9 @@ public:
         connect(ctx, &MainCtx::compactMenusChanged, this, [this] { refresh(); });
         connect(ctx, &MainCtx::intfScaleFactorChanged, this, [this] { refresh(); });
         connect(ctx, &MainCtx::backdropBlurEnabledChanged, this, [this] { refresh(); });
+        connect(ctx, &MainCtx::redesignAccentChanged, this, [this] { refresh(); });
+        connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, [this] { refresh(); });
+        connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, [this] { refresh(); });
     }
 protected:
     bool eventFilter(QObject* object, QEvent* event) override
@@ -276,7 +293,7 @@ protected:
         if (m_updating || (event->type() != QEvent::Polish && event->type() != QEvent::Show))
             return false;
         auto* menu = qobject_cast<QMenu*>(object);
-        if (menu && (m_ctx->compactMenus() || menu->property("redesignMenuMaskInstalled").toBool())) {
+        if (menu) {
             QScopedValueRollback guard(m_updating, true);
             const bool changed = menu->property("redesignCompactMenu") != QVariant(m_ctx->compactMenus());
             styleRedesignMenus(menu, m_ctx);
@@ -290,8 +307,7 @@ private:
         QScopedValueRollback guard(m_updating, true);
         for (auto* widget : QApplication::allWidgets()) {
             auto* menu = qobject_cast<QMenu*>(widget);
-            if (!menu || (!m_ctx->compactMenus() && !menu->property("redesignMenuMaskInstalled").toBool()))
-                continue;
+            if (!menu) continue;
             styleRedesignMenus(menu, m_ctx);
             if (menu->isVisible()) menu->adjustSize();
         }
