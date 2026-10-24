@@ -60,18 +60,40 @@ C.Dialog {
     header: null
     footer: null
 
+    // Popup is not an Item. Apply mirroring to its visual panel and all its children.
+    Binding {
+        target: bodyScroll.parent ? bodyScroll.parent.LayoutMirroring : null
+        property: "enabled"
+        value: Qt.application.layoutDirection === Qt.RightToLeft
+    }
+    Binding {
+        target: bodyScroll.parent ? bodyScroll.parent.LayoutMirroring : null
+        property: "childrenInherit"
+        value: true
+    }
+
     // Keep the title and all request text in the scroll area; actions stay outside it.
     contentItem: C.ScrollView {
         id: bodyScroll
         objectName: "interactionBody"
+        readonly property bool hasOverflow: bodyColumn.implicitHeight > availableHeight
         implicitHeight: bodyColumn.implicitHeight
         contentWidth: availableWidth
+        leftPadding: mirrored ? bodyScrollBar.implicitWidth + control.theme.dp(8) : 0
+        rightPadding: !mirrored ? bodyScrollBar.implicitWidth + control.theme.dp(8) : 0
         clip: true
         Keys.onEscapePressed: event => { event.accepted = control.closePolicy === C.Popup.NoAutoClose }
         C.ScrollBar.horizontal.policy: C.ScrollBar.AlwaysOff
-        C.ScrollBar.vertical.objectName: "interactionScrollBar"
-        C.ScrollBar.vertical.policy: C.ScrollBar.AsNeeded
-        C.ScrollBar.vertical.active: true
+        C.ScrollBar.vertical: C.ScrollBar {
+            id: bodyScrollBar
+            objectName: "interactionScrollBar"
+            parent: bodyScroll
+            x: bodyScroll.mirrored ? 0 : bodyScroll.width - width
+            y: bodyScroll.topPadding
+            height: bodyScroll.availableHeight
+            policy: bodyScroll.hasOverflow ? C.ScrollBar.AsNeeded : C.ScrollBar.AlwaysOff
+            active: true
+        }
         ColumnLayout {
             id: bodyColumn
             width: bodyScroll.availableWidth
@@ -103,16 +125,26 @@ C.Dialog {
     }
     function revealField(field) {
         if (!opened || !field || !bodyViewport) return
+        bodyColumn.ensurePolished()
+        bodyScroll.ensurePolished()
         const point = field.mapToItem(bodyColumn, 0, 0)
         const top = bodyViewport.contentY
-        if (point.y < top) bodyViewport.contentY = Math.max(0, point.y - theme.dp(8))
+        let target = top
+        if (point.y < top) target = point.y - theme.dp(8)
         else if (point.y + field.height > top + bodyViewport.height)
-            bodyViewport.contentY = Math.max(0, point.y + field.height + theme.dp(8) - bodyViewport.height)
+            target = point.y + field.height + theme.dp(8) - bodyViewport.height
+        const maximum = Math.max(0, bodyViewport.contentHeight - bodyViewport.height)
+        bodyViewport.contentY = Math.max(0, Math.min(maximum, target))
     }
     function revealActiveField() { revealField(activeField) }
     onOpened: if (bodyViewport) bodyViewport.contentY = 0
     onWidthChanged: Qt.callLater(control.revealActiveField)
     onHeightChanged: Qt.callLater(control.revealActiveField)
+    Connections {
+        target: control.bodyViewport
+        function onContentHeightChanged() { Qt.callLater(control.revealActiveField) }
+        function onHeightChanged() { Qt.callLater(control.revealActiveField) }
+    }
 
     C.Overlay.modal: Rectangle { color: "#80000000" }
     background: Redesign.RedesignDialogSurface {
