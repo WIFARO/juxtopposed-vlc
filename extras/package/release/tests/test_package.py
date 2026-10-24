@@ -132,7 +132,7 @@ class PackageTests(unittest.TestCase):
                         mock.patch.object(package, 'ROOT', sources), \
                         mock.patch.object(package, 'run', side_effect=query), \
                         mock.patch.object(package.subprocess, 'run', side_effect=execute):
-                    archive = package.macos(stage, output, '4.0.0-beta.4', 'a' * 40)
+                    archive = package.macos(stage, output, package.validate_tag(None)['version'], 'a' * 40)
                 self.assertTrue(archive.exists())
                 metadata = json.loads((output / f'macos-{arch}-build.json').read_text())
                 self.assertEqual(metadata['signing'], 'ad-hoc; no Developer ID or notarization')

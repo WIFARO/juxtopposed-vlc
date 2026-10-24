@@ -1,12 +1,12 @@
 # Cutting a release
 
-The release pipeline builds four native targets. The next release is `4.0.0-beta.4`:
+The release pipeline builds four native targets. The next release is `4.0.0-beta.5`:
 
 | Target | Download |
 | --- | --- |
-| Windows 10 (1809+) / 11, x86_64 | `vlc-juxtopposed-4.0.0-beta.4-win64.zip` (portable) |
-| macOS Apple Silicon | `vlc-juxtopposed-4.0.0-beta.4-macos-arm64.zip` |
-| macOS Intel | `vlc-juxtopposed-4.0.0-beta.4-macos-x86_64.zip` |
+| Windows 10 (1809+) / 11, x86_64 | `vlc-juxtopposed-4.0.0-beta.5-win64.zip` (portable) |
+| macOS Apple Silicon | `vlc-juxtopposed-4.0.0-beta.5-macos-arm64.zip` |
+| macOS Intel | `vlc-juxtopposed-4.0.0-beta.5-macos-x86_64.zip` |
 | Linux x86_64, glibc >= 2.35, GLIBCXX >= 3.4.30 | `.tar.gz` portable directory bundle |
 
 The Mac packages are separate native apps, rather than a universal binary.
@@ -81,7 +81,7 @@ the build still succeeds and users can configure their own key in settings.
 
 ## Review before pushing
 
-Review [the 4.0.0-beta.4 notes](releases/4.0.0-beta.4.md), the packaging scripts in
+Review [the 4.0.0-beta.5 notes](releases/4.0.0-beta.5.md), the packaging scripts in
 `extras/package/release`, and `.github/workflows/beta-release.yml`. Inspect the
 candidate release source before creating a tag:
 
@@ -178,7 +178,7 @@ full run:
    recovery succeeds. Leave it unchecked to produce only the complete artifact.
 6. Start the workflow. It verifies and copies the reusable packages into this
    run, builds and tests the selected targets, and assembles
-   `4.0.0-beta.4-complete`. Inspect the downloads before publishing the draft.
+   `4.0.0-beta.5-complete`. Inspect the downloads before publishing the draft.
 
 Recovery requires the original run to use the same version and an ancestor of
 the current commit. Only release tooling (including the Windows build wrapper),
@@ -291,7 +291,7 @@ Before tagging, update `meson.build`'s project version and `configure.ac`'s
 `AC_INIT` / `VERSION_*` fields together. Add `doc/releases/<version>.md`, then run:
 
 ```sh
-python3 extras/package/release/version.py 4.0.0-beta.4
+python3 extras/package/release/version.py 4.0.0-beta.5
 python3 -m unittest discover -s extras/package/release/tests
 ```
 
@@ -301,19 +301,19 @@ version. Use `4.0.0-beta.N`, `4.0.0-rc.N`, or `4.0.0` (stable). Published histor
 committing the reviewed release source:
 
 ```sh
-git tag -a 4.0.0-beta.4 -m 'VLC Juxtopposed 4.0.0-beta.4'
-git show 4.0.0-beta.4 --stat
+git tag -a 4.0.0-beta.5 -m 'VLC Juxtopposed 4.0.0-beta.5'
+git show 4.0.0-beta.5 --stat
 ```
 
 Once the source/tag is acceptable, explicitly push the branch and tag:
 
 ```sh
 git push origin HEAD
-git push origin refs/tags/4.0.0-beta.4
+git push origin refs/tags/4.0.0-beta.5
 ```
 
-A pushed `4.0.0-beta.4` tag runs the same builds and creates a **draft prerelease** named
-`VLC Juxtopposed Redesign - 4.0.0-beta.4`. It attaches the downloads, source snapshot,
+A pushed `4.0.0-beta.5` tag runs the same builds and creates a **draft prerelease** named
+`VLC Juxtopposed Redesign - 4.0.0-beta.5`. It attaches the downloads, source snapshot,
 source commit, Mac build metadata and `SHA256SUMS.txt`. The notes are taken from
 the tagged source and include its commit hash. Inspect and publish the draft
 manually only after downloading and trying the appropriate binaries.
@@ -347,7 +347,7 @@ Use an Intel Mac for the Intel package or an Apple Silicon Mac for ARM. Optional
 modules are detected from the installed libraries; inspect Meson's summary.
 
 ```sh
-RELEASE_TAG=4.0.0-beta.4 JOBS=4 bash extras/package/release/build-native.sh
+RELEASE_TAG=4.0.0-beta.5 JOBS=4 bash extras/package/release/build-native.sh
 python3 extras/package/release/verify.py \
     'build-release-output/macos-arm64/VLC Juxtopposed.app/Contents/MacOS/vlc'
 ```
@@ -367,7 +367,7 @@ Linux (x86_64 Docker host recommended; emulation on ARM is much slower):
 docker build --platform linux/amd64 -t vlc-release-linux \
     -f extras/package/release/Dockerfile.linux .
 docker run --rm --user root --platform linux/amd64 -v "$PWD:/src" -w /src \
-    -e JOBS=4 -e RELEASE_TAG=4.0.0-beta.4 \
+    -e JOBS=4 -e RELEASE_TAG=4.0.0-beta.5 \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src \
     vlc-release-linux \
     bash extras/package/release/build-native.sh
@@ -381,7 +381,7 @@ Windows (the image includes MinGW and the cross-build toolchain):
 
 ```sh
 docker run --rm --user root --platform linux/amd64 -v "$PWD:/src" -w /src \
-    -e JOBS=4 -e RELEASE_TAG=4.0.0-beta.4 \
+    -e JOBS=4 -e RELEASE_TAG=4.0.0-beta.5 \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src \
     registry.videolan.org/vlc-debian-win64-posix@sha256:8e83e800036f8f4a6da1031a6b80c2b5bad8337259c072ffa22398baaeaad880 \
     bash extras/package/release/build-windows.sh

@@ -18,7 +18,7 @@ spec = importlib.util.spec_from_file_location('release_recovery', SCRIPTS / 'rec
 recovery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(recovery)
 
-VERSION = '4.0.0-beta.4'
+VERSION = recovery.validate_tag(None)['version']
 REPO = 'owner/vlc'
 OLD = 'a' * 40
 NEW = 'b' * 40
