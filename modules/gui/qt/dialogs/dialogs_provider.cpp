@@ -85,6 +85,8 @@
 #include <QScopeGuard>
 #include <QRegularExpression>
 #include <QTextBrowser>
+#include <QPlainTextEdit>
+#include <QShortcut>
 #include <QAbstractTextDocumentLayout>
 #include <QClipboard>
 #include <QKeyEvent>
@@ -95,6 +97,150 @@
 #include <utility>
 
 namespace {
+// The clipboard can contain a list, so keep editing and review in one step.
+class NativeMediaListDialog final : public QVLCDialog
+{
+public:
+    NativeMediaListDialog(qt_intf_t *intf, const QString &text)
+        : QVLCDialog(nullptr, intf), m_ctx(intf->p_mi)
+    {
+        setObjectName(QStringLiteral("redesignMediaList"));
+        setWindowRole("vlc-paste-media");
+        auto *layout = new QVBoxLayout(this);
+        m_heading = new QLabel(this);
+        m_heading->setProperty("redesignHeading", true);
+        m_heading->setTextFormat(Qt::PlainText);
+        m_heading->setWordWrap(true);
+        layout->addWidget(m_heading);
+        m_help = new QLabel(this);
+        m_help->setTextFormat(Qt::PlainText);
+        m_help->setWordWrap(true);
+        layout->addWidget(m_help);
+        m_editor = new QPlainTextEdit(this);
+        m_editor->setObjectName(QStringLiteral("clipboardMediaList"));
+        m_editor->setPlainText(text);
+        m_editor->setTabChangesFocus(true);
+        m_editor->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        m_editor->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        layout->addWidget(m_editor, 1);
+        m_count = new QLabel(this);
+        m_count->setObjectName(QStringLiteral("clipboardMediaCount"));
+        m_count->setTextFormat(Qt::PlainText);
+        m_count->setWordWrap(true);
+        layout->addWidget(m_count);
+        m_actions = new QBoxLayout(QBoxLayout::LeftToRight);
+        m_actions->addStretch();
+        m_cancel = new QPushButton(this);
+        m_cancel->setObjectName(QStringLiteral("clipboardMediaCancel"));
+        m_cancel->setAutoDefault(true);
+        m_actions->addWidget(m_cancel);
+        m_add = new QPushButton(this);
+        m_add->setObjectName(QStringLiteral("clipboardMediaAdd"));
+        m_add->setAutoDefault(true);
+        m_add->setDefault(true);
+        m_add->setProperty("redesignPrimary", true);
+        m_actions->addWidget(m_add);
+        layout->addLayout(m_actions);
+        connect(m_cancel, &QPushButton::clicked, this, &QDialog::reject);
+        connect(m_add, &QPushButton::clicked, this, [this] { if (!items().isEmpty()) accept(); });
+        connect(m_editor, &QPlainTextEdit::textChanged, this, [this] { updateCount(); });
+        // Return inserts a line. Only the explicit shortcut submits the list.
+        for (auto key : {Qt::Key_Return, Qt::Key_Enter})
+        {
+            auto *shortcut = new QShortcut(QKeySequence(Qt::CTRL | key), this);
+            shortcut->setAutoRepeat(false);
+            connect(shortcut, &QShortcut::activated, m_add, &QPushButton::click);
+        }
+        applyRedesignWidgetTheme(this, m_ctx);
+        if (m_ctx)
+        {
+            connect(m_ctx, &MainCtx::intfScaleFactorChanged, this, [this] { updateMetrics(); });
+            connect(m_ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, [this] { updateMetrics(); });
+            connect(m_ctx, &QObject::destroyed, this, &QDialog::reject);
+        }
+        if (auto *translator = InterfaceTranslator::instance())
+            connect(translator, &InterfaceTranslator::languageChanged, this, [this] { retranslate(); });
+        retranslate();
+        const auto available = availableSize();
+        resize(QSize(dp(560), dp(380)).boundedTo(available));
+        m_editor->setFocus();
+        m_editor->selectAll();
+    }
+
+    QStringList items() const
+    {
+        QStringList result;
+        const auto text = m_editor->toPlainText();
+        for (const auto &line : QStringView(text).split(u'\n'))
+        {
+            const auto item = line.trimmed();
+            if (!item.isEmpty()) result.append(item.toString());
+        }
+        return result;
+    }
+
+protected:
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QVLCDialog::resizeEvent(event);
+        updateActions();
+    }
+
+private:
+    int dp(int value) const { return qRound(value * (m_ctx ? m_ctx->getIntfScaleFactor() : 1)); }
+    QSize availableSize() const
+    {
+        const auto size = screen()->availableGeometry().size() - QSize(dp(32), dp(32));
+        return size.expandedTo(QSize(1, 1));
+    }
+    void updateCount()
+    {
+        const auto count = items().size();
+        m_count->setText(qtr("Items: %1").arg(count));
+        m_add->setEnabled(count > 0);
+    }
+    void retranslate()
+    {
+        setWindowTitle(qtr("Paste media"));
+        m_heading->setText(windowTitle());
+        const auto help = qtr("Use one address or file path per line.");
+        m_help->setText(help + QLatin1Char(' ') + qtr("Press %1 to add the items.").arg(
+            QKeySequence(Qt::CTRL | Qt::Key_Return).toString(QKeySequence::NativeText)));
+        m_editor->setAccessibleName(qtr("Media addresses"));
+        m_editor->setAccessibleDescription(m_help->text());
+        m_cancel->setText(qtr("Cancel"));
+        m_add->setText(qtr("Add to queue"));
+        updateCount();
+        updateMetrics();
+    }
+    void updateActions()
+    {
+        const int required = m_cancel->sizeHint().width() + m_add->sizeHint().width() + m_actions->spacing();
+        m_actions->setDirection(contentsRect().width() - 2 * layout()->contentsMargins().left() < required
+            ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+    }
+    void updateMetrics()
+    {
+        const auto available = availableSize();
+        const int margin = qMin(dp(24), available.width() / 12);
+        layout()->setContentsMargins(margin, margin, margin, margin);
+        layout()->setSpacing(dp(12));
+        m_actions->setSpacing(dp(8));
+        m_editor->setMinimumSize(0, dp(48));
+        setMinimumSize(QSize(dp(320), dp(260)).boundedTo(available));
+        resize(size().boundedTo(available));
+        updateActions();
+    }
+    QPointer<MainCtx> m_ctx;
+    QLabel *m_heading;
+    QLabel *m_help;
+    QLabel *m_count;
+    QPlainTextEdit *m_editor;
+    QBoxLayout *m_actions;
+    QPushButton *m_cancel;
+    QPushButton *m_add;
+};
+
 // Keep the provider's synchronous result contract, with a bounded reading area.
 class NativeMessageDialog final : public QVLCDialog
 {
@@ -368,6 +514,12 @@ QString DialogsProvider::getSaveFileName( QWidget *parent,
 {
     const QStringList schemes = QStringList(QStringLiteral("file"));
     return QFileDialog::getSaveFileUrl( parent, caption, dir, filter, selectedFilter, QFileDialog::Options(), schemes).toLocalFile();
+}
+
+QStringList DialogsProvider::getMediaListDialog(const QString &text)
+{
+    NativeMediaListDialog dialog(p_intf, text);
+    return dialog.exec() == QDialog::Accepted ? dialog.items() : QStringList();
 }
 
 QVariant DialogsProvider::getTextDialog(QWidget *parent,

@@ -67,7 +67,6 @@
 #include <QDate>
 #include <QMimeData>
 #include <QClipboard>
-#include <QInputDialog>
 
 #include <QQmlProperty>
 
@@ -1071,20 +1070,14 @@ bool MainCtx::pasteFromClipboard()
             placeholder.chop(1);
         }
 
-        bool ok = false;
-        const QString ret = QInputDialog::getMultiLineText(nullptr,
-                                                           qtr("Paste from clipboard"),
-                                                           qtr("Do you want to enqueue the following URLs into the play queue?"),
-                                                           placeholder,
-                                                           &ok);
-        if (!ok)
+        // A modal prompt can outlive its interface during shutdown.
+        const QPointer<MainCtx> owner(this);
+        const auto items = THEDP->getMediaListDialog(placeholder);
+        if (!owner || items.isEmpty())
             return false;
 
-        for (const auto& i : QStringView(ret).split('\n'))
-        {
-            if (i.length() > 0)
-                THEMPL->append(i.trimmed().toString(), false);
-        }
+        for (const auto &item : items)
+            THEMPL->append(item, false);
 
         return true;
     }

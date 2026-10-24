@@ -150,6 +150,8 @@ public:
                                     const QString &filter = QString(),
                                     QString *selectedFilter = NULL );
 
+    QStringList getMediaListDialog(const QString& text);
+
     Q_INVOKABLE QVariant getTextDialog(QWidget *parent, const QString& title,
                                               const QString& label,
                                               const QString& placeholder,
