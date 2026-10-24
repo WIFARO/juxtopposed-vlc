@@ -64,6 +64,7 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent, OpenTab sourceKind)
 {
     /* Basic Creation of the Window */
     ui.setupUi( this );
+    ui.Tab->setUsesScrollButtons(true);
     setObjectName(QStringLiteral("redesignOpenMedia"));
     setWindowTitle( qtr( "Open Media" ) );
     setWindowRole( "vlc-open-media" );
@@ -407,6 +408,12 @@ void OpenDialog::browseInputSlave()
 /* Function called on signal currentChanged triggered */
 void OpenDialog::signalCurrent( int )
 {
+    // Let the network form fit the viewport without inheriting the minimum
+    // width of hidden source pages. Other pages keep their scrollable minimum.
+    const auto horizontal = qobject_cast<NetOpenPanel*>(ui.Tab->currentWidget())
+        ? QSizePolicy::Ignored : QSizePolicy::Preferred;
+    ui.openSourceContent->setSizePolicy(horizontal, QSizePolicy::Preferred);
+    ui.Tab->setSizePolicy(horizontal, QSizePolicy::Preferred);
     updateEditorText();
     itemsMRL.clear();
     optionsMRL.clear();

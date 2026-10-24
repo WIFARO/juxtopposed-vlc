@@ -134,13 +134,30 @@ class NetOpenPanel: public OpenPanel
     Q_OBJECT
 public:
     NetOpenPanel( QWidget *, qt_intf_t * );
-    virtual ~NetOpenPanel();
+    ~NetOpenPanel() override = default;
     void clear()  override;
     void onFocus() override;
     void onAccept() override;
 private:
     Ui::OpenNetwork ui;
-    bool b_recentList;
+    struct EditorState {
+        QString text;
+        int cursor = 0;
+        int start = -1;
+        int length = 0;
+    };
+    EditorState m_lastFocusedState;
+    EditorState editorState() const;
+    void restoreSelection(const EditorState &);
+    bool m_layoutPending = false;
+    bool historyEnabled() const;
+    QStringList savedHistory() const;
+    void refreshHistory();
+    void retranslate();
+    void scheduleLayoutUpdate();
+protected:
+    void resizeEvent(QResizeEvent *) override;
+    bool eventFilter(QObject *, QEvent *) override;
 public slots:
     void updateMRL() override;
     void clearHistory();

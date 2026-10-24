@@ -62,6 +62,7 @@
 #include <QRegularExpression>
 #include <QPushButton>
 #include <QSignalBlocker>
+#include <QTimer>
 #include <QShortcut>
 #include <QScreen>
 #include <QKeyEvent>
@@ -859,72 +860,166 @@ void DiscOpenPanel::accept()
 /**************************************************************************
  * Open Network streams and URL pages                                     *
  **************************************************************************/
-NetOpenPanel::NetOpenPanel( QWidget *_parent, qt_intf_t *_p_intf ) :
-                                OpenPanel( _parent, _p_intf )
+NetOpenPanel::NetOpenPanel(QWidget *parent, qt_intf_t *intf) : OpenPanel(parent, intf)
 {
-    ui.setupUi( this );
-    if (auto* translator = InterfaceTranslator::instance())
-        connect(translator, &InterfaceTranslator::languageChanged, this, [this] { ui.retranslateUi(this); });
-    connect( ui.urlComboBox, &QComboBox::editTextChanged, this, &NetOpenPanel::updateMRL );
-    connect( ui.clearHistoryButton, &QPushButton::clicked, this, &NetOpenPanel::clearHistory );
-
-    /* */
-    if( var_InheritBool( p_intf, "save-recentplay" ) )
+    ui.setupUi(this);
+    setObjectName(QStringLiteral("networkOpenPanel"));
+    ui.urlComboBox->setMaxCount(10);
+    ui.urlComboBox->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    ui.urlComboBox->setMinimumContentsLength(12);
+    if (historyEnabled()) ui.urlComboBox->addItems(savedHistory());
+    ui.urlComboBox->lineEdit()->setClearButtonEnabled(true);
+    ui.urlComboBox->setValidator(new UrlValidator(this));
+    ui.urlComboBox->completer()->setCaseSensitivity(Qt::CaseSensitive);
+    ui.networkAddressRow->setStretchFactor(ui.urlComboBox, 1);
+    ui.networkAddressRow->setAlignment(ui.clearHistoryButton, Qt::AlignRight);
+    ui.examples->setTextFormat(Qt::PlainText);
+    ui.examples->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    ui.examples->setFocusPolicy(Qt::StrongFocus);
+    ui.groupBox->installEventFilter(this);
+    ui.clearHistoryButton->installEventFilter(this);
+    ui.urlComboBox->installEventFilter(this);
+    ui.urlComboBox->lineEdit()->installEventFilter(this);
+    connect(ui.urlComboBox, &QComboBox::editTextChanged, this, &NetOpenPanel::updateMRL);
+    connect(ui.clearHistoryButton, &QPushButton::clicked, this, &NetOpenPanel::clearHistory);
+    if (auto *ctx = p_intf->p_mi)
     {
-        b_recentList = true;
-        // FIXME: use MLUrlModel
-        ui.urlComboBox->addItems( getSettings()->value( "OpenDialog/netMRL" ).toStringList() );
-        ui.urlComboBox->setMaxCount( 10 );
+        connect(ctx, &MainCtx::redesignPlayerPreferencesChanged, this, &NetOpenPanel::refreshHistory);
+        connect(ctx, &MainCtx::intfScaleFactorChanged, this, &NetOpenPanel::scheduleLayoutUpdate);
     }
-    else
-    {
-        b_recentList = false;
-        ui.clearHistoryButton->setEnabled( false );
-    }
-
-    QFont smallFont = QApplication::font();
-    smallFont.setPointSize( smallFont.pointSize() - 1 );
-    ui.examples->setFont( smallFont );
-
-    /* Use a simple validator for URLs */
-    ui.urlComboBox->setValidator( new UrlValidator( this ) );
-
-    /* QComboBox is by default case insensitive when editable */
-    ui.urlComboBox->completer()->setCaseSensitivity( Qt::CaseSensitive );
-    ui.urlComboBox->setFocus();
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, &NetOpenPanel::retranslate);
+    retranslate();
 }
 
-NetOpenPanel::~NetOpenPanel()
+NetOpenPanel::EditorState NetOpenPanel::editorState() const
 {
-    if( !b_recentList ) return;
+    const auto *edit = ui.urlComboBox->lineEdit();
+    return {edit->text(), edit->cursorPosition(), edit->selectionStart(), int(edit->selectedText().size())};
+}
 
-    /* Create the list with the current items */
-    QStringList mrlList;
-    for( int i = 0; i < ui.urlComboBox->count(); i++ )
-        mrlList << ui.urlComboBox->itemText( i );
+void NetOpenPanel::restoreSelection(const EditorState &state)
+{
+    auto *edit = ui.urlComboBox->lineEdit();
+    if (state.start >= 0)
+        edit->setSelection(state.cursor == state.start ? state.start + state.length : state.start,
+                           state.cursor == state.start ? -state.length : state.length);
+    else edit->setCursorPosition(state.cursor);
+}
 
-    if( mrlList.count() > 0 )
+bool NetOpenPanel::historyEnabled() const
+{
+    return var_InheritBool(p_intf, "save-recentplay");
+}
+
+QStringList NetOpenPanel::savedHistory() const
+{
+    QStringList result;
+    for (const auto &entry : getSettings()->value(QStringLiteral("OpenDialog/netMRL")).toStringList())
     {
-        /* Clean the list... */
-        mrlList.removeDuplicates();
-        /* ...and save the 8 last entries */
-        getSettings()->setValue( "OpenDialog/netMRL", mrlList );
+        const auto address = entry.trimmed();
+        if (!address.isEmpty() && !result.contains(address)) result.append(address);
+        if (result.size() == 10) break;
     }
+    return result;
+}
+
+void NetOpenPanel::refreshHistory()
+{
+    const auto history = savedHistory();
+    const bool enabled = historyEnabled();
+    const auto wanted = enabled ? history : QStringList();
+    QStringList displayed;
+    for (int i = 0; i < ui.urlComboBox->count(); ++i) displayed.append(ui.urlComboBox->itemText(i));
+    {
+        auto *edit = ui.urlComboBox->lineEdit();
+        const auto state = editorState();
+        // Do not publish a transient empty source while rebuilding the choices.
+        const QSignalBlocker comboBlock(ui.urlComboBox), editBlock(edit);
+        if (displayed != wanted)
+        {
+            ui.urlComboBox->clear();
+            ui.urlComboBox->addItems(wanted);
+        }
+        for (int i = 0; i < ui.urlComboBox->count(); ++i)
+            ui.urlComboBox->setItemData(i, Qt::convertFromPlainText(ui.urlComboBox->itemText(i)), Qt::ToolTipRole);
+        ui.urlComboBox->setEditText(state.text);
+        restoreSelection(state);
+    }
+    ui.clearHistoryButton->setEnabled(!history.isEmpty());
+    ui.historyStatus->setText(qtr("Address history is off."));
+    ui.historyStatus->setVisible(!enabled);
+    scheduleLayoutUpdate();
+}
+
+void NetOpenPanel::retranslate()
+{
+    ui.retranslateUi(this);
+    ui.label_1->setTextFormat(Qt::PlainText);
+    ui.label_1->setWordWrap(true);
+    ui.historyStatus->setTextFormat(Qt::PlainText);
+    ui.urlComboBox->setAccessibleName(qtr("Media address"));
+    ui.urlComboBox->lineEdit()->setAccessibleName(qtr("Media address"));
+    ui.urlComboBox->lineEdit()->setAccessibleDescription(ui.label_1->text());
+    ui.urlComboBox->lineEdit()->setPlaceholderText(QStringLiteral("https://example.com/media"));
+    refreshHistory();
+}
+
+void NetOpenPanel::scheduleLayoutUpdate()
+{
+    if (m_layoutPending) return;
+    m_layoutPending = true;
+    QTimer::singleShot(0, this, [this] {
+        m_layoutPending = false;
+        const auto dp = [this](int value) { return qRound(value * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
+        const int available = ui.networkAddressRow->geometry().width();
+        if (available <= 0) return;
+        ui.networkAddressRow->setSpacing(dp(8));
+        ui.networkAddressRow->setDirection(available < dp(260) + ui.clearHistoryButton->sizeHint().width() + dp(8)
+            ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+    });
+}
+
+void NetOpenPanel::resizeEvent(QResizeEvent *event)
+{
+    OpenPanel::resizeEvent(event);
+    scheduleLayoutUpdate();
+}
+
+bool NetOpenPanel::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == ui.urlComboBox && event->type() == QEvent::FocusOut)
+        m_lastFocusedState = editorState();
+    if (event->type() == QEvent::LayoutRequest || event->type() == QEvent::StyleChange || event->type() == QEvent::FontChange)
+        scheduleLayoutUpdate();
+    return OpenPanel::eventFilter(watched, event);
 }
 
 void NetOpenPanel::clear()
 {
     ui.urlComboBox->lineEdit()->clear();
+    m_lastFocusedState = {};
 }
 
 void NetOpenPanel::onAccept()
 {
-    if( ui.urlComboBox->findText( ui.urlComboBox->currentText() ) == -1 )
-        ui.urlComboBox->insertItem( 0, ui.urlComboBox->currentText());
+    if (historyEnabled())
+    {
+        const auto address = ui.urlComboBox->currentText().trimmed();
+        if (!address.isEmpty())
+        {
+            auto history = savedHistory();
+            history.removeAll(address);
+            history.prepend(address);
+            getSettings()->setValue(QStringLiteral("OpenDialog/netMRL"), history.mid(0, 10));
+        }
+    }
+    refreshHistory();
 }
 
 void NetOpenPanel::onFocus()
 {
+    refreshHistory();
     ui.urlComboBox->setFocus();
     ui.urlComboBox->lineEdit()->selectAll();
 }
@@ -960,13 +1055,15 @@ void NetOpenPanel::updateMRL()
 
 void NetOpenPanel::clearHistory()
 {
-    if( !b_recentList ) return;
-
-    // Clear the combobox contents
-    ui.urlComboBox->clear();
-
-    // Clear the stored history
-    getSettings()->remove( "OpenDialog/netMRL" );
+    auto *edit = ui.urlComboBox->lineEdit();
+    auto state = editorState();
+    // An editable combo can deselect its text when the history button gains focus.
+    if (!edit->hasFocus() && m_lastFocusedState.text == state.text)
+        state = m_lastFocusedState;
+    getSettings()->remove(QStringLiteral("OpenDialog/netMRL"));
+    refreshHistory();
+    edit->setFocus(Qt::OtherFocusReason);
+    restoreSelection(state);
 }
 
 /**************************************************************************

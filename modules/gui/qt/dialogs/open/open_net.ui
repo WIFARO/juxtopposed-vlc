@@ -18,7 +18,7 @@
    <item>
     <widget class="QGroupBox" name="groupBox">
      <property name="title">
-      <string>Network Protocol</string>
+      <string>Network source</string>
      </property>
      <layout class="QGridLayout">
       <item row="0" column="0">
@@ -30,22 +30,23 @@
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Please enter a network URL:</string>
+         <string>Enter a media address.</string>
         </property>
        </widget>
       </item>
       <item row="2" column="0">
+       <widget class="QLabel" name="historyStatus">
+        <property name="wordWrap"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item row="3" column="0">
        <widget class="QLabel" name="examples">
-        <property name="styleSheet">
-         <string notr="true">color: #838383; </string>
-        </property>
         <property name="text">
-         <string notr="true">http://www.example.com/stream.avi
-rtp://@:1234
-mms://mms.examples.com/stream.asx
-rtsp://server.example.org:8080/test.sdp
-http://www.yourtube.com/watch?v=gg64x</string>
+         <string notr="true">https://example.com/media
+rtsp://example.com/stream
+udp://@:1234</string>
         </property>
+        <property name="wordWrap"><bool>true</bool></property>
         <property name="margin">
          <number>5</number>
         </property>
@@ -55,15 +56,9 @@ http://www.yourtube.com/watch?v=gg64x</string>
        </widget>
       </item>
       <item row="1" column="0">
-       <layout class="QHBoxLayout">
+       <layout class="QHBoxLayout" name="networkAddressRow">
         <item>
          <widget class="QComboBox" name="urlComboBox">
-          <property name="maximumSize">
-           <size>
-            <width>600</width>
-            <height>16777215</height>
-           </size>
-          </property>
           <property name="editable">
            <bool>true</bool>
           </property>
@@ -75,16 +70,10 @@ http://www.yourtube.com/watch?v=gg64x</string>
         <item>
          <widget class="QPushButton" name="clearHistoryButton">
           <property name="text">
-           <string>Clear History</string>
+           <string>Clear history</string>
           </property>
           <property name="toolTip">
-           <string>Clear the network URL browsing history</string>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>100</width>
-            <height>16777215</height>
-           </size>
+           <string>Remove the saved addresses.</string>
           </property>
          </widget>
         </item>
