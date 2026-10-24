@@ -23,6 +23,7 @@ FocusScope {
     property bool playing: false
     property bool started: false
     property bool hasVideo: false
+    property bool audioOnly: false
     property bool seekable: false
     property bool pausable: true
     property bool hasPrevious: false
@@ -428,7 +429,7 @@ FocusScope {
             height: Math.max(theme.dp(52), resumeRow.implicitHeight + theme.dp(20))
             visible: root.resumeAvailable && !root.minimalView
             Accessible.role: Accessible.Dialog
-            Accessible.name: qsTr("Continue Watching")
+            Accessible.name: resumeContinueButton.caption
             color: theme.lightTheme ? theme.panel : "#161616"
             radius: theme.dp(16)
             RowLayout {
@@ -449,10 +450,12 @@ FocusScope {
                     wrapMode: Text.WordWrap
                 }
                 ChromeButton {
+                    id: resumeContinueButton
                     objectName: "resumeContinueButton"
                     implicitHeight: theme.dp(32)
                     scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
-                    caption: qsTr("Continue Watching"); text: caption; accent: true
+                    caption: root.audioOnly ? qsTr("Continue listening") : qsTr("Continue Watching")
+                    text: caption; accent: true
                     onClicked: root.resumeRequested(true)
                 }
                 ChromeButton {

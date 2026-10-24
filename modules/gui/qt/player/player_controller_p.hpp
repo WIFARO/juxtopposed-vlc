@@ -151,6 +151,8 @@ public:
     void stopProgressiveWaveform();
     bool m_audioWaveformEnabled = false;
     bool m_audioWaveformAutomatic = false;
+    SharedInputItem m_audioWaveformMedia;
+    QByteArray m_audioWaveformTrack;
     QVariantList m_audioWaveformPeaks;
     QString m_audioWaveformState = QStringLiteral("off");
     QTimer m_audioWaveformRefresh;

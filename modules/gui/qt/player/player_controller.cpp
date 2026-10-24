@@ -1671,19 +1671,32 @@ void PlayerControllerPrivate::refreshAudioWaveform()
     // Use media tracks, since a visualizer can itself create a video output.
     QUrl url;
     vlc_tick_t duration = 0;
+    SharedInputItem media;
+    QByteArray trackId;
+    bool audioOnly = false;
     {
         vlc_player_locker lock{m_player};
+        const auto* selected = vlc_player_GetSelectedTrack(m_player, AUDIO_ES);
         if (isCurrentItemSynced() && m_currentItem
-            && vlc_player_GetSelectedTrack(m_player, AUDIO_ES)
-            && vlc_player_GetTrackCount(m_player, VIDEO_ES) == 0
+            && selected
             && vlc_player_GetLength(m_player) > 0) {
+            media = m_currentItem;
+            trackId = vlc_es_id_GetStrId(selected->es_id);
+            audioOnly = vlc_player_GetTrackCount(m_player, VIDEO_ES) == 0;
             vlc_mutex_locker itemLock{&m_currentItem->lock};
             url = QUrl::fromEncoded(m_currentItem->psz_uri);
             duration = vlc_player_GetLength(m_player);
         }
     }
-    m_audioWaveformAutomatic = canScanAudioWaveform(url, duration)
-        || (duration > 0 && (url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https")));
+    const bool automatic = audioOnly && (canScanAudioWaveform(url, duration)
+        || (duration > 0 && (url.scheme() == QLatin1String("http") || url.scheme() == QLatin1String("https"))));
+    // MP3 duration estimates and track metadata can change during playback.
+    // They do not change the audio source or invalidate its waveform.
+    if (media == m_audioWaveformMedia && trackId == m_audioWaveformTrack
+        && automatic == m_audioWaveformAutomatic) return;
+    m_audioWaveformMedia = media;
+    m_audioWaveformTrack = trackId;
+    m_audioWaveformAutomatic = automatic;
     resetAudioWaveform();
 }
 

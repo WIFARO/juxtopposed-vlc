@@ -354,6 +354,7 @@ FocusScope {
         playing: Player.playingState === Player.PLAYING_STATE_PLAYING
         started: Player.isStarted
         hasVideo: MainCtx.hasEmbededVideo
+        audioOnly: Player.audioTracks.count > 0 && Player.videoTracks.count === 0
         seekable: started && Player.seekable
         pausable: Player.pausable
         hasPrevious: MainPlaylistController.hasPrev

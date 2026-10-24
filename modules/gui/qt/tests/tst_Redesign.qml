@@ -197,6 +197,7 @@ TestCase {
         statisticsSwitch.visible = false
         player.showStatistics = false
         player.resumeAvailable = false
+        player.audioOnly = false
         player.resumeTimeText = ""
         resumeSpy.clear()
         player.showSubtitleTimeline = false
@@ -1236,12 +1237,21 @@ TestCase {
         player.started = false
         verify(player.bottomVisible)
     }
-    function test_resumeOffersSavedTimeAndSeparateActions() {
+    function test_resumeOffersSavedTimeAndSeparateActions_data() {
+        return [
+            {tag: "video", audioOnly: false, caption: "Continue Watching"},
+            {tag: "audio", audioOnly: true, caption: "Continue listening"}
+        ]
+    }
+    function test_resumeOffersSavedTimeAndSeparateActions(data) {
+        player.audioOnly = data.audioOnly
         player.resumeTimeText = "00:12:34"
         player.resumeAvailable = true
         const prompt = findChild(player, "resumePlaybackPrompt")
         const label = findChild(player, "resumePlaybackLabel")
         tryCompare(prompt, "visible", true)
+        compare(findChild(player, "resumeContinueButton").caption, data.caption)
+        compare(prompt.Accessible.name, data.caption)
         verify(label.text.includes("00:12:34"))
         verify(!label.truncated)
         mouseClick(findChild(player, "resumeContinueButton"))
