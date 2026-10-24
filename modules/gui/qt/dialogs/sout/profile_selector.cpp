@@ -21,6 +21,7 @@
  *****************************************************************************/
 
 #include "dialogs/sout/profile_selector.hpp"
+#include "dialogs/dialogs_provider.hpp"
 #include "dialogs/sout/profiles.hpp"
 #include "dialogs/sout/sout.hpp"
 #include "util/soutchain.hpp"
@@ -34,7 +35,7 @@
 #include <QToolButton>
 #include <QComboBox>
 #include <QLabel>
-#include <QMessageBox>
+#include <QPersistentModelIndex>
 #include <QRadioButton>
 #include <QRegularExpression>
 #include <QButtonGroup>
@@ -216,12 +217,15 @@ void VLCProfileSelector::editProfile()
 
 void VLCProfileSelector::editProfilePrivate(const QString& original, const QString& value)
 {
+    QPointer<VLCProfileSelector> selector(this);
     QWidget *owner = window();
     QStringList names;
     for (int i = 0; i < profileBox->count(); ++i) names.append(profileBox->itemText(i));
     VLCProfileEditor editor(original, value, owner ? owner->windowHandle() : nullptr,
                             m_themeContext.data(), names);
-    if (editor.exec() != QDialog::Accepted) return;
+    connect(this, &QObject::destroyed, &editor, &QDialog::reject);
+    const auto result = editor.exec();
+    if (!selector || result != QDialog::Accepted) return;
     {
         const QSignalBlocker blocker(profileBox);
         if (original.isEmpty())
@@ -245,18 +249,35 @@ void VLCProfileSelector::deleteProfile()
 {
     const int index = profileBox->currentIndex();
     if (index < 0) return;
-    const QString selected = profileBox->itemText(index);
-    QMessageBox question(QMessageBox::Question, qtr("Remove profile"),
-        qtr("Remove the profile \"%1\"?").arg(selected), QMessageBox::NoButton, window());
-    question.setTextFormat(Qt::PlainText);
-    auto *remove = question.addButton(qtr("&Remove"), QMessageBox::DestructiveRole);
-    question.setDefaultButton(question.addButton(QMessageBox::Cancel));
-    applyRedesignWidgetTheme(&question, m_themeContext.data());
-    question.exec();
-    if (question.clickedButton() != remove || profileBox->itemText(index) != selected) return;
+    QPointer<VLCProfileSelector> selector(this);
+    const QPersistentModelIndex target(profileBox->model()->index(index,
+        profileBox->modelColumn(), profileBox->rootModelIndex()));
+    const QString name = target.data(Qt::DisplayRole).toString();
+    const QVariant settings = target.data(Qt::UserRole);
+    const auto answer = DialogsProvider::getInstance()->messageDialog(
+        qtr("Remove this profile?\n\n%1").arg(name), qtr("Remove profile"),
+        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel,
+        QMessageBox::Question, this, qtr("Remove"));
+    if (!selector || answer != QMessageBox::Yes) return;
+    // A row can move or change while the confirmation runs its nested event loop.
+    // Only the exact, unchanged profile named in the prompt may be removed.
+    if (!target.isValid() || target.model() != profileBox->model()
+        || target.parent() != profileBox->rootModelIndex()
+        || target.column() != profileBox->modelColumn()
+        || target.data(Qt::DisplayRole).toString() != name
+        || target.data(Qt::UserRole) != settings)
+    {
+        updateOptions(profileBox->currentIndex());
+        if (!selector) return;
+        DialogsProvider::getInstance()->messageDialog(
+            qtr("The profile changed. Check the selected profile and try again."),
+            qtr("Remove profile"), QMessageBox::Close, QMessageBox::Close,
+            QMessageBox::Information, this);
+        return;
+    }
     {
         const QSignalBlocker blocker(profileBox);
-        profileBox->removeItem(index);
+        profileBox->removeItem(target.row());
     }
     updateOptions(profileBox->currentIndex());
     saveProfiles();
