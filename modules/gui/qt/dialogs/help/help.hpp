@@ -81,8 +81,10 @@ public:
 protected:
     bool eventFilter(QObject*, QEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
+    void resizeEvent(QResizeEvent*) override;
 
 private:
+    void updateHeaderLayout();
     Ui::aboutWidget ui;
 };
 

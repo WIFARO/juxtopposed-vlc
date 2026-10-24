@@ -32,6 +32,7 @@
 #include "util/color_scheme_model.hpp"
 #include "util/qt_dirs.hpp"
 #include "util/interface_translator.hpp"
+#include "util/colorizedsvgicon.hpp"
 
 
 #include <vlc_intf_strings.h>
@@ -266,17 +267,26 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
     ui.creditPage->setPlainText(AboutModel::getThanks());
     ui.MainBlabla->setUndoRedoEnabled(false);
     ui.MainBlabla->setTabChangesFocus(true);
+    ui.overviewLayout->setContentsMargins(0, 0, 0, 0);
     ui.buildDetails->hide();
     connect(ui.buildDetailsButton, &QToolButton::toggled, this, [this](bool show) {
         ui.buildDetails->setVisible(show);
-        ui.buildDetailsButton->setArrowType(show ? Qt::DownArrow : Qt::RightArrow);
     });
+#ifdef UPDATE_CHECK
+    connect(ui.checkUpdatesButton, &QPushButton::clicked, this, [this] {
+        // About is modal. Close it before presenting the shared update window.
+        accept();
+        p_intf->p_mi->getUpdateModel()->checkUpdate(true);
+    });
+#else
+    ui.checkUpdatesButton->setEnabled(false);
+#endif
     connect(ui.closeButton, &QPushButton::clicked, this, &QDialog::reject);
     auto *copyTimer = new QTimer(this);
     copyTimer->setSingleShot(true);
     copyTimer->setInterval(2500);
     connect(copyTimer, &QTimer::timeout, ui.copyFeedback, &QLabel::clear);
-    connect(ui.copyVersionButton, &QPushButton::clicked, this, [this, copyTimer] {
+    connect(ui.copyVersionButton, &QToolButton::clicked, this, [this, copyTimer] {
         QGuiApplication::clipboard()->setText(QStringLiteral("VLC media player ") + AboutModel::getVersion());
         ui.copyFeedback->setText(qtr("Version copied."));
         copyTimer->start();
@@ -290,21 +300,42 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
         ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.creditPage), qtr("Credits"));
         ui.aboutTabs->setTabText(ui.aboutTabs->indexOf(ui.licensePage), qtr("License"));
         ui.copyVersionButton->setToolTip(qtr("Copy this version to the clipboard."));
+        ui.copyVersionButton->setAccessibleName(qtr("Copy version"));
         ui.buildDetailsButton->setToolTip(qtr("Show information about this build."));
-        ui.buildDetails->setText(qtr("Build user: %1\nBuild host: %2\nBuild date: %3 %4")
-            .arg(qfu(VLC_CompileBy()), qfu(VLC_CompileHost()), QStringLiteral(__DATE__), QStringLiteral(__TIME__)));
+        ui.buildDetailsButton->setAccessibleName(qtr("Build details"));
+        ui.buildDetails->setAccessibleName(qtr("Build details"));
+        ui.buildDetails->setPlainText(qtr("Build user: %1\nBuild host: %2\nBuild date: %3 %4\nCompiler: %5")
+            .arg(qfu(VLC_CompileBy()), qfu(VLC_CompileHost()), QStringLiteral(__DATE__), QStringLiteral(__TIME__), qfu(VLC_Compiler())));
+#ifdef UPDATE_CHECK
+        ui.checkUpdatesButton->setToolTip(qtr("Check for a new version of VLC."));
+#else
+        ui.checkUpdatesButton->setToolTip(qtr("Update checks are not available in this build."));
+#endif
         copyTimer->stop();
         ui.copyFeedback->clear();
         ui.MainBlabla->setHtml("<html><head/><body>" +
         qtr( "<p>VLC media player is a free and open source media player, encoder, and streamer made by the volunteers of the <a href=\"https://www.videolan.org/\"><span style=\" text-decoration: underline; color:#0057ae;\">VideoLAN</span></a> community.</p><p>VLC uses its internal codecs, works on essentially every popular platform, and can read almost all files, CDs, DVDs, network streams, capture cards and other media formats!</p><p><a href=\"https://www.videolan.org/contribute/\"><span style=\" text-decoration: underline; color:#0057ae;\">Help and join us!</span></a>" ).remove(QStringLiteral("color:#0057ae;")) +
         "</p>" + AboutModel::getDesignAttribution() + "</body> </html>");
         colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link));
+        updateHeaderLayout();
     };
     updateText();
     const auto metrics = [this] {
         const int margin = helpDp(p_intf, 24);
         layout()->setContentsMargins(margin,margin,margin,margin);
         layout()->setSpacing(helpDp(p_intf, 12));
+        ui.headerLayout->setSpacing(helpDp(p_intf, 16));
+        ui.identityLayout->setSpacing(helpDp(p_intf, 16));
+        ui.titleLayout->setSpacing(helpDp(p_intf, 4));
+        ui.versionLayout->setSpacing(helpDp(p_intf, 4));
+        const QSize iconSize(helpDp(p_intf, 20), helpDp(p_intf, 20));
+        for (auto *button : {ui.copyVersionButton, ui.buildDetailsButton})
+        {
+            button->setIconSize(iconSize);
+            button->setFixedSize(helpDp(p_intf, 32), helpDp(p_intf, 32));
+        }
+        ui.checkUpdatesButton->setIconSize(iconSize);
+        ui.buildDetails->setFixedHeight(helpDp(p_intf, 128));
         const auto today = QDate::currentDate();
         const bool april = today.month() == 4 && today.day() == 1 && var_InheritBool(p_intf,"qt-icon-change");
         QPixmap cone(april ? QStringLiteral(":/logo/vlc128-aprilfools.png") : QStringLiteral(":/logo/vlc256.png"));
@@ -312,6 +343,7 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
         cone.setDevicePixelRatio(devicePixelRatioF());
         ui.VLCcone->setPixmap(cone);
         ui.VLCcone->setFixedSize(helpDp(p_intf, 64),helpDp(p_intf, 64));
+        updateHeaderLayout();
     };
     metrics();
     if (auto *translator = InterfaceTranslator::instance())
@@ -319,18 +351,55 @@ AboutDialog::AboutDialog(qt_intf_t *intf) : QVLCDialog(nullptr, intf)
     if (auto *ctx = p_intf->p_mi)
     {
         connect(ctx, &MainCtx::intfScaleFactorChanged, this, metrics);
-        const auto links = [this] { colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link)); };
-        connect(ctx, &MainCtx::redesignAccentChanged, this, links);
-        connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, links);
-        connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, links);
+        const auto colors = [this] {
+            const auto color = palette().color(QPalette::Text);
+            ui.copyVersionButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/icons/copy.svg"), color));
+            ui.buildDetailsButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/icons/info.svg"), {}, {}, {},
+                {{QStringLiteral("#212121"), color.name()}}));
+            ui.checkUpdatesButton->setIcon(ColorizedSvgIcon(QStringLiteral(":/menu/redesign/refresh.svg"), {}, {}, {},
+                {{QStringLiteral("#8F8F8F"), color.name()}}));
+            colorBrowserLinks(ui.MainBlabla, palette().color(QPalette::Link));
+        };
+        colors();
+        connect(ctx, &MainCtx::redesignAccentChanged, this, colors);
+        connect(ctx->getColorScheme(), &ColorSchemeModel::currentChanged, this, colors);
+        connect(qApp->styleHints(), &QStyleHints::colorSchemeChanged, this, colors);
     }
     QVLCTools::restoreWidgetPosition(p_intf,"About",this,QSize(helpDp(p_intf, 720),helpDp(p_intf, 560)));
     if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
-    setTabOrder(ui.copyVersionButton, ui.closeButton);
+    setTabOrder(ui.version, ui.copyVersionButton);
+    setTabOrder(ui.copyVersionButton, ui.buildDetailsButton);
+    setTabOrder(ui.buildDetailsButton, ui.checkUpdatesButton);
+    setTabOrder(ui.checkUpdatesButton, ui.buildDetails);
+    setTabOrder(ui.buildDetails, ui.aboutTabs);
+    setTabOrder(ui.aboutTabs, ui.MainBlabla);
+    for (auto *view : {static_cast<QWidget*>(ui.MainBlabla), static_cast<QWidget*>(ui.authorsPage),
+                      static_cast<QWidget*>(ui.creditPage), static_cast<QWidget*>(ui.licensePage)})
+        setTabOrder(view, ui.closeButton);
+    setTabOrder(ui.closeButton, ui.version);
     // Read-only text shortcuts belong to the dialog, before player shortcuts.
     for (auto *view : {static_cast<QWidget*>(ui.MainBlabla), static_cast<QWidget*>(ui.authorsPage),
                       static_cast<QWidget*>(ui.creditPage), static_cast<QWidget*>(ui.licensePage),
-                      static_cast<QWidget*>(ui.version)}) view->installEventFilter(this);
+                      static_cast<QWidget*>(ui.version), static_cast<QWidget*>(ui.buildDetails)}) view->installEventFilter(this);
+}
+
+void AboutDialog::updateHeaderLayout()
+{
+    const int required = ui.identityLayout->sizeHint().width() + ui.checkUpdatesButton->sizeHint().width()
+        + ui.headerLayout->spacing();
+    const bool stacked = contentsRect().width() - layout()->contentsMargins().left()
+        - layout()->contentsMargins().right() < required;
+    ui.headerLayout->setDirection(stacked ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+    ui.headerLayout->setStretch(0, stacked ? 0 : 1);
+    // Keep each stacked row readable without imposing the combined row width.
+    ui.aboutHeader->setMinimumWidth(qMax(ui.identityLayout->minimumSize().width(),
+        ui.checkUpdatesButton->minimumSizeHint().width()));
+}
+
+void AboutDialog::resizeEvent(QResizeEvent *event)
+{
+    QVLCDialog::resizeEvent(event);
+    updateHeaderLayout();
 }
 
 AboutDialog::~AboutDialog()
@@ -357,10 +426,10 @@ bool AboutDialog::eventFilter(QObject *watched, QEvent *event)
                 {
                     if (copy) rich->copy(); else rich->selectAll();
                 }
-                else if (watched == ui.version)
+                else if (auto *label = qobject_cast<QLabel*>(watched))
                 {
-                    if (selectAll) ui.version->setSelection(0, ui.version->text().size());
-                    else if (ui.version->hasSelectedText()) QGuiApplication::clipboard()->setText(ui.version->selectedText());
+                    if (selectAll) label->setSelection(0, label->text().size());
+                    else if (label->hasSelectedText()) QGuiApplication::clipboard()->setText(label->selectedText());
                 }
             }
             key->accept();
@@ -372,6 +441,14 @@ bool AboutDialog::eventFilter(QObject *watched, QEvent *event)
 
 void AboutDialog::keyPressEvent(QKeyEvent *event)
 {
+    if (event->isAutoRepeat()) { event->accept(); return; }
+    if (event->key() == Qt::Key_Escape && ui.buildDetailsButton->isChecked())
+    {
+        ui.buildDetailsButton->setChecked(false);
+        ui.buildDetailsButton->setFocus();
+        event->accept();
+        return;
+    }
     if (!activateHelpButton(event, focusWidget())) QVLCDialog::keyPressEvent(event);
 }
 

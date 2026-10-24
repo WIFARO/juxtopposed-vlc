@@ -27,6 +27,8 @@
         <file alias="vlc128-kb.png">../../../share/icons/128x128/vlc-kb.png</file>
     </qresource>
     <qresource prefix="/icons">
+        <file alias="copy.svg">pixmaps/icons/copy.svg</file>
+        <file alias="info.svg">pixmaps/icons/ic_fluent_info.svg</file>
         <file alias="check.svg">pixmaps/icons/check.svg</file>
         <file alias="chevron-down-dark.svg">pixmaps/icons/chevron-down-dark.svg</file>
         <file alias="chevron-down-light.svg">pixmaps/icons/chevron-down-light.svg</file>

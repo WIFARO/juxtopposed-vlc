@@ -919,6 +919,7 @@ libqt_plugin_la_RES = \
 	pixmaps/icons/history.svg \
 	pixmaps/icons/ic_fluent_home.svg \
 	pixmaps/icons/ic_fluent_info.svg \
+	pixmaps/icons/copy.svg \
 	pixmaps/icons/ic_fluent_apps_list.svg \
 	pixmaps/icons/ic_fluent_more_vertical.svg \
 	pixmaps/icons/multiselect.svg \
