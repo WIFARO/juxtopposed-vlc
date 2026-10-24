@@ -10,6 +10,7 @@
 #include <QRegion>
 #include <QSet>
 #include <QProxyStyle>
+#include <QCommonStyle>
 #include <QStyleFactory>
 #include <QStyleOptionMenuItem>
 #include <QPainter>
@@ -19,6 +20,17 @@
 #include <QScreen>
 
 namespace {
+QStyle* menuBaseStyle()
+{
+    if (auto* fusion = QStyleFactory::create(QStringLiteral("Fusion")))
+        return fusion;
+
+    // Some contrib builds omit Fusion. A null QProxyStyle base would fall
+    // back to the application style. Windows 11 menu polish changes window
+    // flags and can re-enter stylesheet replacement while setStyle is active.
+    return new QCommonStyle;
+}
+
 QString shortcutText(const QString& text)
 {
     auto chords = text.split(QStringLiteral(", "));
@@ -62,7 +74,7 @@ protected:
 class RedesignMenuStyle final : public QProxyStyle
 {
 public:
-    explicit RedesignMenuStyle(QObject* owner) : QProxyStyle(QStyleFactory::create(QStringLiteral("Fusion")))
+    explicit RedesignMenuStyle(QObject* owner) : QProxyStyle(menuBaseStyle())
     {
         setParent(owner);
         setObjectName(QStringLiteral("redesignMenuStyle"));
