@@ -49,6 +49,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
         colors.setColor(QPalette::Base, QColor(field));
         colors.setColor(QPalette::AlternateBase, QColor(background));
         colors.setColor(QPalette::Text, QColor(bright));
+        colors.setColor(QPalette::PlaceholderText, QColor(foreground));
         colors.setColor(QPalette::Button, QColor(field));
         colors.setColor(QPalette::ButtonText, QColor(foreground));
         colors.setColor(QPalette::Highlight, QColor(accent));
@@ -79,6 +80,7 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
         }
         widget->setStyleSheet(QStringLiteral(
             "QWidget { font-family: Inter; font-size: %1px; color: %2; }"
+            "QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QAbstractSpinBox { placeholder-text-color: %2; }"
             "QToolTip { background: %4; color: %5; border: 1px solid %6; border-radius: 4px; padding: 6px; }"
             "QWidget[redesignDialog=\"true\"], QDialog, QTabWidget::pane { background: %3; border: none; }"
             "QWidget#aboutWidget QLabel#title { color: %5; font-size: %13px; font-weight: 600; }"
@@ -187,6 +189,8 @@ void applyRedesignWidgetTheme(QWidget* widget, MainCtx* ctx)
             "QPushButton#saveMetadataButton:hover { border-color: %5; }"
             "QPushButton#saveMetadataButton:disabled, QPushButton[redesignPrimary=\"true\"]:disabled { background: %8; color: %2; }"
             "QWidget:disabled { color: %6; }"
+            "QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled { background: %3; color: %2; border-color: %6; }"
+            "QLabel:disabled { color: %2; }"
             "QTabBar::tab { background: %4; padding: 10px 16px; border-bottom: 2px solid transparent; }"
             "QTabBar::tab:selected { color: %5; border-bottom-color: %7; }"
             "QTabBar::tab:hover { background: %8; }"
