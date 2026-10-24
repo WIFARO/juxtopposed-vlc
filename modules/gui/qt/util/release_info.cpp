@@ -2,6 +2,7 @@
 #include "release_info.hpp"
 
 #include <QJsonObject>
+#include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSysInfo>
 #include <cmath>
@@ -44,6 +45,8 @@ std::optional<Version> Version::parse(QString text)
 
 int Version::compare(const Version& other) const
 {
+    if (generation != other.generation)
+        return generation < other.generation ? -1 : 1;
     const unsigned a[] = {major, minor, patch};
     const unsigned b[] = {other.major, other.minor, other.patch};
     for (int i = 0; i < 3; ++i)
@@ -115,6 +118,62 @@ static bool githubUrl(const QUrl& url, const QString& path)
            url.path() == path;
 }
 
+struct Metadata
+{
+    unsigned generation = 0;
+    QString productName = QStringLiteral("VLC");
+    QString packagePrefix = QStringLiteral("vlc-juxtopposed");
+    QString subtitle;
+    QString notes;
+};
+
+static std::optional<Metadata> releaseMetadata(QString notes, const QString& tag)
+{
+    Metadata result;
+    const QString marker = QStringLiteral("<!-- vlc-update-metadata");
+    const auto start = notes.indexOf(marker);
+    if (start < 0)
+    {
+        result.notes = notes;
+        return result;
+    }
+    const auto end = notes.indexOf(QStringLiteral("-->"), start);
+    if (end < 0 || notes.indexOf(marker, start + marker.size()) >= 0)
+        return std::nullopt;
+    const auto json = notes.mid(start + marker.size(), end - start - marker.size()).trimmed().toUtf8();
+    if (json.size() > 4096)
+        return std::nullopt;
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(json, &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject())
+        return std::nullopt;
+    const auto object = document.object();
+    const auto generation = object.value(QStringLiteral("generation")).toDouble(-1);
+    const auto schema = object.value(QStringLiteral("schema"));
+    const auto subtitle = object.value(QStringLiteral("subtitle"));
+    result.productName = object.value(QStringLiteral("product_name")).toString();
+    result.packagePrefix = object.value(QStringLiteral("package_prefix")).toString();
+    result.subtitle = subtitle.toString();
+    static const QRegularExpression prefix(QStringLiteral("^[a-z0-9]+(?:-[a-z0-9]+)*$"));
+    const auto plainLine = [](const QString& text, qsizetype maximum) {
+        if (text.size() > maximum || text != text.trimmed()) return false;
+        for (const auto c : text)
+            if (!c.isPrint()) return false;
+        return true;
+    };
+    if (!schema.isDouble() || schema.toDouble() != 1 ||
+        object.value(QStringLiteral("version")).toString() != tag ||
+        generation < 0 || generation > std::numeric_limits<int>::max() || std::floor(generation) != generation ||
+        result.productName.isEmpty() || !plainLine(result.productName, 128) ||
+        result.packagePrefix.size() > 64 || !prefix.match(result.packagePrefix).hasMatch() ||
+        (!subtitle.isUndefined() && !subtitle.isString()) || !plainLine(result.subtitle, 512))
+        return std::nullopt;
+    result.generation = unsigned(generation);
+    notes.remove(start, end + 3 - start);
+    result.notes = notes.trimmed();
+    return result;
+}
+
 std::optional<Release> selectRelease(const QJsonArray& releases,
                                     const Version& installed, const Target& target)
 {
@@ -128,8 +187,12 @@ std::optional<Release> selectRelease(const QJsonArray& releases,
             !object.value(QStringLiteral("prerelease")).isBool())
             continue;
         const auto tag = object.value(QStringLiteral("tag_name")).toString();
-        const auto version = Version::parse(tag);
-        if (!version || version->compare(installed) <= 0 ||
+        auto version = Version::parse(tag);
+        const auto metadata = releaseMetadata(object.value(QStringLiteral("body")).toString(), tag);
+        if (!version || !metadata)
+            continue;
+        version->generation = metadata->generation;
+        if (version->compare(installed) <= 0 ||
             (best && version->compare(best->version) <= 0))
             continue;
         const bool prerelease = object.value(QStringLiteral("prerelease")).toBool();
@@ -141,7 +204,7 @@ std::optional<Release> selectRelease(const QJsonArray& releases,
         const auto assets = object.value(QStringLiteral("assets")).toArray();
         for (const auto& suffix : target.packageSuffixes())
         {
-            const QString expected = QStringLiteral("vlc-juxtopposed-") + tag + QLatin1Char('-') + suffix;
+            const QString expected = metadata->packagePrefix + QLatin1Char('-') + tag + QLatin1Char('-') + suffix;
             for (const auto& assetEntry : assets)
             {
                 const auto asset = assetEntry.toObject();
@@ -152,8 +215,9 @@ std::optional<Release> selectRelease(const QJsonArray& releases,
                     size <= 0 || size > 9007199254740991.0 || std::floor(size) != size ||
                     !githubUrl(url, repo + QStringLiteral("download/") + tag + QLatin1Char('/') + expected))
                     continue;
-                best = Release{*version, tag, object.value(QStringLiteral("body")).toString(), page,
-                               {expected, url, qint64(size), asset.value(QStringLiteral("digest")).toString()}};
+                best = Release{*version, tag, metadata->notes, page,
+                               {expected, url, qint64(size), asset.value(QStringLiteral("digest")).toString()},
+                               metadata->productName, metadata->subtitle};
                 break;
             }
             if (best && best->tag == tag)

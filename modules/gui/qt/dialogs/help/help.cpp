@@ -677,7 +677,9 @@ void UpdateModel::startCheck(bool explicitCheck, bool inlineCheck)
         emit explicitCheckChanged();
     }
     d->release.reset();
-    const auto installed = vlc::updates::Version::parse(QStringLiteral(PACKAGE_VERSION));
+    auto installed = vlc::updates::Version::parse(QStringLiteral(PACKAGE_VERSION));
+    if (installed)
+        installed->generation = PACKAGE_UPDATE_GENERATION;
     d->status = installed ? Checking : CheckFailed;
     emit updateStatusChanged();
     if (installed)

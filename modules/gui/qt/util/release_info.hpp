@@ -10,6 +10,9 @@ namespace vlc::updates {
 
 struct Version
 {
+    // Compiled identity for the installed build; explicit metadata for releases.
+    // Tags alone always parse as generation zero.
+    unsigned generation = 0;
     unsigned major = 0, minor = 0, patch = 0;
     QStringList prerelease;
     QString text;
@@ -44,6 +47,8 @@ struct Release
     QString notes;
     QUrl pageUrl;
     Asset asset;
+    QString productName = QStringLiteral("VLC");
+    QString subtitle;
 };
 
 std::optional<Release> selectRelease(const QJsonArray& releases,

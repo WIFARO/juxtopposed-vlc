@@ -30,6 +30,34 @@ static QJsonObject release(const QString& tag, const QString& suffix = QStringLi
                 {QStringLiteral("browser_download_url"), QString(base + QStringLiteral("download/") + tag + QLatin1Char('/') + name)}}}}};
 }
 
+static QJsonObject metadata(const QString& tag, int generation = 1)
+{
+    return {{QStringLiteral("schema"), 1}, {QStringLiteral("version"), tag},
+            {QStringLiteral("generation"), generation},
+            {QStringLiteral("product_name"), QStringLiteral("Sample Player")},
+            {QStringLiteral("package_prefix"), QStringLiteral("sample-player")},
+            {QStringLiteral("subtitle"), QStringLiteral("A release announcement <b>in plain text</b>")}};
+}
+
+static QString metadataBlock(const QJsonObject& object)
+{
+    return QStringLiteral("<!-- vlc-update-metadata\n") +
+        QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)) + QStringLiteral("\n-->");
+}
+
+static QJsonObject describedRelease(const QString& tag, int generation = 1,
+                                    const QString& suffix = QStringLiteral("win64.zip"))
+{
+    auto result = release(tag, suffix);
+    result[QStringLiteral("body")] = QString(QStringLiteral("Notes\n\n") + metadataBlock(metadata(tag, generation)));
+    auto asset = result.value(QStringLiteral("assets")).toArray().first().toObject();
+    for (const auto* key : {"name", "browser_download_url"})
+        asset[QLatin1String(key)] = asset.value(QLatin1String(key)).toString().replace(
+            QStringLiteral("vlc-juxtopposed-"), QStringLiteral("sample-player-"));
+    result[QStringLiteral("assets")] = QJsonArray{asset};
+    return result;
+}
+
 class HttpFixture : public QTcpServer
 {
 public:
@@ -172,6 +200,117 @@ private slots:
             object[QStringLiteral("assets")] = QJsonArray{asset};
             QVERIFY(!selectRelease({object}, version("4.0.0"), target));
         }
+    }
+    void generationsAndMetadata()
+    {
+        const Target win{QStringLiteral("windows"), QStringLiteral("x86_64")};
+        const auto candidate = describedRelease(QStringLiteral("1.0.0"));
+        // Explicit generations take precedence; ordinary tags retain SemVer ordering.
+        QVERIFY(!selectRelease({release(QStringLiteral("1.0.0"))}, version("4.0.0-beta.5"), win));
+        const auto chosen = selectRelease({release(QStringLiteral("9.0.0")), candidate}, version("4.0.0-beta.5"), win);
+        QVERIFY(chosen);
+        QCOMPARE(chosen->version.generation, 1u);
+        QCOMPARE(chosen->version.text, QStringLiteral("1.0.0"));
+        QCOMPARE(chosen->productName, QStringLiteral("Sample Player"));
+        QCOMPARE(chosen->subtitle, QStringLiteral("A release announcement <b>in plain text</b>"));
+        QCOMPARE(chosen->notes, QStringLiteral("Notes"));
+        QVERIFY(chosen->asset.name.startsWith(QStringLiteral("sample-player-")));
+        auto installed = version("1.0.0");
+        installed.generation = 1;
+        QVERIFY(!selectRelease({release(QStringLiteral("9.0.0")), candidate}, installed, win));
+        const auto next = selectRelease({release(QStringLiteral("9.0.0")),
+            describedRelease(QStringLiteral("1.0.1")), describedRelease(QStringLiteral("1.0.2"))}, installed, win);
+        QVERIFY(next);
+        QCOMPARE(next->version.text, QStringLiteral("1.0.2"));
+        QVERIFY(!selectRelease({describedRelease(QStringLiteral("2.0.0-beta.1"), 2)}, installed, win));
+        auto beta = version("4.0.0-beta.5");
+        QVERIFY(selectRelease({describedRelease(QStringLiteral("1.0.0-beta.1"))}, beta, win));
+        for (const auto& suffix : {QStringLiteral("win64.zip"), QStringLiteral("macos-arm64.zip"),
+                                  QStringLiteral("macos-x86_64.zip"), QStringLiteral("linux-x86_64.tar.gz")})
+        {
+            const Target target = suffix.startsWith(QLatin1String("macos"))
+                ? Target{QStringLiteral("macos"), suffix.contains(QLatin1String("arm64")) ? QStringLiteral("arm64") : QStringLiteral("x86_64")}
+                : Target{suffix.startsWith(QLatin1String("linux")) ? QStringLiteral("linux") : QStringLiteral("windows"), QStringLiteral("x86_64")};
+            QVERIFY(selectRelease({describedRelease(QStringLiteral("1.0.0"), 1, suffix)}, beta, target));
+        }
+        auto draft = candidate;
+        draft[QStringLiteral("draft")] = true;
+        QVERIFY(!selectRelease({draft}, beta, win));
+        const auto legacy = selectRelease({release(QStringLiteral("4.0.0-beta.5"))}, version("4.0.0-beta.4"), win);
+        QVERIFY(legacy);
+        QCOMPARE(legacy->productName, QStringLiteral("VLC"));
+        QVERIFY(legacy->subtitle.isEmpty());
+    }
+    void invalidMetadata()
+    {
+        const Target win{QStringLiteral("windows"), QStringLiteral("x86_64")};
+        const auto original = describedRelease(QStringLiteral("1.0.0"));
+        const QPair<QString, QJsonValue> changes[] = {
+            {QStringLiteral("schema"), 2}, {QStringLiteral("schema"), true},
+            {QStringLiteral("version"), QStringLiteral("1.0.1")},
+            {QStringLiteral("generation"), -1}, {QStringLiteral("generation"), 1.5},
+            {QStringLiteral("generation"), 2147483648.0}, {QStringLiteral("generation"), true},
+            {QStringLiteral("product_name"), QString()}, {QStringLiteral("product_name"), QStringLiteral("Name\nInjected")},
+            {QStringLiteral("product_name"), QString(129, QLatin1Char('x'))},
+            {QStringLiteral("package_prefix"), QStringLiteral("../player")},
+            {QStringLiteral("package_prefix"), QStringLiteral("other-player")},
+            {QStringLiteral("subtitle"), true}, {QStringLiteral("subtitle"), QStringLiteral("Line\nBreak")},
+            {QStringLiteral("subtitle"), QString(513, QLatin1Char('x'))}
+        };
+        for (const auto& change : changes)
+        {
+            auto object = original;
+            auto data = metadata(QStringLiteral("1.0.0"));
+            data[change.first] = change.second;
+            object[QStringLiteral("body")] = metadataBlock(data);
+            QVERIFY2(!selectRelease({object}, version("4.0.0-beta.5"), win), qPrintable(change.first));
+        }
+        for (const auto& body : {QStringLiteral("<!-- vlc-update-metadata {"),
+                                QStringLiteral("<!-- vlc-update-metadata [] -->"),
+                                QStringLiteral("<!-- vlc-update-metadata {bad} -->"),
+                                metadataBlock(metadata(QStringLiteral("1.0.0"))).repeated(2)})
+        {
+            auto object = original;
+            object[QStringLiteral("body")] = body;
+            QVERIFY(!selectRelease({object}, version("4.0.0-beta.5"), win));
+        }
+        auto data = metadata(QStringLiteral("1.0.0"));
+        data.remove(QStringLiteral("subtitle"));
+        auto object = original;
+        object[QStringLiteral("body")] = metadataBlock(data);
+        const auto chosen = selectRelease({object}, version("4.0.0-beta.5"), win);
+        QVERIFY(chosen);
+        QVERIFY(chosen->subtitle.isEmpty());
+        // Metadata never relaxes the repository URL restriction.
+        object[QStringLiteral("html_url")] = QStringLiteral("https://github.com/other/project/releases/tag/1.0.0");
+        QVERIFY(!selectRelease({object}, version("4.0.0-beta.5"), win));
+    }
+    void generationPagination_data()
+    {
+        QTest::addColumn<bool>("reverse");
+        QTest::newRow("generation-first") << false;
+        QTest::newRow("generation-last") << true;
+    }
+    void generationPagination()
+    {
+        QFETCH(bool, reverse);
+        HttpFixture server;
+        server.body = [reverse](int page) {
+            QJsonArray entries;
+            entries.append((page == 1) != reverse ? describedRelease(QStringLiteral("1.0.0"))
+                                                               : release(QStringLiteral("9.0.0")));
+            if (page == 1) while (entries.size() < 100) entries.append(QJsonObject());
+            return QJsonDocument(entries).toJson();
+        };
+        GithubReleaseService service(server.options());
+        QSignalSpy done(&service, &GithubReleaseService::finished);
+        service.check(version("4.0.0-beta.5"), {QStringLiteral("windows"), QStringLiteral("x86_64")});
+        QTRY_COMPARE(done.size(), 1);
+        QVERIFY(done.takeFirst().at(0).toBool());
+        QVERIFY(service.release());
+        QCOMPARE(service.release()->version.text, QStringLiteral("1.0.0"));
+        QCOMPARE(service.release()->version.generation, 1u);
+        QCOMPARE(server.requests, 2);
     }
     void paginationAndLateAssets()
     {

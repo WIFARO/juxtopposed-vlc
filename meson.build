@@ -5,6 +5,7 @@ project('VLC', ['c', 'cpp'],
 
 vlc_copyright_years = '1996-2026'
 vlc_version_codename = 'Otto Chriek'
+vlc_update_generation = 0
 
 # LibVLC library (ABI) version
 # Format must be major.minor.micro
@@ -1013,6 +1014,7 @@ endif
 
 cdata.set_quoted('VERSION',         vlc_version)
 cdata.set_quoted('PACKAGE_VERSION', vlc_version)
+cdata.set('PACKAGE_UPDATE_GENERATION', vlc_update_generation)
 cdata.set_quoted('VERSION_MESSAGE', f'@vlc_version@ @vlc_version_codename@')
 
 cdata.set('VERSION_MAJOR',      vlc_version_major)
