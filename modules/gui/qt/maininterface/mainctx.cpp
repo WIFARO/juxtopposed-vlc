@@ -1384,10 +1384,9 @@ UpdateModel* MainCtx::getUpdateModel() const
     {
         m_updateModel = std::make_unique<UpdateModel>(p_intf);
 
-        connect(m_updateModel.get(), &UpdateModel::updateStatusChanged, this, [this](){
-            // No-op, modern update pane opens itself automatically when status changes.
-            // However, the old update dialog is used as fallback in case for any reason
-            // the modern pane is not available.
+        const auto presentUpdate = [this]() {
+            if (m_updateModel->presentationDismissed()) return;
+            // An active pane handles its own state. Otherwise, use the update window.
 
             const auto openLegacyDialogIfNecessary = [&]() {
                 // Fallback:
@@ -1426,15 +1425,17 @@ UpdateModel* MainCtx::getUpdateModel() const
                 case UpdateModel::UpToDate:
                 case UpdateModel::Unchecked:
                 case UpdateModel::Checking:
+                case UpdateModel::CheckFailed:
                     break;
                 case UpdateModel::NeedUpdate:
-                    qWarning() << "Need update";
-                    [[fallthrough]];
-                default:
+                case UpdateModel::Downloading:
                     openLegacyDialogIfNecessary();
+                    break;
                 }
             }
-        });
+        };
+        connect(m_updateModel.get(), &UpdateModel::updateStatusChanged, this, presentUpdate);
+        connect(m_updateModel.get(), &UpdateModel::presentationRequested, this, presentUpdate);
     }
 
     return m_updateModel.get();

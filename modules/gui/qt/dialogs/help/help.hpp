@@ -36,12 +36,14 @@
 #include "ui_about.h"
 #include "ui_update.h"
 #include <QTextCursor>
+#include <QPointer>
 
 class QEvent;
 class QTextBrowser;
 class QLineEdit;
 class QLabel;
 class QPushButton;
+class QTimer;
 
 class HelpDialog : public QVLCFrame
 {
@@ -138,11 +140,14 @@ public:
     double getProgress() const;
     bool explicitCheck() const;
     void resetExplicitCheck();
+    bool presentationDismissed() const;
+    Q_INVOKABLE void dismissPresentation();
 
 signals:
     void updateStatusChanged();
     void progressChanged();
     void explicitCheckChanged();
+    void presentationRequested();
 
 private:
     void _setExplicitCheck(bool) const
@@ -163,17 +168,29 @@ class UpdateDialog : public QVLCFrame
 public:
     UpdateDialog( qt_intf_t * );
     virtual ~UpdateDialog();
+    void present(bool forceActivation = false);
 
     bool event(QEvent *event) override;
 
+protected:
+    bool eventFilter(QObject*, QEvent*) override;
+    void keyPressEvent(QKeyEvent*) override;
+    void resizeEvent(QResizeEvent*) override;
+
 private:
     Ui::updateWidget ui;
-    UpdateModel* m_model = nullptr;
+    QPointer<UpdateModel> m_model;
+    QTimer *m_copyTimer = nullptr;
+    enum Feedback { None, LinkCopied, BrowserFailed } m_feedback = None;
+    bool m_ready = false;
+    bool m_layoutUpdating = false;
+    void updateMetrics();
+    void updateActions();
 
 private slots:
-    void checkOrDownload();
+    void openRelease();
     void updateUI();
-    void close() override { toggleVisible(); }
+    void close() override { hide(); }
 };
 #endif
 

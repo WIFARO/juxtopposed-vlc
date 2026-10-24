@@ -49,6 +49,7 @@
 #include <QPushButton>
 #include <QApplication>
 #include <QStyleHints>
+#include <QStyle>
 #include <QScrollBar>
 #include <QLineEdit>
 #include <QTextBlock>
@@ -383,6 +384,7 @@ public:
     std::optional<vlc::updates::Release> release;
     UpdateModel::Status status = UpdateModel::Unchecked;
     bool explicitCheck = false;
+    bool presentationDismissed = false;
 };
 
 UpdateModel::UpdateModel(qt_intf_t * p_intf)
@@ -404,14 +406,27 @@ UpdateModel::~UpdateModel() = default;
 void UpdateModel::checkUpdate(bool explicitCheck)
 {
     Q_D(UpdateModel);
-    // A manual request during an automatic check should still show its result.
+    if (d->status == Checking)
+    {
+        if (explicitCheck)
+        {
+            d->presentationDismissed = false;
+            if (!d->explicitCheck)
+            {
+                d->explicitCheck = true;
+                emit explicitCheckChanged();
+            }
+            // Present the existing request without sending another one.
+            emit presentationRequested();
+        }
+        return;
+    }
+    d->presentationDismissed = false;
     if (explicitCheck && !d->explicitCheck)
     {
         d->explicitCheck = true;
         emit explicitCheckChanged();
     }
-    if (d->status == Checking)
-        return;
     d->release.reset();
     const auto installed = vlc::updates::Version::parse(QStringLiteral(PACKAGE_VERSION));
     d->status = installed ? Checking : CheckFailed;
@@ -516,144 +531,248 @@ void UpdateModel::resetExplicitCheck()
     emit explicitCheckChanged();
 }
 
+bool UpdateModel::presentationDismissed() const
+{
+    Q_D(const UpdateModel);
+    return d->presentationDismissed;
+}
+
+void UpdateModel::dismissPresentation()
+{
+    Q_D(UpdateModel);
+    d->presentationDismissed = true;
+    resetExplicitCheck();
+}
+
 /*****************************************************************************
  * UpdateDialog
  *****************************************************************************/
 
-UpdateDialog::UpdateDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
+UpdateDialog::UpdateDialog(qt_intf_t *intf) : QVLCFrame(intf)
 {
-    /* build Ui */
-    ui.setupUi( this );
-    ui.updateDialogButtonBox->addButton( new QPushButton( qtr("&Close"), this ),
-                                         QDialogButtonBox::RejectRole );
-    QPushButton *recheckButton = new QPushButton( qtr("&Recheck version"), this );
-    ui.updateDialogButtonBox->addButton( recheckButton, QDialogButtonBox::ActionRole );
-
-    ui.updateNotifyButtonBox->addButton( new QPushButton( qtr("View release on &GitHub"), this ),
-                                         QDialogButtonBox::AcceptRole );
-    ui.updateNotifyButtonBox->addButton( new QPushButton( qtr("&Dismiss"), this ),
-                                         QDialogButtonBox::RejectRole );
-
-    setWindowTitle( qtr( "VLC media player updates" ) );
-    setWindowRole( "vlc-update" );
-
-    BUTTONACT( recheckButton, &UpdateDialog::checkOrDownload );
-    connect( ui.updateDialogButtonBox, &QDialogButtonBox::rejected, this, &UpdateDialog::close );
-
-    connect( ui.updateNotifyButtonBox, &QDialogButtonBox::accepted, this, &UpdateDialog::checkOrDownload );
-    connect( ui.updateNotifyButtonBox, &QDialogButtonBox::rejected, this, &UpdateDialog::close );
-
-    setMinimumSize( 300, 300 );
-    setMaximumSize( 500, 300 );
-
-    restoreWidgetPosition( "Update", maximumSize() );
-
+    setObjectName(QStringLiteral("redesignUpdates"));
+    setWindowRole("vlc-update");
+    ui.setupUi(this);
+    m_ready = true;
+    ui.updateTitle->setProperty("redesignHeading", true);
+    ui.updateOpenRelease->setProperty("redesignPrimary", true);
+    ui.releaseLayout->setContentsMargins(0, 0, 0, 0);
+    ui.releaseLinkLayout->setContentsMargins(0, 0, 0, 0);
+    ui.updateActions->setContentsMargins(0, 0, 0, 0);
     m_model = p_intf->p_mi->getUpdateModel();
-    connect(m_model, &UpdateModel::updateStatusChanged, this, &UpdateDialog::updateUI);
-    /* update status*/
+    m_copyTimer = new QTimer(this);
+    m_copyTimer->setSingleShot(true);
+    m_copyTimer->setInterval(2500);
+    connect(m_copyTimer, &QTimer::timeout, this, [this] { m_feedback = None; updateUI(); });
+    connect(ui.updateClose, &QPushButton::clicked, this, &UpdateDialog::hide);
+    connect(ui.updateCheck, &QPushButton::clicked, this, [this] { if (m_model) m_model->checkUpdate(true); });
+    connect(ui.updateOpenRelease, &QPushButton::clicked, this, &UpdateDialog::openRelease);
+    connect(ui.updateCopyLink, &QPushButton::clicked, this, [this] {
+        if (!m_model || m_model->updateStatus() != UpdateModel::NeedUpdate || !QGuiApplication::clipboard()) return;
+        QGuiApplication::clipboard()->setText(m_model->getUrl());
+        m_feedback = LinkCopied;
+        m_copyTimer->start();
+        updateUI();
+    });
+    connect(m_model, &UpdateModel::updateStatusChanged, this, [this] {
+        m_copyTimer->stop();
+        m_feedback = None;
+        updateUI();
+    });
+    if (auto *translator = InterfaceTranslator::instance())
+        connect(translator, &InterfaceTranslator::languageChanged, this, &UpdateDialog::updateUI);
+    connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &UpdateDialog::updateMetrics);
+    ui.updateNotes->installEventFilter(this);
+    ui.updateReleaseUrl->installEventFilter(this);
+    ui.updateFeedback->installEventFilter(this);
     updateUI();
+    updateMetrics();
+    restoreWidgetPosition("Update", QSize(helpDp(p_intf, 640), helpDp(p_intf, 500)));
+    if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
+    setTabOrder(ui.updateNotes, ui.updateReleaseUrl);
+    setTabOrder(ui.updateReleaseUrl, ui.updateCopyLink);
+    setTabOrder(ui.updateCopyLink, ui.updateClose);
+    setTabOrder(ui.updateClose, ui.updateCheck);
+    setTabOrder(ui.updateCheck, ui.updateOpenRelease);
 }
 
 UpdateDialog::~UpdateDialog()
 {
-    saveWidgetPosition( "Update" );
+    saveWidgetPosition("Update");
 }
 
-bool UpdateDialog::event(QEvent* event)
+void UpdateDialog::present(bool forceActivation)
 {
-    assert(event);
-
-    if (Q_LIKELY(m_model))
+    const bool activate = forceActivation || (m_model && m_model->explicitCheck());
+    setAttribute(Qt::WA_ShowWithoutActivating, !activate);
+    show();
+    if (activate)
     {
-        switch(event->type())
+        raise();
+        activateWindow();
+    }
+}
+
+bool UpdateDialog::event(QEvent *event)
+{
+    if (m_model)
+    {
+        if (event->type() == QEvent::Hide || event->type() == QEvent::Close || event->type() == QEvent::Destroy)
+            m_model->dismissPresentation();
+        else if (event->type() == QEvent::Show)
         {
-        case QEvent::Hide:
-        case QEvent::Show:
-        case QEvent::Close:
-        case QEvent::Destroy:
-            m_model->resetExplicitCheck();
-            break;
-        default:
-            break;
+            updateUI();
+            // Opening a window must not make Return launch a browser.
+            ui.updateClose->setFocus(Qt::OtherFocusReason);
         }
     }
-
     return QVLCFrame::event(event);
 }
 
-/* Check for updates */
-void UpdateDialog::checkOrDownload()
+void UpdateDialog::openRelease()
 {
-    switch (m_model->updateStatus()) {
-    case UpdateModel::Unchecked:
-    case UpdateModel::UpToDate:
-    case UpdateModel::CheckFailed:
+    if (!m_model || m_model->updateStatus() != UpdateModel::NeedUpdate) return;
+    if (m_model->openReleasePage()) hide();
+    else
     {
-        ui.stackedWidget->setCurrentWidget( ui.updateRequestPage );
-        m_model->checkUpdate(true);
-        break;
-    }
-    case UpdateModel::NeedUpdate:
-    {
-        if (m_model->openReleasePage())
-            toggleVisible();
-        break;
-    }
-    default: // Checking
-        break;
+        m_copyTimer->stop();
+        m_feedback = BrowserFailed;
+        updateUI();
     }
 }
 
-/* Show the result of release discovery. */
-void UpdateDialog::updateUI( )
+void UpdateDialog::updateUI()
 {
-    switch (m_model->updateStatus()) {
+    if (!m_model) return;
+    ui.retranslateUi(this);
+    const auto status = m_model->updateStatus();
+    const bool available = status == UpdateModel::NeedUpdate;
+    const bool busy = status == UpdateModel::Checking || status == UpdateModel::Downloading;
+    ui.updateProgress->setVisible(busy);
+    ui.updateCheck->setEnabled(!busy);
+    ui.updateOpenRelease->setVisible(available);
+    ui.updateReleaseDetails->setVisible(available);
+    ui.updateReleaseLink->setVisible(available);
+    const auto notes = m_model->getDescription();
+    if (ui.updateNotes->toPlainText() != notes) ui.updateNotes->setPlainText(notes);
+    const auto url = m_model->getUrl();
+    if (ui.updateReleaseUrl->text() != url) ui.updateReleaseUrl->setText(url);
+    switch (status)
+    {
     case UpdateModel::NeedUpdate:
-    {
-        ui.stackedWidget->setCurrentWidget( ui.updateNotifyPage );
-        ui.updateNotifyLabel->setText(qtr("A new version of VLC (%1) is available.")
-                                     .arg(m_model->getVersion()));
-        ui.updateNotifyTextEdit->setPlainText(m_model->getDescription());
+        ui.updateTitle->setText(qtr("A new version is available"));
+        ui.updateSummary->setText(qtr("VLC %1\nOpen the release page in your web browser.").arg(m_model->getVersion()));
         break;
-    }
     case UpdateModel::UpToDate:
-    {
-        ui.stackedWidget->setCurrentWidget( ui.updateDialogPage );
-        ui.updateDialogLabel->setText(
-            qtr("No newer compatible release is available for this build.") );
+        ui.updateTitle->setText(qtr("No update is available"));
+        ui.updateSummary->setText(qtr("No newer compatible release is available for VLC %1.").arg(QStringLiteral(PACKAGE_VERSION)));
         break;
-    }
     case UpdateModel::CheckFailed:
-    {
-        ui.stackedWidget->setCurrentWidget( ui.updateDialogPage );
-        ui.updateDialogLabel->setText(
-            qtr( "An error occurred while checking for updates..." ) );
+        ui.updateTitle->setText(qtr("Cannot check for updates"));
+        ui.updateSummary->setText(qtr("Check your network connection. Then select Check again."));
         break;
-    }
     case UpdateModel::Checking:
-    {
-        ui.stackedWidget->setCurrentWidget( ui.updateDialogPage );
-        ui.updateDialogLabel->setText(
-            qtr( "Checking for updates..." ) );
-        break;
-    }
-    case UpdateModel::Unchecked:
-        // do nothing
+        ui.updateTitle->setText(qtr("Checking for updates"));
+        ui.updateSummary->setText(qtr("You can close this window while VLC checks for updates."));
         break;
     case UpdateModel::Downloading:
-        // NOTE: It is not planned to implement this in the legacy dialog.
-        //       The new update pane already respects it, we are only
-        //       waiting for the core to provide this information.
+        ui.updateTitle->setText(qtr("Downloading update"));
+        ui.updateSummary->setText(qtr("The update is downloading."));
+        break;
+    case UpdateModel::Unchecked:
+        ui.updateTitle->setText(qtr("VLC updates"));
+        ui.updateSummary->setText(qtr("Installed version: %1\nCheck for a new version of VLC.").arg(QStringLiteral(PACKAGE_VERSION)));
         break;
     }
-
-    if (isVisible())
+    ui.updateFeedback->setVisible(available && m_feedback != None);
+    ui.updateFeedback->setText(m_feedback == LinkCopied ? qtr("Link copied.")
+        : m_feedback == BrowserFailed ? qtr("Cannot open the browser. Copy the link and open it in your browser.") : QString());
+    const bool primary = !available;
+    if (ui.updateCheck->property("redesignPrimary").toBool() != primary)
     {
-        if (const auto w = windowHandle())
+        ui.updateCheck->setProperty("redesignPrimary", primary);
+        ui.updateCheck->style()->unpolish(ui.updateCheck);
+        ui.updateCheck->style()->polish(ui.updateCheck);
+    }
+    updateActions();
+}
+
+void UpdateDialog::updateMetrics()
+{
+    const int margin = helpDp(p_intf, 24);
+    ui.updateLayout->setContentsMargins(margin, margin, margin, margin);
+    ui.updateLayout->setSpacing(helpDp(p_intf, 12));
+    ui.releaseLayout->setSpacing(helpDp(p_intf, 8));
+    ui.releaseLinkLayout->setSpacing(helpDp(p_intf, 8));
+    ui.updateActions->setSpacing(helpDp(p_intf, 8));
+    ui.updateNotes->setMinimumHeight(helpDp(p_intf, 80));
+    ui.updateProgress->setFixedHeight(helpDp(p_intf, 8));
+    auto minimum = QSize(helpDp(p_intf, 420), helpDp(p_intf, 260));
+    if (screen()) minimum = minimum.boundedTo(screen()->availableGeometry().size());
+    setMinimumSize(minimum);
+    updateActions();
+}
+
+void UpdateDialog::updateActions()
+{
+    if (!m_ready || m_layoutUpdating) return;
+    m_layoutUpdating = true;
+    int width = 0, count = 0;
+    for (auto *button : {ui.updateClose, ui.updateCheck, ui.updateOpenRelease})
+        if (!button->isHidden()) { width += button->sizeHint().width(); ++count; }
+    width += qMax(0, count - 1) * ui.updateActions->spacing();
+    const auto margin = ui.updateLayout->contentsMargins();
+    ui.updateActions->setDirection(width > this->width() - margin.left() - margin.right()
+        ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
+    int minimum = qMax(helpDp(p_intf, 260), ui.updateLayout->totalMinimumHeightForWidth(this->width()));
+    if (screen()) minimum = qMin(minimum, screen()->availableGeometry().height());
+    setMinimumHeight(minimum);
+    m_layoutUpdating = false;
+}
+
+void UpdateDialog::resizeEvent(QResizeEvent *event)
+{
+    updateActions();
+    QVLCFrame::resizeEvent(event);
+}
+
+void UpdateDialog::keyPressEvent(QKeyEvent *event)
+{
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) && event->isAutoRepeat())
+        event->accept();
+    else if (!activateHelpButton(event, focusWidget())) QVLCFrame::keyPressEvent(event);
+}
+
+bool UpdateDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+    {
+        auto *key = static_cast<QKeyEvent*>(event);
+        const bool copy = key->matches(QKeySequence::Copy);
+        const bool selectAll = key->matches(QKeySequence::SelectAll);
+        if (copy || selectAll)
         {
-            w->alert(0);
+            if (event->type() == QEvent::KeyPress)
+            {
+                if (watched == ui.updateNotes)
+                {
+                    if (copy) ui.updateNotes->copy(); else ui.updateNotes->selectAll();
+                }
+                else if (watched == ui.updateReleaseUrl)
+                {
+                    if (copy) ui.updateReleaseUrl->copy(); else ui.updateReleaseUrl->selectAll();
+                }
+                else if (watched == ui.updateFeedback)
+                {
+                    if (selectAll) ui.updateFeedback->setSelection(0, ui.updateFeedback->text().size());
+                    else if (ui.updateFeedback->hasSelectedText()) QGuiApplication::clipboard()->setText(ui.updateFeedback->selectedText());
+                }
+            }
+            key->accept();
+            return true;
         }
     }
+    return QVLCFrame::eventFilter(watched, event);
 }
 
 #endif
