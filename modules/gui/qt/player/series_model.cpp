@@ -27,7 +27,7 @@ int SeriesModel::rowCount(const QModelIndex& parent) const { return parent.isVal
 QHash<int, QByteArray> SeriesModel::roleNames() const
 {
     return {{Title, "title"}, {Number, "number"}, {Description, "description"}, {Thumbnail, "thumbnail"},
-        {Urls, "urls"}, {Current, "current"}, {CurrentVersion, "currentVersion"}, {Progress, "progress"}, {Played, "played"}, {FeedIndex, "feedIndex"}, {VideoEpisode, "videoEpisode"}};
+        {Urls, "urls"}, {Current, "current"}, {CurrentVersion, "currentVersion"}, {Progress, "progress"}, {Played, "played"}, {FeedIndex, "feedIndex"}, {VideoEpisode, "videoEpisode"}, {TitleSource, "titleSource"}};
 }
 bool SeriesModel::isCurrent(const Row& row) const
 {
@@ -45,7 +45,8 @@ QVariant SeriesModel::data(const QModelIndex& index, int role) const
     const auto number = !numbers.isEmpty() ? numbers.join(QStringLiteral("–")) : !identity.absoluteEpisode.isEmpty() ? identity.absoluteEpisode
         : identity.airDate.isValid() ? identity.airDate.toString(Qt::ISODate) : QString();
     switch (role) {
-    case Title: return !row.title.isEmpty() ? row.title : !number.isEmpty() ? tr("Episode %1").arg(number) : tr("Episode");
+    case Title: return !row.title.isEmpty() ? row.title : !state.title.isEmpty() ? state.title : !number.isEmpty() ? tr("Episode %1").arg(number) : tr("Episode");
+    case TitleSource: return row.title.isEmpty() ? state.titleSource : QUrl();
     case Number: return number;
     case Description: return row.description;
     case Thumbnail: return state.artwork.isEmpty() ? row.thumbnail : state.artwork;
@@ -92,7 +93,7 @@ void SeriesModel::setCurrent(const QUrl& url, const QVariantMap& metadata)
     // Already discovered sibling episodes reuse the live directory snapshot.
     if (retained) {
         for (auto& row : m_rows) if (isCurrent(row)) {
-            if (!metadata.value("episodeTitle").toString().isEmpty()) row.title = metadata.value("episodeTitle").toString();
+            row.title = MediaIdentity::episodeTitle(url, metadata);
             if (!metadata.value("description").toString().isEmpty()) row.description = metadata.value("description").toString();
         }
     }
@@ -149,7 +150,7 @@ void SeriesModel::publish(const SeriesDiscovery::Result& result, bool complete)
     for (const auto& episode : episodes) {
         Row row; row.episode = episode;
         if (isCurrent(row)) {
-            row.title = m_metadata.value("episodeTitle").toString();
+            row.title = MediaIdentity::episodeTitle(m_current, m_metadata);
             row.description = m_metadata.value("description").toString();
         }
         m_rows.append(row);
@@ -278,4 +279,14 @@ void SeriesModel::requestDetails(int row)
     const auto url = entry.episode.urls.contains(m_current) ? m_current : entry.episode.urls.first();
     if (m_requestedArtwork.contains(url)) return;
     m_requestedArtwork.insert(url); emit artworkRequested(url);
+}
+
+void SeriesModel::setEpisodeTitle(const QUrl& url, const QString& title, const QUrl& source)
+{
+    if (!m_requestedStates.contains(url) && url != m_current) return;
+    const auto cleaned = MediaIdentity::episodeTitle(url, {{"episodeTitle", title}});
+    if (cleaned.isEmpty()) return;
+    m_states[url].title = cleaned;
+    m_states[url].titleSource = source;
+    update(url, Title); update(url, TitleSource);
 }

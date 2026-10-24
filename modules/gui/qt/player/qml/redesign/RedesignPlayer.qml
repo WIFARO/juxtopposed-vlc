@@ -21,8 +21,24 @@ FocusScope {
     PlaylistTreeModel { id: queueTreeModel; treeEnabled: MainCtx.playlistTree }
     property int requestedLibraryCategory: -1
     property var requestedNetworkPlaylist: null
-    SeriesModel { id: seriesModel }
-    Timer { id: seriesContextTimer; interval: 0; onTriggered: seriesModel.setCurrent(Player.url, Player.seriesContext) }
+    SeriesModel { id: seriesModel; objectName: "seriesEpisodeModel" }
+    EpisodeMetadata {
+        id: episodeMetadata
+        objectName: "seriesEpisodeMetadata"
+        ctx: MainCtx
+        onTitleReady: (url, title, source) => seriesModel.setEpisodeTitle(url, title, source)
+    }
+    Connections {
+        target: seriesModel
+        function onWatchStatesRequested(urls, serial) { episodeMetadata.readCached(urls) }
+    }
+    Timer {
+        id: seriesContextTimer; interval: 0
+        onTriggered: {
+            seriesModel.setCurrent(Player.url, Player.seriesContext)
+            episodeMetadata.request(Player.url, Player.seriesContext)
+        }
+    }
     property string seriesFeedUrl: seriesModel.feed.toString()
     onSeriesFeedUrlChanged: seriesFeed.setSources(seriesFeedUrl ? [{mrl: seriesFeedUrl}] : [])
     NetworkPlaylistModel {

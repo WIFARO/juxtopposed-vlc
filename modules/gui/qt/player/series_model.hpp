@@ -33,7 +33,7 @@ class SeriesModel : public QAbstractListModel
     Q_PROPERTY(int currentSeason READ currentSeason NOTIFY contextChanged FINAL)
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged FINAL)
 public:
-    enum Role { Title = Qt::UserRole + 1, Number, Description, Thumbnail, Urls, Current, CurrentVersion, Progress, Played, FeedIndex, VideoEpisode };
+    enum Role { Title = Qt::UserRole + 1, Number, Description, Thumbnail, Urls, Current, CurrentVersion, Progress, Played, FeedIndex, VideoEpisode, TitleSource };
     explicit SeriesModel(QObject* parent = nullptr);
     ~SeriesModel() override;
     bool available() const;
@@ -58,6 +58,7 @@ public:
     Q_INVOKABLE void setPlayed(const QUrl& url, bool played);
     Q_INVOKABLE void setArtwork(const QUrl& url, const QString& artwork);
     Q_INVOKABLE void requestDetails(int row);
+    Q_INVOKABLE void setEpisodeTitle(const QUrl& url, const QString& title, const QUrl& source = {});
     Q_INVOKABLE void loadStates();
     Q_INVOKABLE QVariantMap get(int row) const;
 signals:
@@ -77,7 +78,7 @@ private:
         int feedIndex = -1;
         bool videoEpisode = true;
     };
-    struct State { qreal progress = 0; bool played = false; QString artwork; };
+    struct State { qreal progress = 0; bool played = false; QString artwork, title; QUrl titleSource; };
     void cancel();
     void scan(const QUrl& folder = {});
     void project(bool resetting = false);

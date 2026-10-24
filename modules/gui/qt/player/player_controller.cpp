@@ -3118,6 +3118,7 @@ void PlayerControllerPrivate::requestAutoMetadata()
 void PlayerController::refreshMetadataPreference()
 {
     Q_D(PlayerController);
+    emit metadataNetworkAccessChanged(var_InheritBool(d->p_intf, "metadata-network-access"));
     if (!var_InheritBool(d->p_intf, "metadata-network-access"))
     {
         ++d->m_metadataGeneration;
@@ -3403,13 +3404,8 @@ QVariantMap PlayerController::getSeriesContext() const
     }
     if (!item) return {};
     auto metadata = MediaIdentity::inputMetadata(item.get());
-    const auto title = vlc::wrap_cptr(input_item_GetTitle(item.get()));
     const auto description = vlc::wrap_cptr(input_item_GetDescription(item.get()));
-    // Even when the display name is the embedded title, it is useful as long
-    // as it differs from the filename and the show's name.
-    if (title && QString::fromUtf8(title.get()) != getUrl().fileName()
-        && QString::fromUtf8(title.get()) != QFileInfo(getUrl().fileName()).completeBaseName()
-        && QString::fromUtf8(title.get()) != metadata.value("showName").toString()) metadata["episodeTitle"] = QString::fromUtf8(title.get());
+    metadata["episodeTitle"] = MediaIdentity::episodeTitle(getUrl(), metadata);
     if (description) {
         QTextDocument notes; notes.setHtml(QString::fromUtf8(description.get()));
         metadata["description"] = notes.toPlainText();

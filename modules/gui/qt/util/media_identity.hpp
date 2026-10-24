@@ -407,6 +407,25 @@ inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
     return result;
 }
 
+// A filename reader can manufacture a title that differs from the filename
+// only in punctuation or omitted release details. It is not an episode name.
+inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata)
+{
+    auto title = metadata.value("episodeTitle", metadata.value("title")).toString().trimmed();
+    if (title.isEmpty()) return {};
+    const auto identity = identify(url, metadata);
+    const auto normalized = normalize(title);
+    if (normalized == normalize(url.fileName())
+        || normalized == normalize(QFileInfo(url.fileName()).completeBaseName())
+        || normalized == normalize(identity.title)
+        || normalized == normalize(metadata.value("showName").toString())) return {};
+    const auto generated = parse(title);
+    if (generated.kind == Kind::Episode) return {};
+    static const QRegularExpression generic(QStringLiteral("^(?:episode|ep)[ ._-]*[0-9]+$"), QRegularExpression::CaseInsensitiveOption);
+    if (generic.match(title).hasMatch()) return {};
+    return title.left(1024);
+}
+
 inline QVariantMap toMap(const Identity& identity)
 {
     QVariantList episodes;

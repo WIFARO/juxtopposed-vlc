@@ -573,6 +573,7 @@ signals:
     void statisticsUpdated( const input_stats_t& stats );
     void playbackStatisticsChanged();
     void infoChanged( input_item_t* );
+    void metadataNetworkAccessChanged(bool enabled);
     void currentMetaChanged( input_item_t* );
     void currentLyricChanged();
     void hasLyricsChanged( bool );

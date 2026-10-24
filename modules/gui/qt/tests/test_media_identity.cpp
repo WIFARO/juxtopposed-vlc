@@ -10,6 +10,16 @@ using namespace MediaIdentity;
 class TestMediaIdentity : public QObject {
     Q_OBJECT
 private slots:
+    void episodeNamesExcludeFilenameReaderTitles() {
+        const QUrl url("file://server/share/The%20Walking%20Dead%20-%20S01E03%20-%201080p.mkv");
+        for (const auto& title : {QString("The Walking Dead - S01E03 - 1080p.mkv"),
+                QString("The Walking Dead - S01E03 - 1080p"), QString("The Walking Dead S01E03"),
+                QString("The Walking Dead - S01E03"), QString("The Walking Dead"), QString("Episode 3")})
+            QVERIFY2(episodeTitle(url, {{"title", title}}).isEmpty(), qPrintable(title));
+        QCOMPARE(episodeTitle(url, {{"title", "Tell It to the Frogs"}}), "Tell It to the Frogs");
+        QCOMPARE(episodeTitle(url, {{"title", "  Days Gone By  "}, {"showName", "The Walking Dead"}}), "Days Gone By");
+        QCOMPARE(episodeTitle(url, {{"episodeTitle", "A <literal> & name"}}), "A <literal> & name");
+    }
     void filenames_data() {
         QTest::addColumn<QString>("filename"); QTest::addColumn<QString>("title");
         QTest::addColumn<int>("year"); QTest::addColumn<int>("season");

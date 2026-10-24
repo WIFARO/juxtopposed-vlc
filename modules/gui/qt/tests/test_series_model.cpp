@@ -90,6 +90,32 @@ private slots:
         model.refresh();
         QTRY_VERIFY(!model.loading()); QCOMPARE(model.rowCount(), 2);
     }
+    void realTitlesSurviveNavigationAndScans() {
+        QTemporaryDir base;
+        const auto first = QUrl::fromLocalFile(base.path() + "/Show.S01E01.mkv");
+        const auto second = QUrl::fromLocalFile(base.path() + "/Show.S01E02.mkv");
+        for (const auto& url : {first, second}) { QFile file(url.toLocalFile()); QVERIFY(file.open(QIODevice::WriteOnly)); }
+        SeriesModel model; model.setCurrent(first, {{"title", "Show S01E01"}});
+        QTRY_VERIFY(!model.loading()); QCOMPARE(model.get(0).value("title").toString(), "Episode 1");
+        const QUrl source("https://www.tvmaze.com/episodes/1/show-1x01-pilot");
+        model.setEpisodeTitle(first, "Pilot", source);
+        QCOMPARE(model.get(0).value("title").toString(), "Pilot");
+        QCOMPARE(model.get(0).value("titleSource").toUrl(), source);
+        model.setEpisodeTitle(second, "Second <line> & title");
+        QCOMPARE(model.get(1).value("title").toString(), "Second <line> & title");
+        model.setCurrent(second, {{"episodeTitle", "Show S01E02"}});
+        QCOMPARE(model.get(1).value("title").toString(), "Second <line> & title");
+        model.refresh(); QTRY_VERIFY(!model.loading());
+        QCOMPARE(model.get(0).value("title").toString(), "Pilot");
+        QCOMPARE(model.get(1).value("title").toString(), "Second <line> & title");
+        model.setCurrent(first, {{"episodeTitle", "File title"}});
+        QCOMPARE(model.get(0).value("title").toString(), "File title");
+        QVERIFY(model.get(0).value("titleSource").toUrl().isEmpty());
+        model.setEpisodeTitle(first, "Show S01E01");
+        QCOMPARE(model.get(0).value("title").toString(), "File title");
+        model.setEpisodeTitle(QUrl("file:///unrelated.mkv"), "Unrelated");
+        QCOMPARE(model.rowCount(), 2);
+    }
     void destructionDuringScanIsSafe() {
         QTemporaryDir base;
         const auto url = QUrl::fromLocalFile(base.path() + "/Show.S01E01.mkv");

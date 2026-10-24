@@ -253,6 +253,17 @@ FocusScope {
                         maximumLineCount: 3; elide: Text.ElideRight
                         color: theme.foreground; font.pixelSize: theme.dp(13)
                     }
+                    RedesignButton {
+                        objectName: "episodeTitleSource_" + row.index
+                        visible: !!row.entry.titleSource && String(row.entry.titleSource).length > 0
+                        Layout.fillWidth: true
+                        scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor
+                        caption: qsTr("Episode details: TVmaze"); text: caption
+                        captionFontSize: 11; leftAligned: true
+                        foreground: theme.playerLabel
+                        contentLeftMargin: 0
+                        onClicked: Qt.openUrlExternally(row.entry.titleSource)
+                    }
                     RedesignComboBox {
                         objectName: "episodeVersion_" + row.index
                         Layout.fillWidth: true; visible: !root.podcast && row.entry.urls.length > 1

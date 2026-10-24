@@ -313,6 +313,7 @@ libqt_plugin_la_SOURCES = \
 	player/delay_estimator.hpp \
 	player/player_controller.cpp player/player_controller.hpp player/player_controller_p.hpp \
 	player/series_model.cpp player/series_model.hpp \
+	player/episode_metadata.cpp player/episode_metadata.hpp \
 	util/seek_preview_cache.hpp util/seek_preview_image_provider.hpp \
 	util/subtitle_source_service.hpp util/subtitle_source_service.cpp \
 	util/github_release_service.hpp util/github_release_service.cpp \
@@ -551,6 +552,7 @@ nodist_libqt_plugin_la_SOURCES = \
 	util/github_release_service.moc.cpp \
 	player/player_controller.moc.cpp \
 	player/series_model.moc.cpp \
+	player/episode_metadata.moc.cpp \
 	player/player_controlbar_model.moc.cpp \
 	player/control_list_model.moc.cpp \
 	player/control_list_filter.moc.cpp \
