@@ -29,8 +29,10 @@ for attempt in {1..100}; do
 done
 test -S "$XDG_RUNTIME_DIR/wayland-release"
 python3 "$scripts/bundle-linux-runtime.py" --verify-only "$appdir"
-QT_QPA_PLATFORM=wayland WAYLAND_DISPLAY=wayland-release QT_WAYLAND_CLIENT_BUFFER_INTEGRATION=wayland-egl \
-    python3 "$scripts/verify.py" --expected-version "$version" --gui --video --require-opengl "$appdir/AppRun"
+for platform in '' wayland wayland-egl; do
+    XDG_SESSION_TYPE=wayland QT_QPA_PLATFORM=$platform WAYLAND_DISPLAY=wayland-release QT_WAYLAND_CLIENT_BUFFER_INTEGRATION=wayland-egl \
+        python3 "$scripts/verify.py" --expected-version "$version" --gui --video --require-opengl "$appdir/AppRun"
+done
 QT_QPA_PLATFORM=xcb xvfb-run -a \
     python3 "$scripts/verify.py" --expected-version "$version" --gui --video --require-opengl "$appdir/AppRun"
 QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software xvfb-run -a \

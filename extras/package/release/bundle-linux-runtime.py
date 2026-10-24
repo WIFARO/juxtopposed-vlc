@@ -19,6 +19,10 @@ HOST_LIBRARIES = {
     'libdrm.so.2', 'libdrm_amdgpu.so.1', 'libdrm_radeon.so.1',
     'libdrm_intel.so.1', 'libdrm_nouveau.so.2',
     'libstdc++.so.6', 'libgcc_s.so.1',
+    # Host EGL vendors load these after Qt has initialized Wayland. Bundling an
+    # older client library can leave newer Mesa with unresolved Wayland symbols.
+    'libwayland-client.so.0', 'libwayland-cursor.so.0',
+    'libwayland-egl.so.1', 'libwayland-server.so.0',
 }
 WAYLAND_GROUPS = ('wayland-graphics-integration-client', 'wayland-shell-integration',
                   'wayland-decoration-client', 'wayland-graphics-integration-server')
@@ -30,6 +34,14 @@ REQUIRED_PLUGINS = ('platforms/libqwayland-egl.so', 'platforms/libqwayland-gener
 
 def run(*args, env=None):
     return subprocess.check_output([str(x) for x in args], text=True, env=env)
+
+
+def is_host_library(name):
+    # linuxdeploy may leave a SONAME symlink and its fully versioned target.
+    # Remove both, including development aliases, so dlopen cannot find a stale
+    # copy under a different filename after the SONAME itself has been removed.
+    return any(re.fullmatch(re.escape(library.split('.so')[0] + '.so') +
+                            r'(?:\.\d+)*', name) for library in HOST_LIBRARIES)
 
 
 def elf_files(appdir):
@@ -77,7 +89,7 @@ def deploy(appdir, qt_plugins):
     # libstdc++ can prevent newer host drivers from loading (GLIBCXX_3.4.32 on
     # Ubuntu24.04). Keep the compiler runtime with the host graphics stack too.
     for path in appdir.rglob('*'):
-        if path.name in HOST_LIBRARIES and (path.is_file() or path.is_symlink()):
+        if is_host_library(path.name) and (path.is_file() or path.is_symlink()):
             path.unlink()
     for group in WAYLAND_GROUPS:
         source = qt_plugins / group
@@ -105,7 +117,7 @@ def deploy(appdir, qt_plugins):
         visited.add(path)
         set_runpath(path, libraries)
         for name, resolved in dependencies(path, discovery):
-            if name in HOST_LIBRARIES:
+            if is_host_library(name):
                 continue
             target = libraries / name
             if not target.exists():
@@ -125,7 +137,7 @@ def audit(appdir):
     appdir = appdir.resolve()
     verify_plugins(appdir)
     for path in appdir.rglob('*'):
-        if path.name in HOST_LIBRARIES and path.is_file():
+        if is_host_library(path.name) and (path.is_file() or path.is_symlink()):
             raise ValueError(f'Bundled host ABI library can conflict with graphics drivers: {path}')
     clean = dict(os.environ)
     clean.pop('LD_LIBRARY_PATH', None)
@@ -144,8 +156,13 @@ def audit(appdir):
                 if (suffix and not suffix.startswith('/')) or '$' in suffix or not (
                         path.parent / suffix.lstrip('/')).resolve().is_relative_to(appdir):
                     raise ValueError(f'ELF runtime search path escapes AppDir: {path}: {entry}')
+        # ldd also lists dependencies of host libraries. Their own dependency
+        # closure belongs to the host (e.g. Wayland's libffi); check each bundled
+        # ELF's direct imports here instead. Every bundled dependency is audited
+        # separately, so an unexpected host import still fails at its owner.
+        needed = set(re.findall(r'\(NEEDED\).*?\[(.*?)\]', dynamic))
         for name, resolved in dependencies(path, clean):
-            if not Path(resolved).resolve().is_relative_to(appdir) and name not in HOST_LIBRARIES:
+            if name in needed and not Path(resolved).resolve().is_relative_to(appdir) and not is_host_library(name):
                 raise ValueError(f'Unexpected host dependency: {path}: {name} => {resolved}')
         versions = run('readelf', '--version-info', path)
         if 'GLIBC_ABI_DT_RELR' in versions:

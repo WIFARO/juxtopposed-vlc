@@ -45,10 +45,21 @@ dependencies and build paths, and verifies the glibc 2.35 baseline. The shipped
 `LINUX-RUNTIME.json` records required plugins, host ABI libraries and ELF hashes.
 Host graphics drivers and their EGL/GL/Vulkan dispatch libraries stay together;
 the bundle does not mix an older Mesa or libdrm with a newer host GPU driver.
+The host also supplies the Wayland client, cursor, EGL and server libraries.
+Host EGL vendors load after Qt and can require newer Wayland symbols; bundling
+the build image's older Wayland libraries can prevent Mesa from loading and
+produce `EGL not available`, even when the Qt integration plugin is present.
+The packager removes and rejects versioned backing files and unversioned aliases
+of host libraries as well as their SONAME filenames.
 The host also supplies `libstdc++` and `libgcc_s`, since newer graphics drivers
 can require C++ symbols absent from an older bundled runtime. The required
 `GLIBCXX` ABI is recorded as `minimum_glibcxx` in the runtime/build metadata;
 the standard updated Ubuntu 22.04 runtime satisfies this build's requirement.
+Linux verification covers Ubuntu 22.04, 24.04 and 26.04, including repeated
+OpenGL video playback with automatic, `wayland` and `wayland-egl` platform selection
+on the newer runtimes without system Qt. The current graphics stack is needed
+to catch dependencies loaded dynamically by EGL that an ELF dependency audit
+cannot see.
 
 These checks apply the runtime-plugin, relocation and environment-isolation
 advice in the [pkgforge portable-AppImage guide](https://github.com/pkgforge-dev/Anylinux-AppImages/blob/main/HOW-TO-MAKE-THESE.md).

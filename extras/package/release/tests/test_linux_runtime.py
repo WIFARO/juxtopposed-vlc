@@ -23,6 +23,19 @@ tools = load('linux_tools', 'fetch-linux-tools.py')
 
 
 class RuntimeTests(unittest.TestCase):
+    WAYLAND_LIBRARIES = (
+        ('libwayland-client.so.0', 'libwayland-client.so.0.20.0'),
+        ('libwayland-cursor.so.0', 'libwayland-cursor.so.0.20.0'),
+        ('libwayland-egl.so.1', 'libwayland-egl.so.1.20.0'),
+        ('libwayland-server.so.0', 'libwayland-server.so.0.20.0'),
+    )
+
+    def create_required_plugins(self, app):
+        for name in runtime.REQUIRED_PLUGINS:
+            path = app / 'usr/plugins' / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.touch()
+
     def test_bundled_compiler_runtime_is_rejected_before_graphics_testing(self):
         with tempfile.TemporaryDirectory() as temp:
             app = Path(temp)
@@ -34,6 +47,100 @@ class RuntimeTests(unittest.TestCase):
             (app / 'usr/lib/libstdc++.so.6').write_bytes(b'old compiler runtime')
             with self.assertRaisesRegex(ValueError, 'Bundled host ABI library'):
                 runtime.audit(app)
+
+    def test_bundled_wayland_aliases_sonames_and_versioned_files_are_rejected(self):
+        for soname, versioned in self.WAYLAND_LIBRARIES:
+            alias = soname.split('.so.')[0] + '.so'
+            for filename in (alias, soname, versioned):
+                with self.subTest(filename=filename), tempfile.TemporaryDirectory() as temp:
+                    app = Path(temp)
+                    self.create_required_plugins(app)
+                    library = app / 'usr/lib' / filename
+                    library.parent.mkdir(parents=True)
+                    if filename == alias:
+                        library.symlink_to(soname)
+                    else:
+                        library.write_bytes(b'old Wayland runtime')
+                    with mock.patch.object(runtime, 'dependencies') as dependencies:
+                        with self.assertRaisesRegex(ValueError, 'Bundled host ABI library'):
+                            runtime.audit(app)
+                        dependencies.assert_not_called()
+
+    def test_deploy_removes_wayland_links_and_real_files_without_rebundling_them(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp) / 'AppDir'
+            self.create_required_plugins(app)
+            libraries = app / 'usr/lib'
+            libraries.mkdir(parents=True)
+            (app / 'usr/bin').mkdir(parents=True)
+            (app / 'usr/libexec/vlc').mkdir(parents=True)
+            binary = app / 'usr/bin/vlc'
+            binary.touch()
+            for soname, versioned in self.WAYLAND_LIBRARIES:
+                (libraries / versioned).write_bytes(b'old Wayland runtime')
+                (libraries / soname).symlink_to(versioned)
+                alias = soname.split('.so.')[0] + '.so'
+                (libraries / alias).symlink_to(soname)
+            qt_wayland = libraries / 'libQt6WaylandClient.so.6'
+            qt_wayland.write_bytes(b'matching Qt runtime')
+            lookalike = libraries / 'libwayland-client.so.debug'
+            lookalike.write_bytes(b'unrelated file')
+            for filename in ('libharfbuzz.so.0', 'libfribidi.so.0', 'libasound.so.2', 'libfontconfig.so.1'):
+                (libraries / filename).touch()
+            resolved = [(soname, '/host/lib/' + versioned)
+                        for soname, versioned in self.WAYLAND_LIBRARIES]
+            resolved.append((qt_wayland.name, str(qt_wayland)))
+            with mock.patch.object(runtime, 'run', return_value=''), \
+                 mock.patch.object(runtime, 'elf_files', return_value=[binary]), \
+                 mock.patch.object(runtime, 'set_runpath'), \
+                 mock.patch.object(runtime, 'dependencies', return_value=resolved), \
+                 mock.patch.object(runtime, 'audit', return_value={'files': []}):
+                runtime.deploy(app, Path(temp) / 'qt/plugins')
+            for soname, versioned in self.WAYLAND_LIBRARIES:
+                alias = soname.split('.so.')[0] + '.so'
+                for filename in (alias, soname):
+                    self.assertFalse((libraries / filename).is_symlink())
+                    self.assertFalse((libraries / filename).exists())
+                self.assertFalse((libraries / versioned).exists())
+            self.assertEqual(qt_wayland.read_bytes(), b'matching Qt runtime')
+            self.assertEqual(lookalike.read_bytes(), b'unrelated file')
+
+    def test_audit_allows_transitive_host_dependencies_of_host_wayland(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp)
+            self.create_required_plugins(app)
+            qt_wayland = app / 'usr/lib/libQt6WaylandClient.so.6'
+            qt_wayland.parent.mkdir(parents=True)
+            qt_wayland.write_bytes(b'matching Qt runtime')
+            resolved = [(soname, '/host/lib/' + versioned)
+                        for soname, versioned in self.WAYLAND_LIBRARIES]
+            resolved.append(('libffi.so.8', '/host/lib/libffi.so.8'))
+            dynamic = ' (RUNPATH) Library runpath: [$ORIGIN]\n' + ''.join(
+                f' (NEEDED) Shared library: [{soname}]\n'
+                for soname, _ in self.WAYLAND_LIBRARIES)
+            with mock.patch.object(runtime, 'elf_files', return_value=[qt_wayland]), \
+                 mock.patch.object(runtime, 'run', side_effect=[dynamic, '']), \
+                 mock.patch.object(runtime, 'dependencies', return_value=resolved):
+                result = runtime.audit(app)
+            self.assertEqual(result['elf_files'], 1)
+
+    def test_audit_rejects_unexpected_direct_host_dependencies(self):
+        with tempfile.TemporaryDirectory() as temp:
+            app = Path(temp)
+            self.create_required_plugins(app)
+            qt_wayland = app / 'usr/lib/libQt6WaylandClient.so.6'
+            qt_wayland.parent.mkdir(parents=True)
+            qt_wayland.write_bytes(b'matching Qt runtime')
+            dynamic = (' (RUNPATH) Library runpath: [$ORIGIN]\n'
+                       ' (NEEDED) Shared library: [libwayland-client.so.0]\n'
+                       ' (NEEDED) Shared library: [libffi.so.8]\n')
+            resolved = [('libwayland-client.so.0', '/host/lib/libwayland-client.so.0'),
+                        ('libffi.so.8', '/host/lib/libffi.so.8')]
+            with mock.patch.object(runtime, 'elf_files', return_value=[qt_wayland]), \
+                 mock.patch.object(runtime, 'run', return_value=dynamic), \
+                 mock.patch.object(runtime, 'dependencies', return_value=resolved):
+                with self.assertRaisesRegex(ValueError, r'Unexpected host dependency:.*libffi\.so\.8'):
+                    runtime.audit(app)
 
     def test_platform_plugins_alone_do_not_prove_wayland_egl_is_bundled(self):
         with tempfile.TemporaryDirectory() as temp:

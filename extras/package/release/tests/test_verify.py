@@ -102,6 +102,18 @@ class VerifyTests(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(SystemExit, 'Qt interface reported'):
                 self.run_gui(['', message])
 
+    def test_rejects_egl_initialization_failures_even_with_exit_zero(self):
+        for message in ('EGL not available',
+                        'Failed to initialize EGL display',
+                        'EGL implementation does not support the Wayland platform'):
+            for attempt in (1, 2):
+                with self.subTest(message=message, attempt=attempt):
+                    output = io.StringIO()
+                    with self.assertRaisesRegex(SystemExit, 'Qt interface reported'):
+                        self.run_gui([''] * (attempt - 1) + [message], capture=output)
+                    self.assertIn(message, output.getvalue())
+                    self.assertNotIn('checks passed', output.getvalue())
+
     def test_requesting_opengl_must_prove_a_working_context(self):
         with self.assertRaisesRegex(SystemExit, 'did not confirm a working OpenGL'):
             self.run_gui(['Creating QRhi with backend OpenGL'], True)

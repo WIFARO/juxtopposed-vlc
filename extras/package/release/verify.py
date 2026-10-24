@@ -112,7 +112,9 @@ with tempfile.TemporaryDirectory(prefix='vlc-release-smoke-') as temp:
                 raise SystemExit('Video output did not render to a working display')
         for failure in ('failed to load component', 'qqmlapplicationengine failed', 'is not installed', 'qml loading', 'cannot load the vlc interface', 'svg icon plugin is not found',
                         'failed to load client buffer integration', 'scene graph error:',
-                        'failed to initialize graphics backend', 'failed to create opengl context'):
+                        'failed to initialize graphics backend', 'failed to create opengl context',
+                        'egl not available', 'failed to initialize egl display',
+                        'egl implementation does not support the wayland platform'):
             if failure in gui.stdout.lower():
                 raise SystemExit(f'Qt interface reported: {failure}')
         if args.require_opengl and not (re.search(r'Created OpenGL context|Using existing QOpenGLContext', gui.stdout, re.I)
