@@ -29,34 +29,56 @@
 
 #include <vlc_common.h>
 #include "widgets/native/qvlcframe.hpp"
-#include "util/singleton.hpp"
+#include <QPointer>
 
+class MainCtx;
 class QLineEdit;
+class QLabel;
+class QPushButton;
+class QBoxLayout;
+class QScrollArea;
 
 class OpenUrlDialog : public QVLCDialog
 {
     Q_OBJECT
 
-private:
-    QString lastUrl;
-    bool bClipboard, bShouldEnqueue;
-    QLineEdit *edit;
-
-private slots:
-    void enqueue();
-    void play();
-
 public:
-    OpenUrlDialog( qt_intf_t *, bool bClipboard = true );
-    virtual ~OpenUrlDialog() {}
-
+    OpenUrlDialog(qt_intf_t *, bool clipboard = true);
+    ~OpenUrlDialog() override = default;
     QString url() const;
     bool shouldEnqueue() const;
-    void showEvent( QShowEvent *ev ) override;
-
-public slots:
     void accept() override;
 
+protected:
+    void showEvent(QShowEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
+    bool eventFilter(QObject *, QEvent *) override;
+
+private:
+    void enqueue();
+    void play();
+    void submit(bool enqueue);
+    void retranslate();
+    void updateMetrics();
+    void revealInput();
+    QString inputError() const;
+    int dp(int value) const;
+    QSize availableSize() const;
+
+    QPointer<MainCtx> m_ctx;
+    QString lastUrl;
+    bool bClipboard;
+    bool bShouldEnqueue = false;
+    bool initialized = false;
+    QLineEdit *edit = nullptr;
+    QLabel *heading = nullptr;
+    QLabel *info = nullptr;
+    QLabel *feedback = nullptr;
+    QPushButton *playButton = nullptr;
+    QPushButton *queueButton = nullptr;
+    QPushButton *cancelButton = nullptr;
+    QScrollArea *scroll = nullptr;
+    QBoxLayout *actions = nullptr;
 };
 
 #endif
