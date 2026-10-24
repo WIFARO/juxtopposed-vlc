@@ -311,6 +311,15 @@ class RecoveryTests(unittest.TestCase):
             self.assertIn(recovery.append_metadata('', update_metadata).strip(), notes)
             self.assertIn(f'`{old}`', notes)
             self.assertIn(f'`{new}`', notes)
+            self.assertIn('| Package | Binary source commit | Download |', notes)
+            rows = [line for line in notes.splitlines() if '[download](#)' in line]
+            self.assertEqual(len(rows), 4)
+            self.assertTrue(rows[0].startswith('| win64 |'))
+            for package in manifest['packages']:
+                self.assertIn(f'| {package["target"]} | `{package["source_commit"]}` | [download](#) |', rows)
+            self.assertNotIn('Release packaging commit:', notes)
+            self.assertNotIn('| Build run |', notes)
+            self.assertNotIn('/actions/runs/', notes)
             checksum_names = set()
             for line in (output / 'SHA256SUMS.txt').read_text().splitlines():
                 digest, filename = line.split('  ')

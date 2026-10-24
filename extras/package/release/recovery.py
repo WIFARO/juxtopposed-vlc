@@ -279,12 +279,9 @@ def assemble(artifacts, output, version, current, run_id, repository, previous_r
                     previous_run_id=str(previous_run) if previous_run else None, packages=packages)
     (output / 'RELEASE_MANIFEST.json').write_text(json.dumps(manifest, indent=2) + '\n')
     (output / 'SOURCE_COMMIT.txt').write_text(current + '\n')
-    notes += f'\n\nRelease packaging commit: `{current}`\n\n'
-    notes += '| Package | Binary source commit | Build run |\n| --- | --- | --- |\n'
-    for package in packages:
-        url = f'https://github.com/{repository}/actions/runs/{package["run_id"]}'
-        origin = 'reused' if package['reused'] else 'built'
-        notes += f'| {package["target"]} | `{package["source_commit"]}` | [{origin}]({url}) |\n'
+    notes += '\n\n| Package | Binary source commit | Download |\n| --- | --- | --- |\n'
+    for package in sorted(packages, key=lambda item: item['target'] != 'win64'):
+        notes += f'| {package["target"]} | `{package["source_commit"]}` | [download](#) |\n'
     (output / 'UPDATE_METADATA.json').write_text(json.dumps(update_metadata, indent=2) + '\n')
     (output / 'RELEASE_NOTES.md').write_text(append_metadata(notes, update_metadata))
     sums = ''.join(f'{file_digest(output / name)}  {name}\n' for name in package_asset_names(version))

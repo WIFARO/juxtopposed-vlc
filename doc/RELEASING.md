@@ -93,8 +93,15 @@ the build still succeeds and users can configure their own key in settings.
 ## Review before pushing
 
 Review [the 4.0.0-beta.5 notes](releases/4.0.0-beta.5.md), the packaging scripts in
-`extras/package/release`, and `.github/workflows/beta-release.yml`. Inspect the
-candidate release source before creating a tag:
+`extras/package/release`, and `.github/workflows/beta-release.yml`. Keep release
+notes in the published release format: platform summary and Git tag, full
+changelog link, design attribution, changes since the previous release, usage
+instructions and current limits. Assembly appends the final
+`Package | Binary source commit | Download` table with the actual source commits
+and `[download](#)` placeholders. Replace each `#` with the matching package's
+download URL in the draft before publishing. Build run details and the packaging
+commit remain in the workflow artifacts. Inspect the candidate release source
+before creating a tag:
 
 ```sh
 git log --oneline beta-3..HEAD
