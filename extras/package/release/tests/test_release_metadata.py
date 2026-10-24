@@ -29,7 +29,7 @@ class ReleaseMetadataTests(unittest.TestCase):
             root = Path(temp)
             self.fixture(root, 1)
             fields = dict(product_name='Sample Player', package_prefix='sample-player',
-                          subtitle='A release announcement <b>shown literally</b> -->')
+                          subtitle='日本語のリリース 🎉 <b>shown literally</b> -->')
             (root / 'doc/releases/1.0.0.json').write_text(json.dumps(fields))
             result = release_metadata('1.0.0', root)
             self.assertEqual(result['generation'], 1)

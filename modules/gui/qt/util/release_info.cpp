@@ -157,8 +157,8 @@ static std::optional<Metadata> releaseMetadata(QString notes, const QString& tag
     static const QRegularExpression prefix(QStringLiteral("^[a-z0-9]+(?:-[a-z0-9]+)*$"));
     const auto plainLine = [](const QString& text, qsizetype maximum) {
         if (text.size() > maximum || text != text.trimmed()) return false;
-        for (const auto c : text)
-            if (!c.isPrint()) return false;
+        for (const auto c : text.toUcs4())
+            if (!QChar::isPrint(c)) return false;
         return true;
     };
     if (!schema.isDouble() || schema.toDouble() != 1 ||

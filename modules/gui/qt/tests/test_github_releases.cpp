@@ -285,6 +285,21 @@ private slots:
         object[QStringLiteral("html_url")] = QStringLiteral("https://github.com/other/project/releases/tag/1.0.0");
         QVERIFY(!selectRelease({object}, version("4.0.0-beta.5"), win));
     }
+    void unicodeAnnouncements()
+    {
+        auto object = describedRelease(QStringLiteral("1.0.0"));
+        auto data = metadata(QStringLiteral("1.0.0"));
+        const auto subtitle = QString::fromUtf8("日本語のリリース 🎉");
+        data[QStringLiteral("subtitle")] = subtitle;
+        object[QStringLiteral("body")] = metadataBlock(data);
+        const Target win{QStringLiteral("windows"), QStringLiteral("x86_64")};
+        const auto chosen = selectRelease({object}, version("4.0.0-beta.5"), win);
+        QVERIFY(chosen);
+        QCOMPARE(chosen->subtitle, subtitle);
+        data[QStringLiteral("subtitle")] = QStringLiteral("Hidden\u202econtrol");
+        object[QStringLiteral("body")] = metadataBlock(data);
+        QVERIFY(!selectRelease({object}, version("4.0.0-beta.5"), win));
+    }
     void generationPagination_data()
     {
         QTest::addColumn<bool>("reverse");
