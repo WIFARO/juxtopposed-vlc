@@ -35,8 +35,8 @@ FocusScope {
     Timer {
         id: seriesContextTimer; interval: 0
         onTriggered: {
-            seriesModel.setCurrent(Player.url, Player.seriesContext)
             episodeMetadata.request(Player.url, Player.seriesContext)
+            seriesModel.setCurrent(Player.url, Player.seriesContext)
         }
     }
     property string seriesFeedUrl: seriesModel.feed.toString()

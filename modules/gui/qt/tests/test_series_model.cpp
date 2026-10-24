@@ -116,6 +116,22 @@ private slots:
         model.setEpisodeTitle(QUrl("file:///unrelated.mkv"), "Unrelated");
         QCOMPARE(model.rowCount(), 2);
     }
+    void siblingFilenameTitlesAndNumberedNames() {
+        QTemporaryDir base;
+        const auto first = QUrl::fromLocalFile(base.path() + "/Show S02E09.mkv");
+        const auto second = QUrl::fromLocalFile(base.path() + "/Show S02E10 - 18 Days Out.mkv");
+        for (const auto& url : {first, second}) { QFile file(url.toLocalFile()); QVERIFY(file.open(QIODevice::WriteOnly)); }
+        SeriesModel model; model.setCurrent(first, {});
+        QTRY_VERIFY(!model.loading()); QCOMPARE(model.rowCount(), 2);
+        QCOMPARE(model.get(1).value("number").toString(), "10");
+        QCOMPARE(model.get(1).value("title").toString(), "18 Days Out");
+        model.setEpisodeTitle(second, "Online name", QUrl("https://www.tvmaze.com/episodes/1"));
+        QCOMPARE(model.get(1).value("title").toString(), "18 Days Out");
+        model.setCurrent(second, {{"episodeTitle", "Embedded name"}});
+        QCOMPARE(model.get(1).value("title").toString(), "Embedded name");
+        model.refresh(); QTRY_VERIFY(!model.loading());
+        QCOMPARE(model.get(1).value("title").toString(), "Embedded name");
+    }
     void destructionDuringScanIsSafe() {
         QTemporaryDir base;
         const auto url = QUrl::fromLocalFile(base.path() + "/Show.S01E01.mkv");

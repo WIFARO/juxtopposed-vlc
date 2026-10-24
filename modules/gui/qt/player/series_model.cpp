@@ -149,6 +149,10 @@ void SeriesModel::publish(const SeriesDiscovery::Result& result, bool complete)
     std::sort(episodes.begin(), episodes.end(), SeriesDiscovery::less);
     for (const auto& episode : episodes) {
         Row row; row.episode = episode;
+        for (const auto& url : episode.urls) {
+            row.title = MediaIdentity::episodeTitle(url, {});
+            if (!row.title.isEmpty()) break;
+        }
         if (isCurrent(row)) {
             row.title = MediaIdentity::episodeTitle(m_current, m_metadata);
             row.description = m_metadata.value("description").toString();
@@ -284,7 +288,7 @@ void SeriesModel::requestDetails(int row)
 void SeriesModel::setEpisodeTitle(const QUrl& url, const QString& title, const QUrl& source)
 {
     if (!m_requestedStates.contains(url) && url != m_current) return;
-    const auto cleaned = MediaIdentity::episodeTitle(url, {{"episodeTitle", title}});
+    const auto cleaned = MediaIdentity::episodeTitle(url, {{"episodeTitle", title}}, false);
     if (cleaned.isEmpty()) return;
     m_states[url].title = cleaned;
     m_states[url].titleSource = source;

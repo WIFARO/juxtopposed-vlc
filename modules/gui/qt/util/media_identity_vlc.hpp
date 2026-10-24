@@ -53,16 +53,17 @@ inline QVariantMap inputMetadata(input_item_t* item)
         const auto value = extra(field.first);
         if (!value.isEmpty()) metadata.insert(QLatin1String(field.second), value);
     }
+    char* uri = input_item_GetURI(item);
+    const auto filename = uri ? QUrl(QString::fromUtf8(uri)).fileName() : QString(); free(uri);
     // An embedded movie date is useful; a TV episode date is not its series start year.
-    if (!metadata.contains("showName") && !metadata.contains("episode") && metadata.value("type").toString() != "podcastEpisode") {
+    if (parse(filename).kind != Kind::Episode && !metadata.contains("showName") && !metadata.contains("episode")
+        && metadata.value("type").toString() != "podcastEpisode") {
         char* date = input_item_GetMeta(item, vlc_meta_Date);
         const auto match = QRegularExpression(QStringLiteral("^((?:18[89]|19|20)\\d{2})(?:$|-)"))
             .match(date ? QString::fromUtf8(date) : QString());
         if (match.hasMatch()) metadata.insert("year", match.captured(1).toInt());
         free(date);
     }
-    char* uri = input_item_GetURI(item);
-    const auto filename = uri ? QUrl(QString::fromUtf8(uri)).fileName() : QString(); free(uri);
     const auto title = metadata.value("title").toString();
     if (title == filename || title == QFileInfo(filename).completeBaseName()) metadata.remove("title");
     const auto duration = input_item_GetDuration(item);

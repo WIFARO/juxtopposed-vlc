@@ -108,6 +108,17 @@ inline bool genericTitle(const QString& title)
     return title.isEmpty() || generic.match(title).hasMatch();
 }
 
+// A bare range must be adjacent to the episode number. In "E10 - 18
+// Days Out", the spaced dash introduces a title. Explicit E markers can be spaced.
+inline const QRegularExpression& episodePattern()
+{
+    static const QRegularExpression pattern(QStringLiteral(
+        "(?:^|[ ._\\[(-])(?:s(?:eason)?[ ._-]*(\\d{1,3})[ ._-]*e(?:pisode)?[ ._-]*(\\d{1,4})"
+        "|(\\d{1,3})x(\\d{1,4}))((?:(?:(?:[ ._]*e|x|[ ._]*-[ ._]*e)[ ._]*|-)\\d{1,4})*)(?![\\da-z])"),
+        QRegularExpression::CaseInsensitiveOption);
+    return pattern;
+}
+
 inline Identity parse(QString name, Kind hint = Kind::Unknown)
 {
     Identity result;
@@ -144,10 +155,7 @@ inline Identity parse(QString name, Kind hint = Kind::Unknown)
     qsizetype end = name.size();
     const auto cut = [&end](qsizetype position) { if (position >= 0) end = std::min(end, position); };
 
-    static const QRegularExpression episode(QStringLiteral(
-        "(?:^|[ ._\\[(-])(?:s(?:eason)?[ ._-]*(\\d{1,3})[ ._-]*e(?:pisode)?[ ._-]*(\\d{1,4})"
-        "|(\\d{1,3})x(\\d{1,4}))((?:(?:[ ._]*e|x|[ ._]*-[ ._]*e?)[ ._]*\\d{1,4})*)(?![\\da-z])"), insensitive);
-    const auto ep = episode.match(name);
+    const auto ep = episodePattern().match(name);
     if (ep.hasMatch()) {
         result.kind = Kind::Episode;
         result.season = ep.captured(ep.captured(1).isEmpty() ? 3 : 1).toInt();
@@ -407,23 +415,57 @@ inline Identity identify(const QUrl& url, const QVariantMap& metadata = {})
     return result;
 }
 
-// A filename reader can manufacture a title that differs from the filename
-// only in punctuation or omitted release details. It is not an episode name.
-inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata)
+// Return an actual episode name, with embedded metadata ahead of the filename.
+// Filename readers often manufacture "Show 3" or "Show S01E03"; neither is a name.
+inline QString episodeTitle(const QUrl& url, const QVariantMap& metadata, bool useFilename = true)
 {
-    auto title = metadata.value("episodeTitle", metadata.value("title")).toString().trimmed();
-    if (title.isEmpty()) return {};
     const auto identity = identify(url, metadata);
-    const auto normalized = normalize(title);
-    if (normalized == normalize(url.fileName())
-        || normalized == normalize(QFileInfo(url.fileName()).completeBaseName())
-        || normalized == normalize(identity.title)
-        || normalized == normalize(metadata.value("showName").toString())) return {};
-    const auto generated = parse(title);
-    if (generated.kind == Kind::Episode) return {};
-    static const QRegularExpression generic(QStringLiteral("^(?:episode|ep)[ ._-]*[0-9]+$"), QRegularExpression::CaseInsensitiveOption);
-    if (generic.match(title).hasMatch()) return {};
-    return title.left(1024);
+    const auto usable = [&](const QString& title) {
+        if (title.isEmpty()) return false;
+        const auto normalized = normalize(title);
+        if (normalized == normalize(url.fileName())
+            || normalized == normalize(QFileInfo(url.fileName()).completeBaseName())
+            || normalized == normalize(identity.title)
+            || normalized == normalize(metadata.value("showName").toString())) return false;
+        if (parse(title).kind == Kind::Episode) return false;
+        static const QRegularExpression generic(QStringLiteral("^(?:episode|ep)[ ._-]*[0-9]+$"),
+            QRegularExpression::CaseInsensitiveOption);
+        if (generic.match(title).hasMatch()) return false;
+        bool numbered = false;
+        const int numericTitle = title.toInt(&numbered);
+        if (numbered && identity.episodes.contains(numericTitle)) return false;
+        const auto series = normalize(identity.title);
+        if (!series.isEmpty() && normalized.startsWith(series + QLatin1Char(' '))) {
+            auto tail = normalized.mid(series.size() + 1);
+            tail.remove(QRegularExpression(QStringLiteral("^(?:episode|ep) ")));
+            bool ok = false;
+            const int number = tail.toInt(&ok);
+            if (ok && identity.episodes.contains(number)) return false;
+        }
+        return true;
+    };
+    for (const auto* key : {"episodeTitle", "title"}) {
+        const auto title = metadata.value(QLatin1String(key)).toString().trimmed();
+        if (usable(title)) return title.left(1024);
+    }
+    if (!useFilename) return {};
+    // A title after an explicit season/episode marker is useful even when the
+    // file has no tags. Do not use a release suffix (1080p, WEB-DL, codecs, etc.).
+    auto name = url.fileName();
+    name.remove(QRegularExpression(QStringLiteral("\\.(?:mkv|mp4|m4v|avi|mov|wmv|webm|mpg|mpeg|ts|m2ts|mts|ogv|divx)$"),
+        QRegularExpression::CaseInsensitiveOption));
+    const auto marker = episodePattern().match(name);
+    if (!marker.hasMatch()) return {};
+    auto title = name.mid(marker.capturedEnd());
+    static const QRegularExpression release(QStringLiteral(
+        "(?:^|[ ._\\[(-])(?:(?:480|576|720|1080|1440|2160|4320)[pi]|[48]k|web[ .-]?(?:dl|rip)|"
+        "blu[ .-]?ray|b[dr]rip|hdtv|dvdrip|dvd|[xh][ .-]?26[45]|hevc|avc|av1|xvid|divx|"
+        "e?[ .-]?ac[ .-]?3|dts(?:[ .-]?hd)?|aac|flac|truehd|opus)(?=$|[ ._\\[)\\]-])"),
+        QRegularExpression::CaseInsensitiveOption);
+    const auto technical = release.match(title);
+    if (technical.hasMatch()) title.truncate(technical.capturedStart());
+    title = displayTitle(title);
+    return usable(title) ? title.left(1024) : QString();
 }
 
 inline QVariantMap toMap(const Identity& identity)

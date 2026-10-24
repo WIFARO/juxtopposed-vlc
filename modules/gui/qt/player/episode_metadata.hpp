@@ -8,7 +8,7 @@
 #include <QSet>
 #include <QVariantMap>
 #include <functional>
-#include "util/media_identity.hpp"
+#include "util/series_discovery.hpp"
 
 class MainCtx;
 class QJsonDocument;
@@ -32,7 +32,11 @@ signals:
 private:
     bool online() const;
     void cancel();
-    void lookup(quint64 generation, const MediaIdentity::Identity& identity);
+    void schedule();
+    void lookup();
+    void fetchSeason(quint64 generation, int season);
+    void applyTitles();
+    MediaIdentity::Identity identity(const QUrl& url) const;
     void get(const QUrl& url, quint64 generation, std::function<void(const QJsonDocument&)> completed);
     void save(const QUrl& url, const QVariantMap& metadata, const QString& title, const QUrl& source);
     QPointer<MainCtx> m_ctx;
@@ -41,6 +45,16 @@ private:
     QElapsedTimer m_lastRequest;
     QUrl m_current;
     QVariantMap m_metadata;
-    QSet<QUrl> m_attempted;
+    struct EpisodeTitle { QString title; QUrl source; };
+    QSet<QUrl> m_candidates;
+    QSet<QUrl> m_resolved;
+    QMap<int, QMap<int, EpisodeTitle>> m_titles;
+    QMap<int, int> m_seasonIds;
+    QSet<int> m_attemptedSeasons;
+    int m_showId = 0;
+    int m_cacheReads = 0;
+    bool m_seasonsRead = false;
+    bool m_searchAttempted = false;
+    bool m_busy = false;
     quint64 m_generation = 0;
 };

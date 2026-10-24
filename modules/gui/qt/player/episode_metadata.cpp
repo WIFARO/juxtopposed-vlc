@@ -25,18 +25,19 @@ Title cached(vlc_medialibrary_t* ml, const QUrl& url, const QVariantMap& metadat
         const QByteArray bytes(value); free(value);
         if (bytes.startsWith(prefix) && bytes.size() <= 16384) {
             const auto record = QJsonDocument::fromJson(bytes.mid(prefix.size())).object();
-            const auto identity = MediaIdentity::identify(url, metadata);
+            const auto identity = SeriesDiscovery::identify(url, metadata);
             if (record.value("series").toString() == MediaIdentity::normalize(identity.title)
+                && record.value("year").toInt(-1) == identity.year
                 && record.value("season").toInt(-1) == identity.season
                 && record.value("episodes").toArray() == QJsonArray::fromVariantList(MediaIdentity::toMap(identity).value("episodes").toList())) {
-                result.title = MediaIdentity::episodeTitle(url, {{"episodeTitle", record.value("title").toString()}});
+                result.title = MediaIdentity::episodeTitle(url, {{"episodeTitle", record.value("title").toString()}}, false);
                 const QUrl source(record.value("source").toString());
                 if (source.scheme() == "https" && source.host() == "www.tvmaze.com") result.source = source;
             }
         }
     }
     if (result.title.isEmpty())
-        result.title = MediaIdentity::episodeTitle(url, {{"episodeTitle", QString::fromUtf8(media->psz_title ? media->psz_title : "")}});
+        result.title = MediaIdentity::episodeTitle(url, {{"episodeTitle", QString::fromUtf8(media->psz_title ? media->psz_title : "")}}, false);
     return result;
 }
 }
@@ -47,7 +48,7 @@ MainCtx* EpisodeMetadata::ctx() const { return m_ctx; }
 bool EpisodeMetadata::online() const { return m_ctx && var_InheritBool(m_ctx->getIntf(), "metadata-network-access"); }
 void EpisodeMetadata::cancel()
 {
-    ++m_generation;
+    ++m_generation; m_busy = false;
     if (m_reply) { auto reply = m_reply; m_reply = nullptr; reply->abort(); }
 }
 void EpisodeMetadata::setCtx(MainCtx* ctx)
@@ -60,49 +61,101 @@ void EpisodeMetadata::setCtx(MainCtx* ctx)
         this, [this](bool enabled) {
             cancel();
             if (enabled) {
-                const auto url = m_current; const auto metadata = m_metadata;
-                m_current.clear(); m_attempted.remove(url); request(url, metadata);
+                m_attemptedSeasons.clear(); m_searchAttempted = false;
             }
+            readCached(m_candidates.values());
         });
     emit ctxChanged();
 }
+MediaIdentity::Identity EpisodeMetadata::identity(const QUrl& url) const
+{
+    return SeriesDiscovery::identify(url, url == m_current ? m_metadata : QVariantMap());
+}
 void EpisodeMetadata::readCached(const QList<QUrl>& urls)
 {
-    if (!m_ctx || !m_ctx->getMediaLibrary()) return;
-    // Reads use the existing bounded discovery list. They never import siblings.
+    // Discovery already bounds the directory scan. Limit retained lookup targets
+    // as well; no online scan or media-file preparse is needed for siblings.
+    for (const auto& url : urls) {
+        if (m_candidates.size() >= 2048) break;
+        if (url.isLocalFile() && SeriesDiscovery::sameSeries(identity(url), identity(m_current)))
+            m_candidates.insert(url);
+    }
+    if (!m_ctx || !m_ctx->getMediaLibrary()) { applyTitles(); schedule(); return; }
     const auto batch = urls.mid(0, 64);
     const auto remaining = urls.mid(batch.size());
+    ++m_cacheReads;
+    const auto generation = m_generation;
+    const auto current = m_current; const auto metadata = m_metadata;
     m_ctx->getMediaLibrary()->runOnMLThread<QList<Title>>(this,
-        [batch](vlc_medialibrary_t* ml, QList<Title>& result) {
-            for (const auto& url : batch) if (url.isLocalFile()) result.append(cached(ml, url));
-        }, [this, remaining](quint64, const QList<Title>& result) {
-            for (const auto& entry : result) if (!entry.title.isEmpty()) emit titleReady(entry.url, entry.title, entry.source);
+        [batch, current, metadata](vlc_medialibrary_t* ml, QList<Title>& result) {
+            for (const auto& url : batch) if (url.isLocalFile())
+                result.append(cached(ml, url, url == current ? metadata : QVariantMap()));
+        }, [this, generation, remaining](quint64, const QList<Title>& result) {
+            --m_cacheReads;
+            if (generation != m_generation) { schedule(); return; }
+            for (const auto& entry : result) {
+                if (!m_candidates.contains(entry.url) || m_resolved.contains(entry.url) || entry.title.isEmpty()) continue;
+                m_resolved.insert(entry.url); emit titleReady(entry.url, entry.title, entry.source);
+            }
             if (!remaining.isEmpty()) readCached(remaining);
+            schedule();
         }, "episode-metadata");
 }
 void EpisodeMetadata::request(const QUrl& url, const QVariantMap& metadata)
 {
-    if (url == m_current && metadata == m_metadata) return;
-    cancel(); m_current = url; m_metadata = metadata;
-    const auto identity = MediaIdentity::identify(url, metadata);
-    if (!url.isLocalFile() || identity.kind != MediaIdentity::Kind::Episode) return;
+    const auto previous = identity(m_current);
+    const auto next = SeriesDiscovery::identify(url, metadata);
+    // Duration, description and generated-title updates can arrive while the
+    // request is in flight. Keep it when the identifying evidence is unchanged.
+    const bool unchanged = url == m_current && MediaIdentity::toMap(previous) == MediaIdentity::toMap(next);
+    const bool sameSeries = SeriesDiscovery::sameSeries(previous, next);
+    m_metadata = metadata;
+    if (!unchanged) {
+        cancel(); m_current = url;
+        if (!sameSeries) m_candidates.clear();
+        m_resolved.remove(url);
+        if (!sameSeries || previous.year != next.year || previous.ids != next.ids) {
+            m_resolved.clear(); m_titles.clear(); m_seasonIds.clear();
+            m_attemptedSeasons.clear(); m_showId = 0; m_seasonsRead = false; m_searchAttempted = false;
+        }
+    }
+    if (!url.isLocalFile() || next.kind != MediaIdentity::Kind::Episode) return;
+    m_candidates.insert(url);
     const auto title = MediaIdentity::episodeTitle(url, metadata);
-    if (!title.isEmpty()) { emit titleReady(url, title, {}); save(url, metadata, title, {}); return; }
-    const auto generation = m_generation;
-    if (!m_ctx || !m_ctx->getMediaLibrary()) { lookup(generation, identity); return; }
-    m_ctx->getMediaLibrary()->runOnMLThread<Title>(this,
-        [url, metadata](vlc_medialibrary_t* ml, Title& result) { result = cached(ml, url, metadata); },
-        [this, generation, identity](quint64, const Title& result) {
-            if (generation != m_generation) return;
-            if (!result.title.isEmpty()) emit titleReady(result.url, result.title, result.source);
-            else lookup(generation, identity);
-        }, "episode-metadata");
+    if (!title.isEmpty()) {
+        m_resolved.insert(url); emit titleReady(url, title, {}); save(url, metadata, title, {});
+    }
+    if (!unchanged) readCached(m_candidates.values());
+    else { applyTitles(); schedule(); }
+}
+void EpisodeMetadata::schedule()
+{
+    QTimer::singleShot(0, this, &EpisodeMetadata::lookup);
+}
+void EpisodeMetadata::applyTitles()
+{
+    for (const auto& url : m_candidates) {
+        if (m_resolved.contains(url)) continue;
+        const auto target = identity(url);
+        if (!SeriesDiscovery::sameSeries(target, identity(m_current))) continue;
+        const auto metadata = url == m_current ? m_metadata : QVariantMap();
+        const auto local = MediaIdentity::episodeTitle(url, metadata);
+        if (!local.isEmpty()) {
+            m_resolved.insert(url); emit titleReady(url, local, {}); save(url, metadata, local, {});
+            continue;
+        }
+        if (m_cacheReads || target.episodes.size() != 1 || !target.conflicts.isEmpty()) continue;
+        const auto title = m_titles.value(target.season).value(target.episodes.first());
+        if (title.title.isEmpty()) continue;
+        m_resolved.insert(url); emit titleReady(url, title.title, title.source);
+        save(url, metadata, title.title, title.source);
+    }
 }
 void EpisodeMetadata::save(const QUrl& url, const QVariantMap& metadata, const QString& title, const QUrl& source)
 {
     if (!m_ctx || !m_ctx->getMediaLibrary()) return;
-    const auto identity = MediaIdentity::identify(url, metadata);
-    const QJsonObject record {{"series", MediaIdentity::normalize(identity.title)}, {"season", identity.season},
+    const auto identity = SeriesDiscovery::identify(url, metadata);
+    const QJsonObject record {{"series", MediaIdentity::normalize(identity.title)}, {"year", identity.year}, {"season", identity.season},
         {"episodes", QJsonArray::fromVariantList(MediaIdentity::toMap(identity).value("episodes").toList())},
         {"title", title}, {"source", source.toString()}};
     const QByteArray bytes = prefix + QJsonDocument(record).toJson(QJsonDocument::Compact);
@@ -147,36 +200,86 @@ void EpisodeMetadata::get(const QUrl& url, quint64 generation, std::function<voi
             && reply->error() == QNetworkReply::NoError && reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200;
         if (m_reply == reply) m_reply = nullptr;
         reply->deleteLater();
-        if (valid) completed(QJsonDocument::fromJson(*bytes));
+        if (generation != m_generation || !online()) return;
+        if (!valid && m_ctx)
+            msg_Warn(m_ctx->getIntf(), "episode title request failed (%d): %s",
+                reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), qUtf8Printable(reply->errorString()));
+        completed(valid ? QJsonDocument::fromJson(*bytes) : QJsonDocument());
     });
 }
-void EpisodeMetadata::lookup(quint64 generation, const MediaIdentity::Identity& identity)
+void EpisodeMetadata::lookup()
 {
-    if (!online() || generation != m_generation || m_attempted.contains(m_current)
-        || identity.title.isEmpty() || identity.season < 1 || identity.episodes.size() != 1
-        || identity.episodes.first() < 1 || !identity.conflicts.isEmpty()) return;
-    m_attempted.insert(m_current);
-    QUrl search("https://api.tvmaze.com/search/shows"); QUrlQuery query; query.addQueryItem("q", identity.title); search.setQuery(query);
-    get(search, generation, [this, generation, identity](const QJsonDocument& document) {
+    if (m_busy || m_cacheReads || !online() || !m_current.isLocalFile()) return;
+    applyTitles();
+    const auto current = identity(m_current);
+    if (current.kind != MediaIdentity::Kind::Episode || current.title.isEmpty() || !current.conflicts.isEmpty()) return;
+    int season = -1;
+    // Prioritize playback, then finish the discovered seasons in numeric order.
+    for (const auto& url : m_candidates) {
+        if (m_resolved.contains(url)) continue;
+        const auto target = identity(url);
+        if (!SeriesDiscovery::sameSeries(current, target) || target.season < 1 || target.episodes.size() != 1
+            || target.episodes.first() < 1 || !target.conflicts.isEmpty() || m_attemptedSeasons.contains(target.season)) continue;
+        if (url == m_current) { season = target.season; break; }
+        if (season < 0 || target.season < season) season = target.season;
+    }
+    if (season < 0) return;
+    const auto generation = m_generation;
+    m_busy = true;
+    if (m_showId > 0) { fetchSeason(generation, season); return; }
+    if (m_searchAttempted) { m_busy = false; return; }
+    QUrl search("https://api.tvmaze.com/search/shows"); QUrlQuery query; query.addQueryItem("q", current.title); search.setQuery(query);
+    get(search, generation, [this, generation, current, season](const QJsonDocument& document) {
+        m_searchAttempted = true;
         QJsonObject match;
         for (const auto& value : document.array()) {
             const auto show = value.toObject().value("show").toObject();
-            if (MediaIdentity::normalize(show.value("name").toString()) != MediaIdentity::normalize(identity.title)) continue;
-            if (identity.year > 0 && QDate::fromString(show.value("premiered").toString(), Qt::ISODate).year() != identity.year) continue;
-            if (!match.isEmpty()) return; // Same-name remakes need stronger evidence.
+            if (MediaIdentity::normalize(show.value("name").toString()) != MediaIdentity::normalize(current.title)) continue;
+            if (current.year > 0 && QDate::fromString(show.value("premiered").toString(), Qt::ISODate).year() != current.year) continue;
+            if (!match.isEmpty()) { m_busy = false; return; }
             match = show;
         }
-        const auto id = match.value("id").toInt(); if (id <= 0) return;
-        QUrl url(QStringLiteral("https://api.tvmaze.com/shows/%1/episodebynumber").arg(id));
-        QUrlQuery query; query.addQueryItem("season", QString::number(identity.season));
-        query.addQueryItem("number", QString::number(identity.episodes.first())); url.setQuery(query);
-        get(url, generation, [this, identity](const QJsonDocument& document) {
-            const auto episode = document.object();
-            if (episode.value("season").toInt(-1) != identity.season || episode.value("number").toInt(-1) != identity.episodes.first()) return;
-            const auto title = MediaIdentity::episodeTitle(m_current, {{"episodeTitle", episode.value("name").toString()}});
-            const QUrl source(episode.value("url").toString());
-            if (title.isEmpty() || source.scheme() != "https" || source.host() != "www.tvmaze.com") return;
-            emit titleReady(m_current, title, source); save(m_current, m_metadata, title, source);
-        });
+        m_showId = match.value("id").toInt();
+        if (m_showId <= 0) { m_busy = false; return; }
+        fetchSeason(generation, season);
     });
+}
+void EpisodeMetadata::fetchSeason(quint64 generation, int season)
+{
+    if (!m_seasonsRead) {
+        get(QUrl(QStringLiteral("https://api.tvmaze.com/shows/%1/seasons").arg(m_showId)), generation,
+            [this, generation, season](const QJsonDocument& document) {
+                m_seasonsRead = document.isArray();
+                if (!m_seasonsRead) { m_attemptedSeasons.insert(season); m_busy = false; schedule(); return; }
+                QSet<int> duplicates;
+                for (const auto& value : document.array()) {
+                    const auto object = value.toObject();
+                    const int number = object.value("number").toInt(-1), id = object.value("id").toInt();
+                    if (number < 1 || id <= 0 || duplicates.contains(number)) continue;
+                    if (m_seasonIds.contains(number)) { m_seasonIds.remove(number); duplicates.insert(number); }
+                    else m_seasonIds.insert(number, id);
+                }
+                fetchSeason(generation, season);
+            });
+        return;
+    }
+    const auto id = m_seasonIds.value(season);
+    if (id <= 0) { m_attemptedSeasons.insert(season); m_busy = false; schedule(); return; }
+    get(QUrl(QStringLiteral("https://api.tvmaze.com/seasons/%1/episodes").arg(id)), generation,
+        [this, season](const QJsonDocument& document) {
+            QMap<int, EpisodeTitle> titles;
+            QSet<int> duplicates;
+            for (const auto& value : document.array()) {
+                const auto episode = value.toObject();
+                const int number = episode.value("number").toInt(-1);
+                if (episode.value("season").toInt(-1) != season || number < 1 || duplicates.contains(number)) continue;
+                const auto name = MediaIdentity::episodeTitle(m_current, {{"episodeTitle", episode.value("name").toString()}}, false);
+                const QUrl source(episode.value("url").toString());
+                if (name.isEmpty() || source.scheme() != "https" || source.host() != "www.tvmaze.com") continue;
+                if (titles.contains(number)) { titles.remove(number); duplicates.insert(number); }
+                else titles.insert(number, {name, source});
+            }
+            m_titles.insert(season, titles); m_attemptedSeasons.insert(season); m_busy = false;
+            applyTitles(); schedule();
+        });
 }

@@ -20,6 +20,22 @@ private slots:
         QCOMPARE(episodeTitle(url, {{"title", "  Days Gone By  "}, {"showName", "The Walking Dead"}}), "Days Gone By");
         QCOMPARE(episodeTitle(url, {{"episodeTitle", "A <literal> & name"}}), "A <literal> & name");
     }
+    void numericEpisodeNamesAndGeneratedTitles() {
+        const QUrl plain("file://server/share/The%20Walking%20Dead%20-%20S02E10.mkv");
+        for (const auto& title : {QString("The Walking Dead 10"), QString("The Walking Dead - 010"),
+                QString("The Walking Dead Episode 10"), QString("Episode 010"), QString("10")})
+            QVERIFY2(episodeTitle(plain, {{"title", title}}).isEmpty(), qPrintable(title));
+        QCOMPARE(episodeTitle(plain, {{"title", "18 Days Out"}}), "18 Days Out");
+        QCOMPARE(episodeTitle(plain, {{"title", "1984"}}), "1984");
+        const QUrl named("file://server/share/The%20Walking%20Dead%20-%20S02E10%20-%2018%20Days%20Out.mkv");
+        QCOMPARE(episodeTitle(named, {}), "18 Days Out");
+        QCOMPARE(episodeTitle(named, {{"title", named.fileName()}}), "18 Days Out");
+        QCOMPARE(episodeTitle(named, {{"episodeTitle", ""}, {"title", "Embedded title"}}), "Embedded title");
+        QCOMPARE(episodeTitle(named, {{"episodeTitle", "Better title"}}), "Better title");
+        QVERIFY(episodeTitle(named, {{"episodeTitle", "Episode 10"}}, false).isEmpty());
+        QCOMPARE(episodeTitle(QUrl("file:///Show.S02E10.18.Miles.Out.1080p.WEB-DL.x264.mkv"), {}), "18 Miles Out");
+        QVERIFY(episodeTitle(QUrl("file:///Show.S02E10.1080p.WEB-DL.x264.mkv"), {}).isEmpty());
+    }
     void filenames_data() {
         QTest::addColumn<QString>("filename"); QTest::addColumn<QString>("title");
         QTest::addColumn<int>("year"); QTest::addColumn<int>("season");
@@ -40,6 +56,11 @@ private slots:
         QTest::newRow("x-episode") << "The_Show.2x03.en.srt" << "The Show" << -1 << 2 << QList<int>{3};
         QTest::newRow("long-episode") << "The Show Season 2 Episode 3.mkv" << "The Show" << -1 << 2 << QList<int>{3};
         QTest::newRow("multi") << "The.Show.S02E03E04.mkv" << "The Show" << -1 << 2 << QList<int>{3,4};
+        QTest::newRow("numbered-title") << "The Show S02E10 - 18 Days Out.mkv" << "The Show" << -1 << 2 << QList<int>{10};
+        QTest::newRow("numbered-title-compact-dash") << "The Show S02E10 -18 Days Out.mkv" << "The Show" << -1 << 2 << QList<int>{10};
+        QTest::newRow("bare-range") << "The.Show.S02E10-12.mkv" << "The Show" << -1 << 2 << QList<int>{10,11,12};
+        QTest::newRow("spaced-markers") << "The Show S02E10 - E 12.mkv" << "The Show" << -1 << 2 << QList<int>{10,11,12};
+        QTest::newRow("explicit-spaced-range") << "The Show S02E10 - E12.mkv" << "The Show" << -1 << 2 << QList<int>{10,11,12};
         QTest::newRow("range") << "The.Show.S02E03-E05.mkv" << "The Show" << -1 << 2 << QList<int>{3,4,5};
         QTest::newRow("multi-x") << "The.Show.2x03x04.mkv" << "The Show" << -1 << 2 << QList<int>{3,4};
         QTest::newRow("special") << "The.Show.S00E01.mkv" << "The Show" << -1 << 0 << QList<int>{1};
