@@ -1232,17 +1232,17 @@ void PlaylistContextMenu::popup(int selectedIndex, QPoint pos )
 
                 // Actions that are available when the view uses a proxy model:
 
-                action = m_menu->addAction( qtr("Discard the filtered out items"));
+                action = m_menu->addAction( qtr("Remove hidden items"));
                 connect(action, &QAction::triggered, [this]( ) {
-                    bool proceed = true;
+                    const auto count = m_model->rowCount() - m_proxyModel->rowCount();
+                    bool proceed = false;
 
                     if (const auto dp = DialogsProvider::getInstance())
                     {
-                        proceed = dp->questionDialog(QStringLiteral("Discard the filtered out items"),
-                                                     QStringLiteral("Do you really want to discard the items that are not displayed at the moment?"));
+                        proceed = dp->questionDialog(qtr("Remove %n hidden item from the play queue?",
+                                                        "Remove %n hidden items from the play queue?", count),
+                                                     qtr("Remove hidden items"), qtr("Remove"));
                     }
-
-                    const auto count = m_model->rowCount() - m_proxyModel->rowCount();
 
                     if (proceed && (count > 0))
                     {
