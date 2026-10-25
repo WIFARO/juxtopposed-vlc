@@ -1,3 +1,14 @@
+if host_system == 'linux'
+    vlc_tests += {
+        'name': 'test_modules_services_discovery_sap',
+        'sources': files('services_discovery/sap.c'),
+        'suite': ['modules', 'test_modules'],
+        'link_with': [libvlc, libvlccore],
+        'module_depends': ['sap'],
+        'env': ['VLC_PLUGIN_PATH=' + vlc_build_root / 'modules'],
+    }
+endif
+
 vlc_tests += {
     'name': 'test_modules_playlist_m3u',
     'sources': files('demux/playlist/m3u.c'),

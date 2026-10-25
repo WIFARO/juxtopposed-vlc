@@ -224,6 +224,12 @@ AM_LDFLAGS = -no-install $(LDFLAGS_vlc)
 LIBVLCCORE = -L../src/ -lvlccore
 LIBVLC = -L../lib -lvlc
 
+if HAVE_LINUX
+check_PROGRAMS += test_modules_services_discovery_sap
+test_modules_services_discovery_sap_SOURCES = modules/services_discovery/sap.c
+test_modules_services_discovery_sap_LDADD = $(LIBVLC) $(LIBVLCCORE)
+endif
+
 test_src_misc_configured_proxy_SOURCES = src/misc/configured_proxy.c
 test_src_misc_configured_proxy_LDADD = $(LIBVLC) $(LIBVLCCORE)
 

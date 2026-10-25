@@ -506,7 +506,12 @@ static void *Run( void *data )
         for (unsigned i = 0; l[i].if_index; i++)
         {
             strcpy (ptr, l[i].if_name);
-            InitSocket (p_sd, psz_address, SAP_PORT);
+            /* Interface- and link-local multicast both need a zone. */
+            for (char scope = '1'; scope <= '2'; scope++)
+            {
+                psz_address[3] = scope;
+                InitSocket (p_sd, psz_address, SAP_PORT);
+            }
         }
         if_freenameindex (l);
     }
@@ -536,7 +541,7 @@ static void *Run( void *data )
 #endif
     *strchr (psz_address, '%') = '\0';
 
-    static const char ipv6_scopes[] = "1456789ABCDE";
+    static const char ipv6_scopes[] = "456789ABCDE";
     for (const char *c_scope = ipv6_scopes; *c_scope; c_scope++)
     {
         psz_address[3] = *c_scope;
