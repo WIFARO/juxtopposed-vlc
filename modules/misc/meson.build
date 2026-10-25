@@ -48,39 +48,38 @@ if libxml2_dep.found()
     }
 endif
 
-# medialibrary module
+# Keep the medialibrary manifest entry when disabled so dependent tests are skipped.
 medialibrary_dep = dependency('medialibrary', version: '>= 0.13', required: get_option('medialibrary'), method: 'pkg-config')
-if medialibrary_dep.found()
-    vlc_modules += {
-        'name' : 'medialibrary',
-        'sources' : files(
-            'medialibrary/medialibrary.cpp',
-            'medialibrary/MetadataExtractor.cpp',
-            'medialibrary/entities.cpp',
-            'medialibrary/Thumbnailer.cpp',
-            'medialibrary/medialibrary.h',
-            'medialibrary/track_rules.hpp',
-            'medialibrary/history_filter.hpp',
-            'medialibrary/track_rule_store.hpp',
-            'medialibrary/library_storage.hpp',
-            'medialibrary/track_rule_store.cpp',
-            'medialibrary/fs/device.h',
-            'medialibrary/fs/device.cpp',
-            'medialibrary/fs/directory.h',
-            'medialibrary/fs/directory.cpp',
-            'medialibrary/fs/file.h',
-            'medialibrary/fs/file.cpp',
-            'medialibrary/fs/fs.h',
-            'medialibrary/fs/fs.cpp',
-            'medialibrary/fs/devicelister.cpp',
-            'medialibrary/fs/devicelister.h',
-            'medialibrary/fs/util.h',
-            'medialibrary/fs/util.cpp',
-        ),
-        'dependencies' : [medialibrary_dep],
-        'plugin_dir' : 'misc',
-    }
-endif
+vlc_modules += {
+    'name' : 'medialibrary',
+    'enabled' : medialibrary_dep.found(),
+    'sources' : files(
+        'medialibrary/medialibrary.cpp',
+        'medialibrary/MetadataExtractor.cpp',
+        'medialibrary/entities.cpp',
+        'medialibrary/Thumbnailer.cpp',
+        'medialibrary/medialibrary.h',
+        'medialibrary/track_rules.hpp',
+        'medialibrary/history_filter.hpp',
+        'medialibrary/track_rule_store.hpp',
+        'medialibrary/library_storage.hpp',
+        'medialibrary/track_rule_store.cpp',
+        'medialibrary/fs/device.h',
+        'medialibrary/fs/device.cpp',
+        'medialibrary/fs/directory.h',
+        'medialibrary/fs/directory.cpp',
+        'medialibrary/fs/file.h',
+        'medialibrary/fs/file.cpp',
+        'medialibrary/fs/fs.h',
+        'medialibrary/fs/fs.cpp',
+        'medialibrary/fs/devicelister.cpp',
+        'medialibrary/fs/devicelister.h',
+        'medialibrary/fs/util.h',
+        'medialibrary/fs/util.cpp',
+    ),
+    'dependencies' : [medialibrary_dep],
+    'plugin_dir' : 'misc',
+}
 
 # Securetransport
 if host_system == 'darwin'
