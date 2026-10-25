@@ -396,6 +396,12 @@ docker run --rm --user root --platform linux/amd64 -v "$PWD:/src" -w /src \
     bash extras/package/release/build-native.sh
 ```
 
+The dependency image rebuilds the matching Qt Quick library from verified
+Qt sources to fix image-cache cleanup on VLC's interface thread. It keeps
+the rest of the pinned Qt SDK and checks repeated application startup and
+shutdown before installing the replacement library. This build step is cached
+until its script, patch, test, or SDK inputs change.
+
 Run the relocated `AppDir/AppRun` as a normal user, outside the build container.
 For example, extract the tarball in a new directory and run `verify.py` against
 that `AppRun`. The check needs Python and FFmpeg on the verification host.

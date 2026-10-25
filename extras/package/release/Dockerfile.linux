@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wayland-protocols libxkbcommon-dev libxkbcommon-x11-dev libxcb-cursor-dev \
     libxcb-keysyms1-dev libxcb-composite0-dev libxcb-xinerama0-dev \
     libxcb-icccm4-dev libxcb-image0-dev libxcb-render-util0-dev \
-    libgl1-mesa-dev libegl1-mesa-dev libdbus-1-dev liblua5.4-dev \
+    libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev libdbus-1-dev liblua5.4-dev \
     libgnutls28-dev libgcrypt20-dev libxml2-dev libsqlite3-dev \
     libpng-dev libfreetype-dev libharfbuzz-dev libfribidi-dev libass-dev \
     libdav1d-dev libopus-dev libvorbis-dev libflac-dev libmpg123-dev \
@@ -22,6 +22,13 @@ ENV QT_ROOT_DIR=/opt/qt/6.8.3/gcc_64
 ENV PATH=/opt/qt/6.8.3/gcc_64/bin:$PATH
 ENV PKG_CONFIG_PATH=/opt/qt/6.8.3/gcc_64/lib/pkgconfig
 ENV LD_LIBRARY_PATH=/opt/qt/6.8.3/gcc_64/lib
+# The binary SDK's Qt Quick cache outlives VLC's interface thread. Rebuild the
+# matching library with the same lifecycle fix used by Windows contrib builds.
+COPY contrib/src/qtdeclarative /tmp/vlc-qtquick/contrib/src/qtdeclarative
+COPY extras/package/release/build-qtquick.sh /tmp/vlc-qtquick/extras/package/release/build-qtquick.sh
+COPY extras/package/release/tests/qtquick-pixmap-cache-lifetime.cpp /tmp/vlc-qtquick/extras/package/release/tests/qtquick-pixmap-cache-lifetime.cpp
+RUN bash /tmp/vlc-qtquick/extras/package/release/build-qtquick.sh \
+    && rm -rf /tmp/vlc-qtquick
 RUN apt-get update && apt-get install -y --no-install-recommends \
     lua5.4 squashfs-tools libexpat1-dev libffi-dev \
     libxcb-damage0-dev libxcb-xfixes0-dev libxcb-randr0-dev \
