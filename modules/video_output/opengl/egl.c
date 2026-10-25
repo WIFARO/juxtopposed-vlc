@@ -73,7 +73,8 @@ typedef struct vlc_gl_sys_t
 #if defined (USE_PLATFORM_WAYLAND)
     struct wl_egl_window *window;
 #endif
-    bool is_current;
+    unsigned reported_errors;
+    bool first_swap;
     /* The EGLDisplay is shared with the UI (Qt) and cannot be refcounted:
      * terminating it would tear down the UI's EGL state too. */
     bool skip_terminate;
@@ -174,14 +175,40 @@ struct gl_api
    EGLint     attr[3];
 };
 
+enum egl_error
+{
+    MAKE_CURRENT_FAILED = 1 << 0,
+    RELEASE_CURRENT_FAILED = 1 << 1,
+    SWAP_BUFFERS_FAILED = 1 << 2,
+    RESTORE_CURRENT_FAILED = 1 << 3,
+};
+
+static bool CheckEGL(vlc_gl_t *gl, EGLBoolean result, const char *operation,
+                     enum egl_error error)
+{
+    vlc_gl_sys_t *sys = gl->sys;
+    if (result == EGL_TRUE)
+    {
+        sys->reported_errors &= ~error;
+        return true;
+    }
+
+    EGLint code = eglGetError();
+    /* A persistent failure must not produce one message per video frame. */
+    if (!(sys->reported_errors & error))
+        msg_Err(gl, "%s failed (EGL error 0x%04x)", operation, code);
+    sys->reported_errors |= error;
+    return false;
+}
+
 static int MakeCurrent (vlc_gl_t *gl)
 {
     vlc_gl_sys_t *sys = gl->sys;
 
-    if (eglMakeCurrent (sys->display, sys->surface, sys->surface,
-                        sys->context) != EGL_TRUE)
+    if (!CheckEGL(gl, eglMakeCurrent(sys->display, sys->surface, sys->surface,
+                                     sys->context),
+                  "eglMakeCurrent", MAKE_CURRENT_FAILED))
         return VLC_EGENERIC;
-    sys->is_current = true;
     return VLC_SUCCESS;
 }
 
@@ -189,9 +216,9 @@ static void ReleaseCurrent (vlc_gl_t *gl)
 {
     vlc_gl_sys_t *sys = gl->sys;
 
-    eglMakeCurrent (sys->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
-                    EGL_NO_CONTEXT);
-    sys->is_current = false;
+    CheckEGL(gl, eglMakeCurrent(sys->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                                EGL_NO_CONTEXT),
+             "eglMakeCurrent (release)", RELEASE_CURRENT_FAILED);
 }
 
 #ifdef USE_PLATFORM_WAYLAND
@@ -673,22 +700,43 @@ static void SwapBuffers (vlc_gl_t *gl)
 {
     vlc_gl_sys_t *sys = gl->sys;
 
-    if (!sys->is_current)
+    /* EGL bindings belong to the calling thread. A cached flag can become
+     * stale if releasing the context fails or another context is bound. */
+    bool is_current = eglGetCurrentContext() == sys->context
+                   && eglGetCurrentDisplay() == sys->display
+                   && eglGetCurrentSurface(EGL_DRAW) == sys->surface
+                   && eglGetCurrentSurface(EGL_READ) == sys->surface;
+    EGLDisplay previous_display = EGL_NO_DISPLAY;
+    EGLSurface s_read = EGL_NO_SURFACE, s_draw = EGL_NO_SURFACE;
+    EGLContext previous_context = EGL_NO_CONTEXT;
+    if (!is_current)
     {
-        EGLDisplay previous_display = eglGetCurrentDisplay();
-        EGLSurface s_read = eglGetCurrentSurface(EGL_READ);
-        EGLSurface s_draw = eglGetCurrentSurface(EGL_DRAW);
-        EGLContext previous_context = eglGetCurrentContext();
+        previous_display = eglGetCurrentDisplay();
+        s_read = eglGetCurrentSurface(EGL_READ);
+        s_draw = eglGetCurrentSurface(EGL_DRAW);
+        previous_context = eglGetCurrentContext();
 
-        eglMakeCurrent(sys->display, sys->surface, sys->surface, sys->context);
-        eglSwapBuffers (sys->display, sys->surface);
-        if (previous_display != EGL_NO_DISPLAY)
-            eglMakeCurrent(previous_display, s_draw, s_read, previous_context);
-        else
-            eglMakeCurrent(sys->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        if (MakeCurrent(gl) != VLC_SUCCESS)
+            return;
     }
-    else
-        eglSwapBuffers (sys->display, sys->surface);
+
+    if (CheckEGL(gl, eglSwapBuffers(sys->display, sys->surface),
+                 "eglSwapBuffers", SWAP_BUFFERS_FAILED) && !sys->first_swap)
+    {
+        msg_Dbg(gl, "First EGL video frame submitted");
+        sys->first_swap = true;
+    }
+
+    if (!is_current)
+    {
+        EGLBoolean restored;
+        if (previous_display != EGL_NO_DISPLAY)
+            restored = eglMakeCurrent(previous_display, s_draw, s_read, previous_context);
+        else
+            restored = eglMakeCurrent(sys->display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                                       EGL_NO_CONTEXT);
+        CheckEGL(gl, restored, "eglMakeCurrent (restore)", RESTORE_CURRENT_FAILED);
+    }
 }
 
 static void *GetSymbol(vlc_gl_t *gl, const char *procname)
@@ -754,7 +802,8 @@ static int Open(vlc_gl_t *gl, const struct gl_api *api,
     sys->skip_terminate = false;
     sys->surface = EGL_NO_SURFACE;
     sys->context = EGL_NO_CONTEXT;
-    sys->is_current = false;
+    sys->reported_errors = 0;
+    sys->first_swap = false;
 
     sys->display = OpenDisplay(gl);
     if (sys->display == EGL_NO_DISPLAY) {
@@ -834,6 +883,15 @@ static int Open(vlc_gl_t *gl, const struct gl_api *api,
         msg_Err (obj, "cannot choose EGL configuration");
         goto error;
     }
+
+    EGLint id, red, green, blue, alpha;
+    if (eglGetConfigAttrib(sys->display, cfgv[0], EGL_CONFIG_ID, &id)
+        && eglGetConfigAttrib(sys->display, cfgv[0], EGL_RED_SIZE, &red)
+        && eglGetConfigAttrib(sys->display, cfgv[0], EGL_GREEN_SIZE, &green)
+        && eglGetConfigAttrib(sys->display, cfgv[0], EGL_BLUE_SIZE, &blue)
+        && eglGetConfigAttrib(sys->display, cfgv[0], EGL_ALPHA_SIZE, &alpha))
+        msg_Dbg(gl, "Using EGL config %d: R%d G%d B%d A%d", id,
+                red, green, blue, alpha);
 
     /* Create a drawing surface */
     sys->surface = CreateSurface(gl, sys->display, cfgv[0], width, height);

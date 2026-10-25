@@ -80,6 +80,7 @@ typedef struct vout_display_sys_t
     bool place_changed;
     bool is_dirty;
     bool restart_renderer;
+    bool render_failed;
     struct vlc_gl_backdrop_window backdrop;
 
     struct {
@@ -236,6 +237,8 @@ static int Open(vout_display_t *vd,
 
     sys->gl = NULL;
     sys->is_dirty = false;
+    sys->restart_renderer = false;
+    sys->render_failed = false;
     sys->backdrop = (struct vlc_gl_backdrop_window) {0};
 
     vlc_window_t *surface = vd->cfg->window;
@@ -339,6 +342,8 @@ static void PictureRender (vout_display_t *vd, picture_t *pic,
     VLC_UNUSED(date);
     vout_display_sys_t *sys = vd->sys;
 
+    sys->is_dirty = false;
+
     /* The importer reads crop coordinates from the picture. Keep the cached
      * decoder picture unchanged when applying the user's display crop. */
     picture_t *cropped = NULL;
@@ -377,8 +382,21 @@ static void PictureRender (vout_display_t *vd, picture_t *pic,
             sys->place_changed = false;
         }
 
-        vout_display_opengl_Prepare (sys->vgl, pic, subpicture);
-        vout_display_opengl_Display(sys->vgl);
+        const char *stage = "prepare";
+        int ret = vout_display_opengl_Prepare(sys->vgl, pic, subpicture);
+        if (ret == VLC_SUCCESS)
+        {
+            stage = "draw";
+            ret = vout_display_opengl_Display(sys->vgl);
+        }
+        if (ret != VLC_SUCCESS)
+        {
+            if (!sys->render_failed)
+                msg_Err(vd, "OpenGL frame %s failed (%d)", stage, ret);
+            sys->render_failed = true;
+            goto release_current;
+        }
+        sys->render_failed = false;
 
         if (vd->cfg->window->type == VLC_WINDOW_TYPE_WAYLAND
             || vd->cfg->window->type == VLC_WINDOW_TYPE_NSOBJECT)
@@ -386,8 +404,9 @@ static void PictureRender (vout_display_t *vd, picture_t *pic,
                                         vd->cfg->display.width, vd->cfg->display.height);
 
         sys->vt.Flush();
-        vlc_gl_ReleaseCurrent (sys->gl);
         sys->is_dirty = true;
+release_current:
+        vlc_gl_ReleaseCurrent (sys->gl);
     }
     if (cropped != NULL)
         picture_Release(cropped);

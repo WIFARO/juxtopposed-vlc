@@ -294,6 +294,17 @@ vlc_tests += {
     'module_depends' : vlc_plugins_targets.keys()
 }
 
+if host_system == 'linux' and opengl_dep.found()
+    vlc_tests += {
+        'name': 'test_modules_video_output_opengl_display',
+        'sources': files('video_output/opengl/display.c'),
+        'suite': ['modules', 'test_modules'],
+        'link_with': [libvlccore],
+        'c_args': ['-ffunction-sections', '-fdata-sections', '-Werror=incompatible-pointer-types'],
+        'link_args': ['-Wl,--gc-sections'],
+    }
+endif
+
 if opengl_dep.found() and (host_system == 'windows' or egl_dep.found())
     foreach api, api_flag : {'opengl': 'VLC_OPENGL', 'opengl_es2': 'VLC_OPENGL_ES2'}
         if api == 'opengl' or host_system != 'windows'
@@ -427,6 +438,15 @@ if pipewire_dep.found()
 endif
 
 if have_wayland and egl_dep.found()
+    vlc_tests += {
+        'name': 'test_modules_video_output_egl_runtime',
+        'sources': files('video_output/egl_runtime.c'),
+        'suite': ['modules', 'test_modules'],
+        'dependencies': [egl_dep, wayland_deps],
+        'link_with': [libvlccore],
+        'c_args': ['-ffunction-sections', '-fdata-sections', '-Werror=incompatible-pointer-types'],
+        'link_args': ['-Wl,--gc-sections'],
+    }
     foreach variant, variant_args : {
         'modern': [],
         'ext': ['-DTEST_EGL14'],

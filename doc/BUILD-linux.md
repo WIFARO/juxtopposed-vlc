@@ -154,6 +154,53 @@ directory: this is a VLC 4 (`libvlc` ABI 12.0.0) build and
 must only load its own build-tree plugins. Close other VLC
 instances before testing.
 
+## Wayland: audio plays but video is black
+
+[Issue #30](https://github.com/dsojevic/juxtopposed-vlc/issues/30)
+reports black video with Intel `iris` on Mesa 26.2.5 / Hyprland,
+including with software decoding. The reported working workaround is
+`--vout=placebo`; it requires the Vulkan/libplacebo modules. On the
+reported hybrid machine Vulkan selects NVIDIA while VAAPI decodes on
+Intel, so this workaround includes frame copies between the GPUs.
+
+To investigate, capture the **full** verbose log from a fresh process.
+Use the throwaway XDG directories above and an ordinary local video file:
+
+```sh
+env XDG_CONFIG_HOME="$test_root/config" \
+    XDG_DATA_HOME="$test_root/data" \
+    XDG_CACHE_HOME="$test_root/cache" \
+    MESA_DEBUG=context EGL_LOG_LEVEL=debug \
+    ./build-linux/bin/vlc-static --ignore-config --no-media-library \
+        --no-qt-privacy-ask --intf=qt --vout=gl,none \
+        --avcodec-hw=none -vv /path/to/video.mp4 >gl-software.log 2>&1
+```
+
+`--avcodec-hw=none` explicitly disables hardware decoding. `--vout=gl,none`
+keeps the test on GL and disables fallback to another video output.
+Repeat without `--avcodec-hw=none` to compare the hardware-decoding path.
+Record which decoder, interop, EGL driver and video-output modules each
+run actually selects.
+
+The EGL log now reports the selected configuration's RGB/alpha sizes,
+the first successful video buffer submission, and context/swap failures
+with EGL error codes. A successful submission confirms that EGL accepted
+the swap; it does not confirm that the compositor displayed the buffer.
+Frame preparation and drawing failures are also reported, with repeated
+messages suppressed until recovery. Include the display/GPU topology and
+whether each run shows video with the logs.
+
+`--glinterop=none` makes the GL output fail initialization and can select
+`wl_shm` instead. Use the selected-module lines when interpreting that
+result.
+
+Local pixel checks with Mesa 23.2.1 llvmpipe and Mesa 26.2.5 softpipe,
+including libplacebo 7.360.1 and an optimized GL build, render correctly.
+They do not exercise Intel `iris`, cross-GPU DMA-BUF presentation, or the
+reported Hyprland/Qt 6.12 combination. The hardware-specific black screen
+therefore remains unconfirmed locally; the diagnostics and failure-path
+fixes do not establish its root cause.
+
 ## Optional: install to a user prefix (staged only, live install unperformed)
 
 The build definitions do install (per-target `install: true`
