@@ -772,3 +772,10 @@ vlc_tests += {
     'suite': ['src', 'test_src'],
     'link_with': [libvlccore],
 }
+
+vlc_tests += {
+    'name': 'test_src_network_http_auth',
+    'sources': files('network/http_auth.c'),
+    'suite': ['src', 'test_src'],
+    'link_with': [libvlc, libvlccore],
+}

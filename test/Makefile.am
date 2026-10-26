@@ -895,6 +895,10 @@ check_PROGRAMS += test_src_network_http_rate
 test_src_network_http_rate_SOURCES = src/network/http_rate.c
 test_src_network_http_rate_LDADD = $(LIBVLCCORE)
 
+check_PROGRAMS += test_src_network_http_auth
+test_src_network_http_auth_SOURCES = src/network/http_auth.c
+test_src_network_http_auth_LDADD = $(LIBVLC) $(LIBVLCCORE)
+
 test_modules_video_filter_rotate_SOURCES = modules/video_filter/rotate.c
 test_modules_video_filter_rotate_LDADD = $(LIBVLCCORE) $(LIBVLC)
 

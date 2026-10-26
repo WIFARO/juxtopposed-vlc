@@ -146,6 +146,8 @@ static int Open( vlc_object_t *p_this )
         return VLC_ENOMEM;
 
     p_sys->stream = NULL;
+    vlc_http_auth_Init( &p_sys->auth );
+    vlc_http_auth_Init( &p_sys->proxy_auth );
     p_sys->b_proxy = false;
     p_sys->psz_mime = NULL;
     p_sys->b_icecast = false;
@@ -305,6 +307,8 @@ connect:
             msg_Err( p_access, "retrying with user=%s", p_sys->psz_username );
             p_sys->url.psz_username = p_sys->psz_username;
             p_sys->url.psz_password = p_sys->psz_password;
+            free( p_sys->auth.psz_HA1 );
+            p_sys->auth.psz_HA1 = NULL;
             Disconnect( p_access );
             goto connect;
         }
@@ -312,7 +316,14 @@ connect:
             goto disconnect;
     }
     else
+    {
+        if( p_sys->auth.psz_realm != NULL )
+        {
+            credential.psz_realm = p_sys->auth.psz_realm;
+            credential.psz_authtype = p_sys->auth.psz_nonce ? "Digest" : "Basic";
+        }
         vlc_credential_store( &credential, p_access );
+    }
 
     if( ( p_sys->i_code == 301 || p_sys->i_code == 302 ||
           p_sys->i_code == 303 || p_sys->i_code == 307 ) &&
@@ -339,6 +350,8 @@ disconnect:
     Disconnect( p_access );
 
 error:
+    vlc_http_auth_Deinit( &p_sys->auth );
+    vlc_http_auth_Deinit( &p_sys->proxy_auth );
     vlc_credential_clean( &credential );
     vlc_UrlClean( &p_sys->url );
     if( p_sys->b_proxy )
@@ -378,6 +391,8 @@ static void Close( vlc_object_t *p_this )
     free( p_sys->psz_password );
 
     Disconnect( p_access );
+    vlc_http_auth_Deinit( &p_sys->auth );
+    vlc_http_auth_Deinit( &p_sys->proxy_auth );
 }
 
 /* Read data from the socket */
@@ -619,8 +634,6 @@ static int Connect( stream_t *p_access )
     free( p_sys->psz_icy_name );
     free( p_sys->psz_icy_title );
 
-    vlc_http_auth_Init( &p_sys->auth );
-    vlc_http_auth_Init( &p_sys->proxy_auth );
     p_sys->psz_location = NULL;
     p_sys->psz_mime = NULL;
     p_sys->i_icy_meta = 0;
@@ -967,8 +980,7 @@ static void Disconnect( stream_t *p_access )
         vlc_tls_Close(p_sys->stream);
     p_sys->stream = NULL;
 
-    vlc_http_auth_Deinit( &p_sys->auth );
-    vlc_http_auth_Deinit( &p_sys->proxy_auth );
+    /* Keep the challenge and nonce count for authentication retries. */
 }
 
 /*****************************************************************************

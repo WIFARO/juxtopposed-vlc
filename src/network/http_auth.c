@@ -222,6 +222,7 @@ void vlc_http_auth_ParseWwwAuthenticateHeader(
         /* 2 Basic Authentication Scheme */
         msg_Dbg( p_this, "Using Basic Authentication" );
         psz_header += sizeof( psz_basic_prefix ) - 1;
+        free( p_auth->psz_realm );
         p_auth->psz_realm = AuthGetParam( psz_header, "realm" );
         if ( p_auth->psz_realm == NULL )
             msg_Warn( p_this, "Basic Authentication: "
@@ -389,6 +390,8 @@ char *vlc_http_auth_FormatAuthorizationHeader(
         if ( p_auth->psz_qop != NULL || p_auth->psz_cnonce == NULL )
         {
             free( p_auth->psz_cnonce );
+            free( p_auth->psz_HA1 );
+            p_auth->psz_HA1 = NULL;
 
             p_auth->psz_cnonce = GenerateCnonce();
             if ( p_auth->psz_cnonce == NULL )
