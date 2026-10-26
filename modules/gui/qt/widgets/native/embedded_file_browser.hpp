@@ -14,6 +14,8 @@ public:
     void clearSelection();
     void selectUrls(const QList<QUrl>& urls);
     QList<QUrl> selectedMediaUrls() const;
+    bool validateSelection();
+    bool hasSelectionError() const { return m_selectionError; }
 
 signals:
     void selectionChanged();
@@ -27,4 +29,7 @@ protected:
 private:
     QLineEdit* m_nameEdit = nullptr;
     QList<QUrl> m_explicitUrls;
+    bool m_validating = false;
+    bool m_selectionAccepted = false;
+    bool m_selectionError = false;
 };

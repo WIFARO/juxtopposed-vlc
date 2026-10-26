@@ -379,7 +379,8 @@ void OpenDialog::updateLayoutMetrics()
 void OpenDialog::updateValidation()
 {
     QString error;
-    if (auto *panel = qobject_cast<OpenPanel*>(ui.Tab->currentWidget())) error = panel->validationError();
+    auto *panel = qobject_cast<OpenPanel*>(ui.Tab->currentWidget());
+    if (panel) error = panel->validationError();
     if (error.isEmpty() && itemsMRL.isEmpty()) error = qtr("Select a source to continue.");
     if (error.isEmpty() && ui.slaveCheckbox->isChecked() && ui.slaveText->text().trimmed().isEmpty())
         error = qtr("Select an extra media file, or turn off this option.");
@@ -388,7 +389,8 @@ void OpenDialog::updateValidation()
         && ui.stopTimeTimeEdit->time() <= ui.startTimeTimeEdit->time())
         error = qtr("Set the stop time after the start time, or set it to zero.");
     const bool valid = error.isEmpty();
-    ui.openFeedback->setText(valid ? qtr("Ready to continue.") : error);
+    const QString feedback = valid && panel ? panel->validationFeedback() : error;
+    ui.openFeedback->setText(feedback.isEmpty() ? qtr("Ready to continue.") : feedback);
     ui.openFeedback->setAccessibleName(ui.openFeedback->text());
     playButton->setEnabled(valid);
     actionButton->setEnabled(valid);
@@ -464,8 +466,11 @@ void OpenDialog::close()
     /* If in Select Mode, accept instead of selecting a Slot */
     updateValidation();
     if (!selectButton->isEnabled()) return;
-    if( i_action_flag == SELECT )
+    if( i_action_flag == SELECT ) {
+        if (auto *panel = qobject_cast<OpenPanel*>(ui.Tab->currentWidget()))
+            if (!panel->validateSelection()) return;
         accept();
+    }
     else
         selectSlots();
 }
@@ -503,6 +508,8 @@ void OpenDialog::enqueue( bool b_enqueue )
 {
     updateValidation();
     if (!actionButton->isEnabled()) return;
+    if (auto *panel = qobject_cast<OpenPanel*>(ui.Tab->currentWidget()))
+        if (!panel->validateSelection()) return;
     hide();
 
     if( i_action_flag == SELECT )
@@ -535,6 +542,8 @@ void OpenDialog::stream( bool b_transcode_only )
 {
     updateValidation();
     if (!actionButton->isEnabled()) return;
+    if (auto *panel = qobject_cast<OpenPanel*>(ui.Tab->currentWidget()))
+        if (!panel->validateSelection()) return;
 //    QString soutMRL = getMRL( false );
 //    if( soutMRL.isEmpty() ) return;
 

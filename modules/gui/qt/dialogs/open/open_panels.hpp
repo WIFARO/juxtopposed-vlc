@@ -79,6 +79,8 @@ public:
     virtual void onFocus() {}
     virtual void onAccept() {}
     virtual QString validationError() const { return {}; }
+    virtual QString validationFeedback() const { return {}; }
+    virtual bool validateSelection() { return true; }
 
     static const int CONTEXT_INTERACTIVE = 0;
     static const int CONTEXT_BATCH = 1;
@@ -108,6 +110,8 @@ public:
     void clear() override;
     void onFocus() override;
     void onAccept() override;
+    bool validateSelection() override;
+    QString validationFeedback() const override;
 protected:
     void dropEvent( QDropEvent *) override;
     void dragEnterEvent( QDragEnterEvent * ) override;

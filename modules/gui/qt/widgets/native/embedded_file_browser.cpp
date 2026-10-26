@@ -9,6 +9,7 @@
 #include <QLayout>
 #include <QLineEdit>
 #include <QSet>
+#include <QScopedValueRollback>
 #include <QSignalBlocker>
 
 EmbeddedFileBrowser::EmbeddedFileBrowser(QWidget* parent)
@@ -36,7 +37,11 @@ EmbeddedFileBrowser::EmbeddedFileBrowser(QWidget* parent)
             if (m_nameEdit) break;
         }
     }
-    const auto changed = [this] { m_explicitUrls.clear(); emit selectionChanged(); };
+    const auto changed = [this] {
+        m_explicitUrls.clear();
+        m_selectionError = false;
+        emit selectionChanged();
+    };
     if (m_nameEdit) connect(m_nameEdit, &QLineEdit::textChanged, this, changed);
 
     QSet<QItemSelectionModel*> selections;
@@ -67,6 +72,7 @@ void EmbeddedFileBrowser::clearSelection()
             m_nameEdit->clear();
         }
         m_explicitUrls.clear();
+        m_selectionError = false;
     }
     emit selectionChanged();
 }
@@ -93,14 +99,48 @@ QList<QUrl> EmbeddedFileBrowser::selectedMediaUrls() const
     return selectedUrls();
 }
 
+bool EmbeddedFileBrowser::validateSelection()
+{
+    // Dropped URLs are lossless and may span directories or use other schemes.
+    if (!m_explicitUrls.isEmpty()) return true;
+    if (m_validating) return false;
+    const QScopedValueRollback<bool> validating(m_validating, true);
+    m_selectionAccepted = false;
+    m_selectionError = false;
+    const auto previousDirectory = directoryUrl();
+    if (m_nameEdit && m_nameEdit->isModified()) {
+        // Autocomplete can select only the existing subset of typed filenames.
+        // Let Qt parse the full edited text instead of silently dropping a name.
+        for (auto* view : findChildren<QAbstractItemView*>()) {
+            if (!qobject_cast<QFileSystemModel*>(view->model())) continue;
+            if (auto* selection = view->selectionModel()) {
+                const QSignalBlocker blocker(selection);
+                selection->clearSelection();
+            }
+        }
+    }
+    // Use the same filename parsing, existence checks and folder navigation for
+    // the host buttons as for Return and activation in the file view.
+    QFileDialog::accept();
+    m_selectionError = !m_selectionAccepted && directoryUrl() == previousDirectory
+        && m_nameEdit && !m_nameEdit->text().trimmed().isEmpty()
+        && m_nameEdit->text() != QLatin1String("..");
+    // Refresh the host's source list as well as its persistent error feedback.
+    emit selectionChanged();
+    return m_selectionAccepted;
+}
+
 void EmbeddedFileBrowser::accept()
 {
-    if (!m_explicitUrls.isEmpty()) emit filesActivated();
-    else QFileDialog::accept();
+    emit filesActivated();
 }
 
 void EmbeddedFileBrowser::done(int result)
 {
+    if (m_validating) {
+        m_selectionAccepted = result == QDialog::Accepted;
+        return;
+    }
     // QFileDialog validates files and navigates folders before it reaches done.
     // The surrounding Open Media dialog decides when to close.
     if (result == QDialog::Accepted) emit filesActivated();

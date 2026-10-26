@@ -415,7 +415,18 @@ void FileOpenPanel::updateMRL()
     emit mrlUpdated( fileList, mrl );
 }
 
-/* Function called by Open Dialog when clicke on Play/Enqueue */
+bool FileOpenPanel::validateSelection()
+{
+    return !embedded || dialogBox->validateSelection();
+}
+
+QString FileOpenPanel::validationFeedback() const
+{
+    return embedded && dialogBox->hasSelectionError()
+        ? qtr("Check the file names and locations. Then try again.") : QString{};
+}
+
+/* Function called by Open Dialog when clicked on Play/Enqueue */
 void FileOpenPanel::onAccept()
 {
     if (embedded) p_intf->p_mi->setDialogFilePath(dialogBox->directoryUrl());
