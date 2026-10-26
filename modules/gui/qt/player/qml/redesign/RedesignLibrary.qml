@@ -14,6 +14,9 @@ RedesignLibraryView {
     readonly property var emptyParentId: MediaLib.deserializeMlItemIdFromString("")
     property var selectedPlaylist
     property string playlistEditKey: ""
+    property var pendingFolderAdds: ({})
+    property var folderFailures: []
+    property bool folderRecoveryActive: false
     onSelectedPlaylistChanged: { playlistEditKey = ""; playlistEditMessage = ""; ++linkedSourceSerial; linkedPlaylist.setSources([]); linkedSourceRefresh.restart() }
     playlistOpen: !!selectedPlaylist
     playlistKey: selectedPlaylist ? selectedPlaylist.toString() : ""
@@ -525,7 +528,7 @@ RedesignLibraryView {
         if (selectedPlaylist) playlistMedia.appendFiles(DialogsProvider.selectPlaylistFiles())
         else if (category === 3 && network.podcast) DialogsProvider.podcastConfigureDialog()
         else if (category === 3) DialogsProvider.openNetDialog()
-        else { const folder = DialogsProvider.selectLibraryFolder(); if (folder.toString().length > 0) libraryFolders.add(folder) }
+        else { const folder = DialogsProvider.selectLibraryFolder(); if (folder.toString().length > 0) addLibraryFolder(folder) }
     }
     onFilesRequested: {
         const files = currentFolder ? DialogsProvider.selectLibraryFiles(Qt.resolvedUrl(currentFolder)) : DialogsProvider.selectLibraryFiles()
@@ -539,11 +542,43 @@ RedesignLibraryView {
     onFolderRequested: {
         const folder = currentFolder ? DialogsProvider.selectLibraryFolder(Qt.resolvedUrl(currentFolder)) : DialogsProvider.selectLibraryFolder()
         if (!folder.toString().length) return
-        libraryFolders.add(folder)
+        addLibraryFolder(folder)
         openFolder(folder, category)
     }
     onPreferencesRequested: DialogsProvider.prefsPageDialog("library")
     onNewPlaylistRequested: createPlaylist.begin()
+
+    function addLibraryFolder(folder) {
+        if (!folder.toString().length) return
+        pendingFolderAdds[folderPath.location(folder)] = true
+        libraryFolders.add(folder)
+    }
+    function recoverNextFolder() {
+        if (folderRecoveryActive || !folderFailures.length) return
+        folderRecoveryActive = true
+        const failed = folderFailures[0]
+        folderFailures = folderFailures.slice(1)
+        const location = folderPath.location(failed)
+        const wasCurrent = currentFolder === location
+        const previousCategory = category
+        try {
+            const folder = DialogsProvider.recoverLibraryFolder(failed)
+            if (!folder.toString().length) return
+            addLibraryFolder(folder)
+            const replacement = folderPath.location(folder)
+            if (wasCurrent && currentFolder === location && category === previousCategory && replacement !== location) {
+                // Replace the failed location without adding it to Back history.
+                currentFolder = replacement
+                selectedName = nameFromUrl(folder)
+                searchText = ""
+                visits.record("folders", currentFolder, selectedName, category)
+            }
+        } finally {
+            folderRecoveryActive = false
+            if (folderFailures.length) folderFailureTimer.restart()
+        }
+    }
+    Timer { id: folderFailureTimer; interval: 0; onTriggered: root.recoverNextFolder() }
 
     function homeItem(section, index) {
         const model = homeModels[section]
@@ -783,9 +818,13 @@ RedesignLibraryView {
     Connections {
         target: libraryFolders
         function onModelReset() { root.refreshFolders() }
+        function onFolderAdded(url) { delete root.pendingFolderAdds[folderPath.location(url)] }
         function onOperationFailed(operation, url) {
-            if (operation === MLFolderModel.Add)
-                DialogsProvider.messageDialog(qsTr("VLC cannot add this folder: %1").arg(url.toString()), qsTr("VLC Media Player"))
+            const key = folderPath.location(url)
+            if (operation !== MLFolderModel.Add || !root.pendingFolderAdds[key]) return
+            delete root.pendingFolderAdds[key]
+            root.folderFailures = [...root.folderFailures, url]
+            folderFailureTimer.restart()
         }
     }
     RedesignPlaylistDialog {

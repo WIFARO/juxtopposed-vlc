@@ -312,7 +312,7 @@ public:
         m_copy->setObjectName(QStringLiteral("messageCopy"));
         m_copy->setAutoDefault(false);
         m_copy->setToolTip(qtr("Copy the full message."));
-        m_actions->addWidget(m_copy, 0, Qt::AlignLeft);
+        m_actions->addWidget(m_copy, 0, Qt::AlignLeft | Qt::AlignTop);
         m_actions->addStretch(1);
         if (buttons == QMessageBox::NoButton) buttons = QMessageBox::Close;
         m_buttons = new QDialogButtonBox(QDialogButtonBox::StandardButtons(int(buttons)), this);
@@ -449,9 +449,10 @@ private:
         const int copyWidth = qMax(m_copy->minimumWidth(), m_copy->sizeHint().width());
         const bool vertical = copyWidth + dp(12) + m_buttons->sizeHint().width() > available;
         m_buttons->setOrientation(vertical ? Qt::Vertical : Qt::Horizontal);
-        m_actions->setDirection(vertical ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
         int minimum = 0;
         for (auto *button : m_buttons->buttons()) minimum = qMax(minimum, button->sizeHint().width());
+        const bool stackCopy = vertical && copyWidth + dp(12) + minimum > available;
+        m_actions->setDirection(stackCopy ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
         m_buttons->setMinimumWidth(vertical ? minimum : 0);
         m_footer->setMinimumWidth(qMax(minimum, copyWidth));
     }
@@ -1350,12 +1351,49 @@ QUrl DialogsProvider::selectLibraryFolder(const QUrl& initial)
     const auto restoreShortcuts = qScopeGuard([context, shortcuts] {
         if (context) context->setUseGlobalShortcuts(shortcuts);
     });
-    const QUrl folder = QFileDialog::getExistingDirectoryUrl(nullptr,
-        qtr("Add folder to media library"), initial.isEmpty() ? context->getDialogFilePath() : initial,
-        QFileDialog::ShowDirsOnly, {QStringLiteral("file")});
-    if (!folder.isEmpty())
-        p_intf->p_mi->setDialogFilePath(folder);
+    QFileDialog dialog(nullptr, qtr("Add folder to media library"));
+    dialog.setFileMode(QFileDialog::Directory);
+    dialog.setOption(QFileDialog::ShowDirsOnly);
+    dialog.setSupportedSchemes({QStringLiteral("file")});
+    dialog.setDirectoryUrl(initial.isEmpty() ? context->getDialogFilePath() : initial);
+    if (auto *buttons = dialog.findChild<QDialogButtonBox*>())
+        if (auto *open = buttons->button(QDialogButtonBox::Open))
+            open->setProperty("redesignPrimary", true);
+    applyRedesignWidgetTheme(&dialog, context);
+    for (auto *combo : dialog.findChildren<QComboBox*>()) {
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        combo->setMinimumContentsLength(16);
+    }
+    QVLCDialog::setWindowTransientParent(&dialog, nullptr, p_intf);
+    const auto available = dialog.screen()->availableGeometry().size();
+    dialog.resize(std::min(qRound(800 * context->getIntfScaleFactor()), available.width() - 40),
+                  std::min(qRound(560 * context->getIntfScaleFactor()), available.height() - 40));
+    if (dialog.exec() != QDialog::Accepted || !context || dialog.selectedUrls().isEmpty()) return {};
+    const auto folder = dialog.selectedUrls().first();
+    if (!folder.isLocalFile()) return {};
+    context->setDialogFilePath(folder);
     return folder;
+}
+
+QUrl DialogsProvider::recoverLibraryFolder(const QUrl& folder)
+{
+    const QPointer<MainCtx> context = p_intf->p_mi;
+    if (!context || folder.isEmpty() || !folder.isValid()) return {};
+    const bool shortcuts = context->getUseGlobalShortcuts();
+    context->setUseGlobalShortcuts(false);
+    const auto restoreShortcuts = qScopeGuard([context, shortcuts] {
+        if (context) context->setUseGlobalShortcuts(shortcuts);
+    });
+    const QString path = folder.isLocalFile() ? toNativeSeparators(folder.toLocalFile())
+        : folder.toDisplayString(QUrl::RemovePassword);
+    const auto answer = messageDialog(
+        qtr("VLC cannot add this folder.\nMake sure that you can read the folder.\n\n%1").arg(path),
+        qtr("Add folder to media library"), QMessageBox::Retry | QMessageBox::Yes | QMessageBox::Cancel,
+        QMessageBox::Cancel, QMessageBox::Warning, nullptr, qtr("Select folder"));
+    if (!context) return {};
+    if (answer == QMessageBox::Retry) return folder;
+    if (answer == QMessageBox::Yes) return selectLibraryFolder(folder);
+    return {};
 }
 
 QStringList DialogsProvider::selectPlaylistFiles()

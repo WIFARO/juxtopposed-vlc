@@ -85,6 +85,8 @@ signals:
     void ctxChanged();
     void operationFailed( int op, QUrl url ) const;
     void onMLEntryPointModified(QPrivateSignal);
+    // An add request succeeded, including a root that is already registered.
+    void folderAdded(QUrl url) const;
 
 protected:
     struct EntryPoint

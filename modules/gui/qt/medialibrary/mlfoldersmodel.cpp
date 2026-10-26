@@ -18,6 +18,8 @@
 
 #include "mlfoldersmodel.hpp"
 #include "medialibrary/medialib.hpp"
+#include <QFileInfo>
+#include <QPointer>
 #include <cassert>
 #include <algorithm>
 
@@ -140,7 +142,11 @@ void MLFoldersBaseModel::onMlEvent( void* data , const vlc_ml_event_t* event )
          event->i_type == VLC_ML_EVENT_FOLDER_DELETED )
     {
         if (!self->failed( event ))
+        {
+            if (event->i_type == VLC_ML_EVENT_ENTRY_POINT_ADDED && event->entry_point_added.b_success)
+                emit self->folderAdded(QUrl::fromEncoded(event->entry_point_added.psz_entry_point));
             emit self->onMLEntryPointModified( QPrivateSignal() );
+        }
     }
 }
 
@@ -225,7 +231,36 @@ bool MLFoldersModel::failed(const vlc_ml_event_t *event) const
 {
     if ( event->i_type == VLC_ML_EVENT_ENTRY_POINT_ADDED && !event->entry_point_added.b_success )
     {
-        emit operationFailed( Add, QUrl::fromEncoded( event->entry_point_added.psz_entry_point ) );
+        const auto url = QUrl::fromEncoded(event->entry_point_added.psz_entry_point);
+        const QPointer<const MLFoldersModel> model(this);
+        // The backend also reports a failed insertion for an existing root.
+        // Inspect it on the library worker, without querying from its callback.
+        QMetaObject::invokeMethod(m_mediaLib, [model, url] {
+            if (!model) return;
+            model->m_mediaLib->runOnMLThread<bool>(model.data(),
+                [url](vlc_medialibrary_t* ml, bool& registered) {
+                    registered = false;
+                    if (!url.isLocalFile()) return;
+                    const QFileInfo folder(url.toLocalFile());
+                    if (!folder.isDir() || !folder.isReadable()) return;
+                    ml_unique_ptr<vlc_ml_folder_list_t> roots(vlc_ml_list_entry_points(ml, nullptr));
+                    if (!roots) return;
+                    for (const auto& root : ml_range_iterate<vlc_ml_folder_t>(roots))
+                    {
+                        if (root.psz_mrl && url.matches(QUrl::fromEncoded(root.psz_mrl),
+                                QUrl::StripTrailingSlash | QUrl::NormalizePathSegments))
+                        {
+                            registered = true;
+                            return;
+                        }
+                    }
+                },
+                [model, url](quint64, bool& registered) {
+                    if (!model) return;
+                    if (registered) emit model->folderAdded(url);
+                    else emit model->operationFailed(Add, url);
+                }, ML_FOLDER_ADD_QUEUE);
+        }, Qt::QueuedConnection);
         return true;
     }
     else if ( event->i_type == VLC_ML_EVENT_ENTRY_POINT_REMOVED && !event->entry_point_removed.b_success )
@@ -251,10 +286,22 @@ void MLFoldersModel::remove( const QUrl &mrl )
 void MLFoldersModel::add(const QUrl &mrl )
 {
     //UI data is updated on onMlEvent
-    m_mediaLib->runOnMLThread(this,
+    m_mediaLib->runOnMLThread<bool>(this,
     //ML thread
-    [mrl](vlc_medialibrary_t* ml){
+    [mrl](vlc_medialibrary_t* ml, bool& rejected){
+        // Registration can succeed before discovery tries to read the folder.
+        // Reject unavailable local paths here, without drive I/O on the UI thread.
+        rejected = false;
+        if (mrl.isLocalFile())
+        {
+            const QFileInfo folder(mrl.toLocalFile());
+            rejected = !folder.isDir() || !folder.isReadable();
+            if (rejected) return;
+        }
         vlc_ml_add_folder( ml, qtu( mrl.toString( QUrl::FullyEncoded ) ) );
+    },
+    [this, mrl](quint64, bool& rejected) {
+        if (rejected) emit operationFailed(Add, mrl);
     },
     ML_FOLDER_ADD_QUEUE);
 }

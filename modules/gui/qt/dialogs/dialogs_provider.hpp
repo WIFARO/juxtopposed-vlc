@@ -268,6 +268,7 @@ public slots:
 
     // Returns a file URL without adding the directory to the play queue.
     QUrl selectLibraryFolder(const QUrl& initial = QUrl());
+    QUrl recoverLibraryFolder(const QUrl& folder);
     QStringList selectLibraryFiles(const QUrl& initial = QUrl());
     QStringList selectPlaylistFiles();
     QUrl selectPlaylistCover();
