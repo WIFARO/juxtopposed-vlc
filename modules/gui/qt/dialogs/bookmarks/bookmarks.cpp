@@ -158,15 +158,11 @@ BookmarksDialog::BookmarksDialog(qt_intf_t *intf) : QVLCFrame(intf)
     clearConfirmation->setObjectName(QStringLiteral("bookmarkClearConfirmation"));
     auto *confirmLayout = new QVBoxLayout(clearConfirmation);
     clearQuestion = new QLabel(clearConfirmation);
+    clearQuestion->setObjectName(QStringLiteral("bookmarkClearQuestion"));
     clearQuestion->setWordWrap(true);
     confirmLayout->addWidget(clearQuestion);
-    auto *confirmActions = new QHBoxLayout;
-    confirmActions->addStretch();
     confirmClear = button("bookmarkConfirmClear");
     cancelClear = button("bookmarkCancelClear");
-    confirmActions->addWidget(confirmClear);
-    confirmActions->addWidget(cancelClear);
-    confirmLayout->addLayout(confirmActions);
     layout->addWidget(clearConfirmation);
     clearConfirmation->hide();
     auto *footer = new QHBoxLayout;
@@ -175,6 +171,8 @@ BookmarksDialog::BookmarksDialog(qt_intf_t *intf) : QVLCFrame(intf)
     closeButton = button("bookmarkClose");
     footer->addWidget(delButton);
     footer->addWidget(clearButton);
+    footer->addWidget(confirmClear);
+    footer->addWidget(cancelClear);
     footer->addStretch();
     footer->addWidget(closeButton);
     layout->addLayout(footer);
@@ -185,11 +183,15 @@ BookmarksDialog::BookmarksDialog(qt_intf_t *intf) : QVLCFrame(intf)
     connect(delButton, &QPushButton::clicked, this, &BookmarksDialog::del);
     connect(clearButton, &QPushButton::clicked, this, &BookmarksDialog::clear);
     connect(closeButton, &QPushButton::clicked, this, &BookmarksDialog::close);
-    connect(cancelClear, &QPushButton::clicked, this, &BookmarksDialog::cancelClearRequest);
+    connect(cancelClear, &QPushButton::clicked, this, [this] {
+        cancelClearRequest();
+        bookmarksList->setFocus();
+    });
     connect(confirmClear, &QPushButton::clicked, this, [this] {
         if (!clearConfirmation->isHidden() && clearUri == THEMIM->getUrl() && !THEMIM->getUrl().isEmpty())
             m_model->clear();
         cancelClearRequest();
+        bookmarksList->setFocus();
     });
     connect(bookmarksList, &QTreeView::activated, this, &BookmarksDialog::activateItem);
     connect(bookmarksList->selectionModel(), &QItemSelectionModel::selectionChanged, this, &BookmarksDialog::updateButtons);
@@ -215,10 +217,10 @@ BookmarksDialog::BookmarksDialog(qt_intf_t *intf) : QVLCFrame(intf)
     if (auto *translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, &BookmarksDialog::retranslate);
     applyRedesignWidgetTheme(this, p_intf->p_mi);
-    const auto scale = [this, actions, footer, confirmLayout, confirmActions] {
+    const auto scale = [this, actions, footer, confirmLayout] {
         const auto dp = [this](int value) { return qRound(value * p_intf->p_mi->getIntfScaleFactor()); };
         updateMetrics();
-        for (auto *row : {actions, footer, confirmActions}) row->setSpacing(dp(8));
+        for (auto *row : {actions, footer}) row->setSpacing(dp(8));
         confirmLayout->setContentsMargins(0, 0, 0, 0);
         confirmLayout->setSpacing(dp(8));
         bookmarksList->setColumnWidth(1, dp(90));
@@ -271,7 +273,6 @@ void BookmarksDialog::retranslate()
     delButton->setToolTip(qtr("Remove the selected bookmarks. You can also press Delete."));
     clearButton->setText(qtr("Remove &all"));
     closeButton->setText(qtr("&Close"));
-    confirmClear->setText(qtr("Remove all"));
     cancelClear->setText(qtr("Cancel"));
     clearQuestion->setText(qtr("Remove all bookmarks for this media?"));
     bookmarksList->header()->setToolTip(qtr("Select Name or Time to sort the bookmarks."));
@@ -292,6 +293,24 @@ void BookmarksDialog::updateButtons()
     const bool armed = !clearConfirmation->isHidden();
     const auto selected = bookmarksList->selectionModel()->selectedRows();
     const int count = m_model->rowCount();
+    // Hide the old actions before showing their replacements. Otherwise a
+    // layout activation can briefly size the window for both action sets.
+    if (armed)
+    {
+        delButton->hide();
+        clearButton->hide();
+        confirmClear->show();
+        cancelClear->show();
+    }
+    else
+    {
+        confirmClear->hide();
+        cancelClear->hide();
+        delButton->show();
+        clearButton->show();
+    }
+    confirmClear->setText(qtr("Remove all (%1)").arg(count));
+    feedback->setVisible(!armed);
     timeAvailable = THEMIM->getTime().valid() && THEMIM->getTime().toVLCTick() >= 0;
     addButton->setEnabled(library && active && timeAvailable && !armed);
     goButton->setEnabled(active && THEMIM->isSeekable() && selected.size() == 1 && !armed);
@@ -307,7 +326,6 @@ void BookmarksDialog::updateButtons()
     source->setToolTip(QStringLiteral("<qt>%1</qt>").arg(url.toDisplayString(QUrl::RemovePassword | QUrl::PreferLocalFile).toHtmlEscaped()));
     const QString total = count == 1 ? qtr("1 bookmark.") : qtr("%1 bookmarks.").arg(count);
     if (!library || !active) feedback->setText(QString());
-    else if (armed) feedback->setText(qtr("No bookmarks are removed until you confirm."));
     else if (!THEMIM->isSeekable()) feedback->setText(total + QLatin1Char(' ') + qtr("This media does not support seeking."));
     else feedback->setText(total + QLatin1Char(' ') + (selected.isEmpty() ? qtr("Select a bookmark to use it.") : selected.size() == 1 ? qtr("1 bookmark selected.") : qtr("%1 bookmarks selected.").arg(selected.size())));
 }

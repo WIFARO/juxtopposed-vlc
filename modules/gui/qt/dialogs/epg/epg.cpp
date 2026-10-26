@@ -213,7 +213,6 @@ void EpgDialog::updateMetrics()
     layout()->setContentsMargins(margin, margin, margin, margin);
     layout()->setSpacing(dp(compact ? 6 : 12));
     help->setVisible(!compact);
-    epg->setMinimumHeight(dp(compact ? 80 : 120));
     epg->setCompact(compact);
     detailsScroll->widget()->layout()->setSpacing(dp(compact ? 4 : 8));
     detailsScroll->setMinimumHeight(dp(compact ? 72 : 128));

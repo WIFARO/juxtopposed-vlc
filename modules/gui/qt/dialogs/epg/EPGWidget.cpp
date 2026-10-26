@@ -121,6 +121,20 @@ void EPGWidget::setCompact(bool compact)
 {
     m_epgView->setCompact(compact);
     m_channelsWidget->update();
+    updateGeometry();
+}
+
+QSize EPGWidget::minimumSizeHint() const
+{
+    auto size = QWidget::minimumSizeHint();
+    // Reserve the scrollbar even when it is hidden, so zooming does not
+    // reduce the space available for a complete program row.
+    const auto *scrollbar = m_epgView->horizontalScrollBar();
+    const int rowHeight = m_epgView->trackHeight() + 2 * m_epgView->frameWidth();
+    const int scrollHeight = qMax(scrollbar->minimumHeight(), scrollbar->sizeHint().height());
+    size.setHeight(qMax(size.height(), m_rulerWidget->height() + rowHeight
+                                      + scrollHeight + 2 * rootWidget->frameWidth()));
+    return size;
 }
 
 void EPGWidget::updateEPG( input_item_t *p_input_item )
@@ -178,6 +192,8 @@ void EPGWidget::changeEvent(QEvent *event)
 {
     QWidget::changeEvent(event);
     if (event->type() == QEvent::FontChange) setZoom(zoomLevel);
+    if (event->type() == QEvent::FontChange || event->type() == QEvent::StyleChange)
+        updateGeometry();
 }
 
 void EPGWidget::setAccent(const QColor &color)

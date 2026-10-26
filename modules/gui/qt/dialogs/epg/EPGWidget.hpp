@@ -43,6 +43,7 @@ class EPGWidget : public QWidget
     Q_OBJECT
 public:
     explicit EPGWidget( QWidget* parent = 0 );
+    QSize minimumSizeHint() const override;
     void reset();
     bool hasValidData() const;
     EPGItem *selectedItem() const;

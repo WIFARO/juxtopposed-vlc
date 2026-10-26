@@ -74,6 +74,9 @@ void EPGItem::paint( QPainter *painter, const QStyleOptionGraphicsItem *option, 
     if (program->getCurrent() == this)
         painter->fillRect(QRectF(mapped.left() + 2 * scale, mapped.top() + 7 * scale, 3 * scale, mapped.height() - 14 * scale), accent);
     mapped.adjust(9 * scale, 7 * scale, -8 * scale, -7 * scale);
+    // Keep labels in view when only part of a wide program is visible.
+    mapped.setLeft(qMax(mapped.left(), 9 * scale));
+    mapped.setRight(qMin(mapped.right(), m_view->viewport()->width() - 8 * scale));
     painter->setFont(m_view->font());
     const auto metrics = painter->fontMetrics();
     painter->setPen(colors.color(QPalette::Text));
