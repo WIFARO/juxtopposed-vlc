@@ -27,6 +27,7 @@
 #endif
 #ifdef ENABLE_VLM
 #include "dialogs/vlm/vlm.hpp"
+#include "dialogs/dialogs_provider.hpp"
 #include "dialogs/open/open.hpp"
 #include "dialogs/sout/sout.hpp"
 #include "maininterface/mainctx.hpp"
@@ -37,6 +38,7 @@
 #include <QHeaderView>
 #include <QKeyEvent>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QResizeEvent>
 #include <QSaveFile>
 #include <QScreen>
@@ -289,7 +291,12 @@ void VLMDialog::updateActions()
     ui.draftInfo->setText(dirty ? error.isEmpty() ? qtr("Changes are not saved.") : error : editingId >= 0 ? error : QString());
 }
 
-void VLMDialog::feedback(const QString &text) { ui.feedback->setText(text); ui.feedback->setVisible(!text.isEmpty()); }
+void VLMDialog::feedback(const QString &text)
+{
+    ui.feedback->setText(text);
+    ui.feedback->setVisible(!text.isEmpty());
+    updateMetrics();
+}
 
 void VLMDialog::edit(vlm_media_t *item)
 {
@@ -406,27 +413,55 @@ bool VLMDialog::importVLMConf()
 bool VLMDialog::exportVLMConf()
 {
     if (!vlm) return false;
-    QFileDialog dialog(this, qtr("Export VLM configuration"), QVLCUserDir(VLC_DOCUMENTS_DIR), qtr("VLM files (*.vlm);;All files (*)"));
+    QPointer<VLMDialog> owner(this);
+    QFileDialog dialog(nullptr, qtr("Export VLM configuration"), QVLCUserDir(VLC_DOCUMENTS_DIR), qtr("VLM files (*.vlm);;All files (*)"));
+    dialog.setWindowModality(Qt::WindowModal);
+    QVLCDialog::setWindowTransientParent(&dialog, windowHandle(), p_intf);
+    connect(this, &QObject::destroyed, &dialog, &QDialog::reject);
     dialog.setAcceptMode(QFileDialog::AcceptSave);
     dialog.setDefaultSuffix(QStringLiteral("vlm"));
-    dialog.selectFile(QStringLiteral("broadcasts.vlm"));
-    if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) return false;
-    const auto path = dialog.selectedFiles().first();
-    if (!refresh()) return false;
-    QString text = QStringLiteral("# VLC broadcast configuration\n");
-    for (const auto &item : media) {
-        const QString name = qfu(item->psz_name);
-        QStringList values = strings(item->i_input, item->ppsz_input) + strings(item->i_option, item->ppsz_option);
-        values << name << qfu(item->psz_output);
-        for (const auto &value : values) if (value.contains(QLatin1Char('\n')) || value.contains(QLatin1Char('\r'))) { feedback(qtr("VLC cannot save a value that contains a line break.")); return false; }
-        text += QStringLiteral("new %1 broadcast %2%3\n").arg(token(name), item->b_enabled ? QStringLiteral("enabled") : QStringLiteral("disabled"), item->broadcast.b_loop ? QStringLiteral(" loop") : QString());
-        for (const auto &input : strings(item->i_input, item->ppsz_input)) text += QStringLiteral("setup %1 input %2\n").arg(token(name), token(input));
-        if (item->psz_output) text += QStringLiteral("setup %1 output %2\n").arg(token(name), token(qfu(item->psz_output)));
-        for (const auto &option : strings(item->i_option, item->ppsz_option)) text += QStringLiteral("setup %1 option %2\n").arg(token(name), token(option));
+    dialog.selectFile(lastExportPath.isEmpty() ? QStringLiteral("broadcasts.vlm") : lastExportPath);
+    while (owner && dialog.exec() == QDialog::Accepted) {
+        if (!owner || dialog.selectedFiles().isEmpty()) return false;
+        const auto path = dialog.selectedFiles().first();
+        if (!refresh()) return false;
+        QString text = QStringLiteral("# VLC broadcast configuration\n");
+        for (const auto &item : media) {
+            const QString name = qfu(item->psz_name);
+            QStringList values = strings(item->i_input, item->ppsz_input) + strings(item->i_option, item->ppsz_option);
+            values << name << qfu(item->psz_output);
+            for (const auto &value : values) if (value.contains(QLatin1Char('\n')) || value.contains(QLatin1Char('\r'))) { feedback(qtr("VLC cannot save a value that contains a line break.")); return false; }
+            text += QStringLiteral("new %1 broadcast %2%3\n").arg(token(name), item->b_enabled ? QStringLiteral("enabled") : QStringLiteral("disabled"), item->broadcast.b_loop ? QStringLiteral(" loop") : QString());
+            for (const auto &input : strings(item->i_input, item->ppsz_input)) text += QStringLiteral("setup %1 input %2\n").arg(token(name), token(input));
+            if (item->psz_output) text += QStringLiteral("setup %1 output %2\n").arg(token(name), token(qfu(item->psz_output)));
+            for (const auto &option : strings(item->i_option, item->ppsz_option)) text += QStringLiteral("setup %1 option %2\n").arg(token(name), token(option));
+        }
+        bool saved;
+        QString error;
+        {
+            QSaveFile file(path);
+            const auto bytes = text.toUtf8();
+            saved = file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size() && file.commit();
+            if (!saved) error = file.errorString();
+        }
+        if (!saved) {
+            feedback(qtr("VLC did not save the configuration."));
+            const auto answer = DialogsProvider::getInstance(p_intf)->messageDialog(
+                qtr("VLC cannot save this file.\n\n%1\n\n%2\n\nSelect another file or folder.")
+                    .arg(error, toNativeSeparators(path)),
+                qtr("Export VLM configuration"), QMessageBox::Yes | QMessageBox::Cancel,
+                QMessageBox::Cancel, QMessageBox::Warning, this, qtr("Select file"));
+            if (!owner || answer != QMessageBox::Yes) return false;
+            dialog.selectFile(path);
+            continue;
+        }
+        lastExportPath = path;
+        feedback(dirty
+            ? qtr("VLC exported the saved broadcasts. Save the changes before the next export.")
+            : qtr("Configuration saved."));
+        return true;
     }
-    QSaveFile file(path); const auto bytes = text.toUtf8();
-    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) { feedback(qtr("VLC cannot save the file. %1").arg(file.errorString())); return false; }
-    feedback(qtr("Configuration saved.")); return true;
+    return false;
 }
 
 void VLMDialog::updateText()
@@ -440,8 +475,14 @@ void VLMDialog::updateText()
 }
 void VLMDialog::updateMetrics()
 {
-    const int margin = dp(p_intf, 24);
-    ui.rootLayout->setContentsMargins(margin, margin, margin, margin); ui.rootLayout->setSpacing(dp(p_intf, 12));
+    const auto available = screen() ? screen()->availableGeometry().size() : QSize(1280, 720);
+    const bool shortScreen = available.height() < dp(p_intf, 460);
+    const int margin = dp(p_intf, shortScreen ? 12 : 24);
+    ui.rootLayout->setContentsMargins(margin, margin, margin, margin);
+    ui.rootLayout->setSpacing(dp(p_intf, shortScreen ? 4 : 12));
+    ui.feedback->ensurePolished();
+    ui.feedback->setMinimumHeight(ui.feedback->text().isEmpty() ? 0
+        : ui.feedback->heightForWidth(qMax(1, width() - 2 * margin)));
     ui.inputLayout->setSpacing(dp(p_intf, 6)); ui.outputLayout->setSpacing(dp(p_intf, 6));
     ui.inputsText->setMinimumHeight(dp(p_intf, 100)); ui.optionsText->setMinimumHeight(dp(p_intf, 100));
     ui.broadcasts->setMinimumHeight(dp(p_intf, 120)); ui.broadcasts->verticalHeader()->setDefaultSectionSize(dp(p_intf, 36));
@@ -449,7 +490,6 @@ void VLMDialog::updateMetrics()
     ui.broadcasts->setColumnHidden(2, width() < dp(p_intf, 580));
     ui.broadcasts->setColumnHidden(3, width() < dp(p_intf, 720));
     ui.broadcasts->setColumnHidden(4, width() < dp(p_intf, 720));
-    const auto available = screen() ? screen()->availableGeometry().size() : QSize(1280, 720);
     setMinimumSize(QSize(dp(p_intf, 440), dp(p_intf, 460)).boundedTo(available));
     ui.form->setRowWrapPolicy(width() < dp(p_intf, 650) ? QFormLayout::WrapAllRows : QFormLayout::WrapLongRows);
 }

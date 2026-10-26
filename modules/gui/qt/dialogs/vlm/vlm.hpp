@@ -50,6 +50,7 @@ private:
     QHash<qint64, QHash<QString, int>> states;
     qint64 editingId = -1;
     bool dirty = false, loadingEditor = false, refreshQueued = false, ready = false;
+    QString lastExportPath;
     static int vlmEvent(vlc_object_t*, const char*, vlc_value_t, vlc_value_t, void*);
     bool refresh(qint64 selectId = -1);
     void queueRefresh();
