@@ -32,6 +32,7 @@
 
 #include "qt.hpp"
 #include "dialogs_provider.hpp"
+#include <QStyleOptionButton>
 #include "player/player_controller.hpp" /* Load Subtitles */
 #include "playlist/playlist_controller.hpp"
 #include "menus/menus.hpp"
@@ -445,13 +446,14 @@ private:
     {
         m_buttons->setOrientation(Qt::Horizontal);
         const int available = width() - 2 * dp(24);
-        const bool vertical = m_copy->sizeHint().width() + dp(12) + m_buttons->sizeHint().width() > available;
+        const int copyWidth = qMax(m_copy->minimumWidth(), m_copy->sizeHint().width());
+        const bool vertical = copyWidth + dp(12) + m_buttons->sizeHint().width() > available;
         m_buttons->setOrientation(vertical ? Qt::Vertical : Qt::Horizontal);
         m_actions->setDirection(vertical ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
         int minimum = 0;
         for (auto *button : m_buttons->buttons()) minimum = qMax(minimum, button->sizeHint().width());
         m_buttons->setMinimumWidth(vertical ? minimum : 0);
-        m_footer->setMinimumWidth(qMax(minimum, m_copy->sizeHint().width()));
+        m_footer->setMinimumWidth(qMax(minimum, copyWidth));
     }
     void updateMetrics()
     {
@@ -462,8 +464,16 @@ private:
         m_body->document()->setDocumentMargin(dp(12));
         m_actions->setSpacing(dp(12));
         for (auto *button : m_buttons->buttons()) button->setIcon({});
-        m_copy->setMinimumWidth(qMax(m_copy->fontMetrics().horizontalAdvance(qtr("Copy")),
-            m_copy->fontMetrics().horizontalAdvance(qtr("Copied."))) + dp(32));
+        m_copy->ensurePolished();
+        const auto copy = qtr("Copy"), copied = qtr("Copied.");
+        const auto metrics = m_copy->fontMetrics();
+        const auto copySize = metrics.size(Qt::TextShowMnemonic, copy);
+        const auto copiedSize = metrics.size(Qt::TextShowMnemonic, copied);
+        QStyleOptionButton option;
+        option.initFrom(m_copy);
+        option.text = copySize.width() > copiedSize.width() ? copy : copied;
+        m_copy->setMinimumWidth(m_copy->style()->sizeFromContents(QStyle::CT_PushButton, &option,
+            copySize.expandedTo(copiedSize), m_copy).width());
         m_icon->setVisible(m_iconType != QMessageBox::NoIcon);
         if (m_iconType != QMessageBox::NoIcon)
         {
