@@ -32,4 +32,5 @@ private:
     bool m_validating = false;
     bool m_selectionAccepted = false;
     bool m_selectionError = false;
+    bool m_activationValidated = false;
 };

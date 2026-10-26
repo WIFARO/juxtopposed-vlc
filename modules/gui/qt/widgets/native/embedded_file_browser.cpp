@@ -152,6 +152,7 @@ EmbeddedFileBrowser::EmbeddedFileBrowser(QWidget* parent)
     const auto changed = [this] {
         m_explicitUrls.clear();
         m_selectionError = false;
+        m_activationValidated = false;
         emit selectionChanged();
     };
     if (m_nameEdit) connect(m_nameEdit, &QLineEdit::textChanged, this, changed);
@@ -185,6 +186,7 @@ void EmbeddedFileBrowser::clearSelection()
         }
         m_explicitUrls.clear();
         m_selectionError = false;
+        m_activationValidated = false;
     }
     emit selectionChanged();
 }
@@ -213,6 +215,7 @@ QList<QUrl> EmbeddedFileBrowser::selectedMediaUrls() const
 
 bool EmbeddedFileBrowser::validateSelection()
 {
+    if (m_activationValidated) return true;
     // Dropped URLs are lossless and may span directories or use other schemes.
     if (!m_explicitUrls.isEmpty()) return true;
     if (m_validating) return false;
@@ -246,6 +249,10 @@ bool EmbeddedFileBrowser::validateSelection()
 
 void EmbeddedFileBrowser::accept()
 {
+    // Folder navigation belongs to the chooser even if another host field is
+    // invalid. The host can reuse this validation during the synchronous action.
+    if (!validateSelection()) return;
+    const QScopedValueRollback<bool> activated(m_activationValidated, true);
     emit filesActivated();
 }
 

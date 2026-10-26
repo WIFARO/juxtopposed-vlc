@@ -137,6 +137,29 @@ private slots:
         QCOMPARE(activated.size(), 0);
         QVERIFY(browser.selectedMediaUrls().isEmpty());
     }
+    void validatingHostReceivesOneFileSelection()
+    {
+        QWidget host;
+        QVBoxLayout layout(&host);
+        EmbeddedFileBrowser browser(&host);
+        layout.addWidget(&browser);
+        browser.setDirectory(directory.path());
+        host.resize(800, 600); host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
+        QTRY_VERIFY(clickFile(browser, QStringLiteral("First file.mkv")));
+        QSignalSpy selected(&browser, &QFileDialog::filesSelected);
+        QSignalSpy activated(&browser, &EmbeddedFileBrowser::filesActivated);
+        int accepted = 0;
+        connect(&browser, &EmbeddedFileBrowser::filesActivated, &host, [&] {
+            if (browser.validateSelection()) ++accepted;
+        });
+        QVERIFY(QMetaObject::invokeMethod(&browser, "accept"));
+        QCOMPARE(activated.size(), 1);
+        QCOMPARE(accepted, 1);
+        QCOMPARE(selected.size(), 1);
+        QCOMPARE(selected.first().first().toStringList(), QStringList{directory.filePath("First file.mkv")});
+        QVERIFY(browser.isVisible());
+    }
     void droppedUrlsStayLosslessUntilTheUserChoosesAnotherFile()
     {
         QWidget host;
