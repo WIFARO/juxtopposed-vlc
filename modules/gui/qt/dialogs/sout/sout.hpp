@@ -52,9 +52,12 @@ public:
 protected:
     void done(int) override;
     bool validateCurrentPage() override;
+    bool eventFilter(QObject *, QEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
 private:
     Ui::Sout ui;
     void retranslate();
+    void ensureFocusVisible();
 
     QString chain;
     QString sourceMRL;

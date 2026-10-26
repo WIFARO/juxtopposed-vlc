@@ -39,6 +39,8 @@
 
 #include <cassert>
 #include <QWindow>
+#include <QApplication>
+#include <QTimer>
 #include <QStyle>
 #include <QSignalBlocker>
 #include <QScrollArea>
@@ -115,6 +117,11 @@ SoutDialog::SoutDialog( QWindow *parent, qt_intf_t *_p_intf, const QString& inpu
     ui.verticalLayout_2->insertWidget(2, customOptions);
     ui.groupBox_4->hide();
     ui.mrlEdit->setReadOnly(true);
+    ui.mrlEdit->setTabChangesFocus(true);
+    connect(ui.mrlEdit, &QTextEdit::cursorPositionChanged, this, [this] {
+        // Let the text editor finish scrolling before adjusting the page.
+        QTimer::singleShot(0, this, &SoutDialog::ensureFocusVisible);
+    });
     ui.verticalLayout->addStretch();
     ui.verticalLayout_3->addStretch();
     ui.verticalLayout_2->addStretch();
@@ -123,7 +130,10 @@ SoutDialog::SoutDialog( QWindow *parent, qt_intf_t *_p_intf, const QString& inpu
         ui.groupBox_4->setVisible(custom);
         ui.mrlEdit->setReadOnly(!custom);
         if (!custom) updateChain();
-        else updateStatus();
+        else {
+            updateStatus();
+            ui.mrlEdit->setFocus(Qt::OtherFocusReason);
+        }
     });
     connect(ui.mrlEdit, &QTextEdit::textChanged, this, &SoutDialog::updateStatus);
     connect(this, &QWizard::currentIdChanged, this, [this] { updateChain(); });
@@ -187,6 +197,53 @@ SoutDialog::SoutDialog( QWindow *parent, qt_intf_t *_p_intf, const QString& inpu
     updateChain();
     if (auto* translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, &SoutDialog::retranslate);
+    for (auto *widget : findChildren<QWidget*>()) widget->installEventFilter(this);
+    setTabOrder(ui.soutAll, customOptions);
+    setTabOrder(customOptions, ui.mrlEdit);
+    setTabOrder(ui.mrlEdit, button(QWizard::BackButton));
+    setTabOrder(button(QWizard::BackButton), button(QWizard::NextButton));
+    setTabOrder(button(QWizard::NextButton), button(QWizard::FinishButton));
+    setTabOrder(button(QWizard::FinishButton), button(QWizard::CancelButton));
+}
+
+bool SoutDialog::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::FocusIn
+        || (event->type() == QEvent::Resize && watched == ui.mrlEdit->viewport()))
+        QTimer::singleShot(0, this, &SoutDialog::ensureFocusVisible);
+    return QWizard::eventFilter(watched, event);
+}
+
+void SoutDialog::resizeEvent(QResizeEvent *event)
+{
+    QWizard::resizeEvent(event);
+    QTimer::singleShot(0, this, &SoutDialog::ensureFocusVisible);
+}
+
+void SoutDialog::ensureFocusVisible()
+{
+    auto *widget = QApplication::focusWidget();
+    if (!isVisible() || !widget || !isAncestorOf(widget)) return;
+    QScrollArea *scroll = nullptr;
+    for (auto *parent = widget->parentWidget(); parent && parent != this; parent = parent->parentWidget())
+        if ((scroll = qobject_cast<QScrollArea*>(parent))) break;
+    if (!scroll || !scroll->widget()->isAncestorOf(widget)) return;
+    const auto dp = [this](int n) { return qRound(n * p_intf->p_mi->getIntfScaleFactor()); };
+    QRect rect(widget->mapTo(scroll->widget(), QPoint()), widget->size());
+    if (auto *editor = qobject_cast<QTextEdit*>(widget)) {
+        editor->ensureCursorVisible();
+        if (editor->height() > scroll->viewport()->height()) {
+            rect = editor->cursorRect();
+            rect.moveTopLeft(editor->viewport()->mapTo(scroll->widget(), rect.topLeft()));
+        }
+    } else if (qobject_cast<QGroupBox*>(widget)) {
+        // Focus belongs to the title, rather than the expanded group contents.
+        rect.setHeight(widget->fontMetrics().height() + dp(12));
+    }
+    const auto viewport = scroll->viewport()->size();
+    scroll->ensureVisible(rect.center().x(), rect.center().y(),
+        qMin(rect.width() / 2 + dp(6), viewport.width() / 2),
+        qMin(rect.height() / 2 + dp(6), viewport.height() / 2));
 }
 
 void SoutDialog::retranslate()
@@ -316,6 +373,7 @@ void SoutDialog::addDest( )
                 if (auto *label = qobject_cast<QLabel *>(left->widget())) label->setBuddy(right->widget());
         }
     }
+    for (auto *widget : db->findChildren<QWidget*>()) widget->installEventFilter(this);
     if (auto *field = db->findChild<QLineEdit *>()) field->setFocus();
     updateChain();
 }
@@ -505,4 +563,5 @@ void SoutDialog::updateStatus()
     if (customOptions->isChecked())
         review->setText(qtr("Custom output options replace the destination and format settings. Check the options below before you start."));
     else review->setText(lines.join(QStringLiteral("\n\n")));
+    QTimer::singleShot(0, this, &SoutDialog::ensureFocusVisible);
 }
