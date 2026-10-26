@@ -56,6 +56,7 @@ private:
     void queueRefresh();
     void updateText();
     void updateMetrics();
+    void ensureEditorFocusVisible();
     void filterRows();
     void updateActions();
     QString validationError() const;

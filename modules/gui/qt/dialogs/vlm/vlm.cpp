@@ -42,6 +42,7 @@
 #include <QResizeEvent>
 #include <QSaveFile>
 #include <QScreen>
+#include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QTimer>
@@ -116,6 +117,13 @@ VLMDialog::VLMDialog(qt_intf_t *intf) : QVLCFrame(intf)
     ui.feedback->setTextInteractionFlags(Qt::TextSelectableByMouse);
     ui.inputLayout->setContentsMargins(0, 0, 0, 0);
     ui.outputLayout->setContentsMargins(0, 0, 0, 0);
+    for (auto *edit : {ui.inputsText, ui.optionsText}) {
+        edit->setTabChangesFocus(true);
+        connect(edit, &QPlainTextEdit::cursorPositionChanged, this, [this] {
+            // Wait for the text editor to finish scrolling its own viewport.
+            QTimer::singleShot(0, this, &VLMDialog::ensureEditorFocusVisible);
+        });
+    }
     ui.editorActions->setStretch(0, 1);
     ui.broadcasts->setColumnCount(5);
     ui.broadcasts->verticalHeader()->hide();
@@ -492,6 +500,30 @@ void VLMDialog::updateMetrics()
     ui.broadcasts->setColumnHidden(4, width() < dp(p_intf, 720));
     setMinimumSize(QSize(dp(p_intf, 440), dp(p_intf, 460)).boundedTo(available));
     ui.form->setRowWrapPolicy(width() < dp(p_intf, 650) ? QFormLayout::WrapAllRows : QFormLayout::WrapLongRows);
+    QTimer::singleShot(0, this, &VLMDialog::ensureEditorFocusVisible);
+}
+void VLMDialog::ensureEditorFocusVisible()
+{
+    auto *widget = focusWidget();
+    if (!isVisible() || !widget || !ui.editorBody->isAncestorOf(widget)) return;
+    QRect rect;
+    if (auto *edit = qobject_cast<QPlainTextEdit*>(widget)) {
+        if (edit->height() + dp(p_intf, 12) <= ui.editorScroll->viewport()->height())
+            rect = QRect(edit->mapTo(ui.editorBody, QPoint()), edit->size());
+        else {
+            rect = edit->cursorRect();
+            rect.moveTopLeft(edit->viewport()->mapTo(ui.editorBody, rect.topLeft()));
+        }
+    } else {
+        rect = QRect(widget->mapTo(ui.editorBody, QPoint()), widget->size());
+        // A checkable group needs its title in view, even when it is expanded.
+        if (qobject_cast<QGroupBox*>(widget))
+            rect.setHeight(widget->fontMetrics().height() + dp(p_intf, 12));
+    }
+    const auto viewport = ui.editorScroll->viewport()->size();
+    ui.editorScroll->ensureVisible(rect.center().x(), rect.center().y(),
+        qMin(rect.width() / 2 + dp(p_intf, 6), viewport.width() / 2),
+        qMin(rect.height() / 2 + dp(p_intf, 6), viewport.height() / 2));
 }
 void VLMDialog::resizeEvent(QResizeEvent *event) { QVLCFrame::resizeEvent(event); if (ready) updateMetrics(); }
 void VLMDialog::toggleVisible() { refresh(); QVLCFrame::toggleVisible(); }
@@ -503,6 +535,8 @@ void VLMDialog::keyPressEvent(QKeyEvent *event)
 }
 bool VLMDialog::eventFilter(QObject *watched, QEvent *event)
 {
+    if (event->type() == QEvent::FocusIn)
+        QTimer::singleShot(0, this, &VLMDialog::ensureEditorFocusVisible);
     if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress) {
         auto *key = static_cast<QKeyEvent*>(event);
         const bool find = key->matches(QKeySequence::Find);
