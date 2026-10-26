@@ -67,9 +67,10 @@ private slots:
 private:
     void buildTree( QTreeWidgetItem *, vlc_object_t * );
     void updateActionIcon();
+    void updateMetrics();
 
     QPushButton *updateButton = nullptr;
-    QLabel* m_historyInfo;
+    QLabel* m_historyInfo = nullptr;
     MessageLogBuffer m_pendingMessages;
     QTimer m_logTimer;
     quint64 m_skippedMessages = 0;
@@ -90,6 +91,7 @@ protected:
     void changeEvent(QEvent*) override;
     void showEvent(QShowEvent*) override;
     void hideEvent(QHideEvent*) override;
+    void resizeEvent(QResizeEvent*) override;
 };
 
 #endif

@@ -117,6 +117,12 @@ void EPGWidget::setZoom( int level )
     m_rulerWidget->setScale(scale);
 }
 
+void EPGWidget::setCompact(bool compact)
+{
+    m_epgView->setCompact(compact);
+    m_channelsWidget->update();
+}
+
 void EPGWidget::updateEPG( input_item_t *p_input_item )
 {
     if (!p_input_item) { reset(); return; }

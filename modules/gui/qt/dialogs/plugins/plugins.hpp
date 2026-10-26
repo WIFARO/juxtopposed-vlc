@@ -67,8 +67,10 @@ public:
 protected:
     bool eventFilter(QObject*, QEvent*) override;
     void keyPressEvent(QKeyEvent*) override;
+    void resizeEvent(QResizeEvent*) override;
 private:
     QLineEdit *activeSearch() const;
+    void updateMetrics();
     QTabWidget *tabs;
     PluginTab *pluginTab;
     ExtensionTab *extensionTab;

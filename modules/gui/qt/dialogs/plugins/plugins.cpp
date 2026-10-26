@@ -33,6 +33,7 @@
 #include "util/redesign_widget_theme.hpp"
 #include "util/interface_translator.hpp"
 #include "util/color_scheme_model.hpp"
+#include "util/scroll_focus_tracker.hpp"
 #include "maininterface/mainctx.hpp"
 
 #include <cassert>
@@ -174,6 +175,7 @@ PluginDialog::PluginDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
     heading->setProperty("redesignHeading", true);
     root->addWidget(heading);
     auto *help = new QLabel(this);
+    help->setObjectName(QStringLiteral("pluginHelp"));
     help->setWordWrap(true);
     root->addWidget(help);
     tabs = new QTabWidget(this);
@@ -196,6 +198,8 @@ PluginDialog::PluginDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
         setWindowTitle(qtr("Plugins and extensions"));
         heading->setText(qtr("Plugins and extensions"));
         help->setText(qtr("Manage add-ons, view local extensions, or find a built-in module."));
+        heading->setToolTip(help->text());
+        heading->setAccessibleDescription(help->text());
         tabs->setTabText(0, qtr("Add-ons"));
         tabs->setTabText(1, qtr("Local extensions"));
         tabs->setTabText(2, qtr("Built-in modules"));
@@ -206,18 +210,30 @@ PluginDialog::PluginDialog( qt_intf_t *_p_intf ) : QVLCFrame( _p_intf )
     if (auto *translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, text);
     applyRedesignWidgetTheme(this, p_intf->p_mi);
-    const auto metrics = [this, root] {
-        const int margin = pluginDp(p_intf, 24);
-        root->setContentsMargins(margin, margin, margin, margin);
-        root->setSpacing(pluginDp(p_intf, 12));
-        const auto available = screen() ? screen()->availableGeometry().size() : QSize(1280, 720);
-        setMinimumSize(QSize(pluginDp(p_intf, 400), pluginDp(p_intf, 460)).boundedTo(available));
-    };
-    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, metrics);
-    metrics();
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &PluginDialog::updateMetrics);
+    updateMetrics();
     restoreWidgetPosition("PluginsDialog", QSize(pluginDp(p_intf, 740), pluginDp(p_intf, 620)));
     if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
     for (auto *child : findChildren<QWidget*>()) child->installEventFilter(this);
+    trackScrollFocus(this, p_intf->p_mi);
+}
+
+void PluginDialog::updateMetrics()
+{
+    // Reserve room for the active form before the optional introduction.
+    const bool compact = height() < pluginDp(p_intf, 520);
+    const int margin = pluginDp(p_intf, compact ? 16 : 24);
+    layout()->setContentsMargins(margin, margin, margin, margin);
+    layout()->setSpacing(pluginDp(p_intf, compact ? 8 : 12));
+    findChild<QLabel*>(QStringLiteral("pluginHelp"))->setVisible(!compact);
+    const auto available = screen() ? screen()->availableGeometry().size() : QSize(1280, 720);
+    setMinimumSize(QSize(pluginDp(p_intf, 400), pluginDp(p_intf, 460)).boundedTo(available));
+}
+
+void PluginDialog::resizeEvent(QResizeEvent *event)
+{
+    QVLCFrame::resizeEvent(event);
+    updateMetrics();
 }
 
 QLineEdit *PluginDialog::activeSearch() const
@@ -241,7 +257,20 @@ bool PluginDialog::eventFilter(QObject *watched, QEvent *event)
             if (event->type() == QEvent::KeyPress)
             {
                 if (activate) button->click();
-                else if (find) { search->setFocus(); search->selectAll(); }
+                else if (find) {
+                    search->setFocus();
+                    search->selectAll();
+                    // Focus may already be in a search scrolled out of view.
+                    for (auto *parent = search->parentWidget(); parent && parent != this; parent = parent->parentWidget())
+                        if (auto *scroll = qobject_cast<QScrollArea*>(parent)) {
+                            // Reveal the full field, including its focus border.
+                            const QRect rect(search->mapTo(scroll->widget(), QPoint()), search->size());
+                            const int margin = pluginDp(p_intf, 6);
+                            scroll->ensureVisible(rect.center().x(), rect.center().y(),
+                                qMin(rect.width() / 2 + margin, scroll->viewport()->width() / 2),
+                                qMin(rect.height() / 2 + margin, scroll->viewport()->height() / 2));
+                        }
+                }
                 else search->clear();
             }
             key->accept();

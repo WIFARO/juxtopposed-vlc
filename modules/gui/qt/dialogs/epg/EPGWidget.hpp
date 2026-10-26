@@ -59,6 +59,7 @@ public slots:
     void goToNow();
     void setAccent(const QColor &);
     void activateSelectedProgram();
+    void setCompact(bool);
 
 protected:
     void changeEvent(QEvent *) override;

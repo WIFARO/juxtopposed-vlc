@@ -31,6 +31,7 @@ class QTimer;
 class EPGItem;
 class EPGWidget;
 class QPushButton;
+class QScrollArea;
 
 class EpgDialog : public QVLCFrame
 {
@@ -43,6 +44,7 @@ public:
 protected:
     void showEvent(QShowEvent * event) override;
     void hideEvent(QHideEvent * event) override;
+    void resizeEvent(QResizeEvent *) override;
 
     EPGWidget *epg;
     QTextEdit *description;
@@ -59,6 +61,8 @@ protected:
     int zoomLevel = 2;
     EPGItem *displayedItem = nullptr;
     QTimer *timer;
+    QScrollArea *detailsScroll = nullptr;
+    void updateMetrics();
 
 private slots:
     void scheduleUpdate();

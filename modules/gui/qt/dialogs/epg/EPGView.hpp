@@ -63,7 +63,13 @@ public:
     void            cleanup();
     bool            hasValidData() const;
     void            activateProgram( int );
-    int             trackHeight() const { return fontMetrics().height() * 4 + 12; }
+    int             trackHeight() const
+    {
+        const int height = fontMetrics().height();
+        return m_compact ? height + qRound(20 * qMax(1., height / 17.)) + 2 : height * 4 + 12;
+    }
+    bool            isCompact() const { return m_compact; }
+    void            setCompact(bool);
     EPGItem *       selectedItem() const { return m_selectedItem; }
     void            goToNow();
     QColor          accentColor() const { return m_accent.isValid() ? m_accent : palette().color(QPalette::Highlight); }
@@ -76,6 +82,7 @@ signals:
     void            programActivated( int );
 
 protected:
+    bool m_compact = false;
     void            changeEvent(QEvent *) override;
     void            keyPressEvent(QKeyEvent *) override;
     void            mousePressEvent(QMouseEvent *) override;

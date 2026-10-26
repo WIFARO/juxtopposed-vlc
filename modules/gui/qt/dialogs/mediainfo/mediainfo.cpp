@@ -30,6 +30,7 @@
 #include "maininterface/mainctx.hpp"
 #include "util/redesign_widget_theme.hpp"
 #include "util/interface_translator.hpp"
+#include "util/scroll_focus_tracker.hpp"
 
 #include <vlc_url.h>
 
@@ -99,6 +100,7 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
     layout->addWidget( infoTabW, 1 );
 
     auto *locationLayout = new QHBoxLayout;
+    locationLayout->setObjectName(QStringLiteral("mediaInfoLocationRow"));
     auto *uriLabel = new QLabel( qtr("Location:"), this );
     uriLine = new QLineEdit( this );
     uriLine->setObjectName( "mediaInfoLocation" );
@@ -109,6 +111,7 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
     layout->addLayout( locationLayout );
 
     auto *actions = new QHBoxLayout;
+    actions->setObjectName(QStringLiteral("mediaInfoActions"));
     editingStatus = new QLabel( this );
     editingStatus->setObjectName( "metadataEditStatus" );
     editingStatus->setWordWrap( true );
@@ -196,23 +199,10 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
         connect(translator, &InterfaceTranslator::languageChanged, this, translate);
 
     applyRedesignWidgetTheme(this, p_intf->p_mi);
-    const auto scaleLayout = [this, layout, locationLayout, actions] {
-        const auto dp = [this](int value) { return qRound(value * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.)); };
-        layout->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
-        layout->setSpacing(dp(16));
-        locationLayout->setSpacing(dp(8));
-        actions->setSpacing(dp(8));
-        uriLine->setFixedHeight(dp(37));
-        for (auto *button : {saveMetaButton, closeButton})
-        {
-            button->setFixedHeight(dp(32));
-            button->setMinimumWidth(dp(100));
-        }
-        for (auto *panel : {static_cast<QWidget *>(EMP), static_cast<QWidget *>(IP), static_cast<QWidget *>(ISP)})
-            if (panel && panel->layout()) panel->layout()->setContentsMargins(0, dp(16), 0, 0);
-    };
-    scaleLayout();
-    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, scaleLayout);
+    layoutReady = true;
+    updateMetrics();
+    trackScrollFocus(this, p_intf->p_mi);
+    if (p_intf->p_mi) connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, &MediaInfoDialog::updateMetrics);
     const double factor = p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.;
     QSize initial(qRound(760 * factor), qRound(860 * factor));
     if (screen()) initial = initial.boundedTo(screen()->availableGeometry().size() - QSize(32, 32));
@@ -222,6 +212,31 @@ MediaInfoDialog::MediaInfoDialog(qt_intf_t *_p_intf,
 MediaInfoDialog::~MediaInfoDialog()
 {
     saveWidgetPosition( "Mediainfo" );
+}
+
+void MediaInfoDialog::updateMetrics()
+{
+    if (!layoutReady) return;
+    const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.)); };
+    const bool compact = height() < dp(700);
+    const int margin = dp(compact ? 16 : 24);
+    layout()->setContentsMargins(margin, margin, margin, margin);
+    layout()->setSpacing(dp(compact ? 8 : 16));
+    findChild<QHBoxLayout*>(QStringLiteral("mediaInfoLocationRow"))->setSpacing(dp(8));
+    findChild<QHBoxLayout*>(QStringLiteral("mediaInfoActions"))->setSpacing(dp(8));
+    uriLine->setFixedHeight(dp(37));
+    for (auto *button : {saveMetaButton, closeButton}) {
+        button->setFixedHeight(dp(32));
+        button->setMinimumWidth(dp(100));
+    }
+    for (auto *panel : {static_cast<QWidget *>(EMP), static_cast<QWidget *>(IP), static_cast<QWidget *>(ISP)})
+        if (panel && panel->layout()) panel->layout()->setContentsMargins(0, dp(compact ? 8 : 16), 0, 0);
+}
+
+void MediaInfoDialog::resizeEvent(QResizeEvent *event)
+{
+    QVLCFrame::resizeEvent(event);
+    updateMetrics();
 }
 
 void MediaInfoDialog::showTab( panel i_tab = META_PANEL )

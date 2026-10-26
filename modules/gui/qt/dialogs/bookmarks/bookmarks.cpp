@@ -215,10 +215,9 @@ BookmarksDialog::BookmarksDialog(qt_intf_t *intf) : QVLCFrame(intf)
     if (auto *translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, &BookmarksDialog::retranslate);
     applyRedesignWidgetTheme(this, p_intf->p_mi);
-    const auto scale = [this, layout, actions, footer, confirmLayout, confirmActions] {
+    const auto scale = [this, actions, footer, confirmLayout, confirmActions] {
         const auto dp = [this](int value) { return qRound(value * p_intf->p_mi->getIntfScaleFactor()); };
-        layout->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
-        layout->setSpacing(dp(12));
+        updateMetrics();
         for (auto *row : {actions, footer, confirmActions}) row->setSpacing(dp(8));
         confirmLayout->setContentsMargins(0, 0, 0, 0);
         confirmLayout->setSpacing(dp(8));
@@ -237,11 +236,31 @@ BookmarksDialog::~BookmarksDialog()
     saveWidgetPosition("Bookmarks");
 }
 
+void BookmarksDialog::updateMetrics()
+{
+    if (!help) return;
+    const auto dp = [this](int n) { return qRound(n * p_intf->p_mi->getIntfScaleFactor()); };
+    const bool compact = height() < dp(520);
+    const int margin = dp(compact ? 16 : 24);
+    layout()->setContentsMargins(margin, margin, margin, margin);
+    layout()->setSpacing(dp(compact ? 8 : 12));
+    help->setVisible(!compact);
+    heading->setToolTip(help->text());
+    heading->setAccessibleDescription(help->text());
+}
+
+void BookmarksDialog::resizeEvent(QResizeEvent *event)
+{
+    QVLCFrame::resizeEvent(event);
+    updateMetrics();
+}
+
 void BookmarksDialog::retranslate()
 {
     setWindowTitle(qtr("Bookmark details"));
     heading->setText(qtr("Bookmark details"));
     help->setText(qtr("Add a bookmark at the current time. Edit its name or description. Changes are saved automatically."));
+    updateMetrics();
     addButton->setText(qtr("&Add at current time"));
     addButton->setToolTip(qtr("Add a bookmark here. Insert also adds a bookmark when the list has focus."));
     goButton->setText(qtr("&Go to"));

@@ -112,6 +112,16 @@ void EPGView::setScale( double scaleFactor )
     centerOn(center);
 }
 
+void EPGView::setCompact(bool compact)
+{
+    if (m_compact == compact) return;
+    m_compact = compact;
+    for (auto *program : programs) program->updateEventPos();
+    walkItems(false);
+    if (m_selectedItem) ensureVisible(m_selectedItem, 0, 0);
+    viewport()->update();
+}
+
 const QDateTime& EPGView::startTime() const
 {
     return m_startTime;
@@ -301,7 +311,8 @@ void EPGView::keyPressEvent(QKeyEvent *event)
         {
             best->setFocus(Qt::TabFocusReason);
             focusItem(best);
-            ensureVisible(best);
+            const int margin = qBound(0, (viewport()->height() - trackHeight()) / 2, 8);
+            ensureVisible(best, 50, margin);
         }
         event->accept();
         return;

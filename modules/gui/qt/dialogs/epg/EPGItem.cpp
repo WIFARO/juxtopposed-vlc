@@ -78,6 +78,7 @@ void EPGItem::paint( QPainter *painter, const QStyleOptionGraphicsItem *option, 
     const auto metrics = painter->fontMetrics();
     painter->setPen(colors.color(QPalette::Text));
     painter->drawText(mapped, Qt::AlignTop | Qt::AlignLeft, metrics.elidedText(m_name, Qt::ElideRight, qMax(0, qFloor(mapped.width()))));
+    if (m_view->isCompact()) { painter->restore(); return; }
     mapped.adjust(0, metrics.height() + 4 * scale, 0, 0);
     painter->setPen(colors.color(QPalette::WindowText));
     const QLocale locale;

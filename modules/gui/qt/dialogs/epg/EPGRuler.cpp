@@ -37,7 +37,7 @@ EPGRuler::EPGRuler( QWidget* parent )
     : QWidget( parent )
 {
     setContentsMargins( 0, 0, 0, 0 );
-    setFixedHeight(fontMetrics().height() * 2 + 8);
+    setFixedHeight(fontMetrics().height() + 8);
     m_offset = 0;
     m_scale = 1.0;
 }
@@ -71,7 +71,7 @@ void EPGRuler::setOffset( int offset )
 void EPGRuler::changeEvent(QEvent *event)
 {
     QWidget::changeEvent(event);
-    if (event->type() == QEvent::FontChange) setFixedHeight(fontMetrics().height() * 2 + 8);
+    if (event->type() == QEvent::FontChange) setFixedHeight(fontMetrics().height() + 8);
 }
 
 void EPGRuler::paintEvent(QPaintEvent *)

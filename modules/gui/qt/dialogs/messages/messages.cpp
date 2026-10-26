@@ -139,9 +139,7 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
     if (p_intf->p_mi)
         connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, [this] {
             updateActionIcon();
-            const auto dp = [this](int v) { return qRound(v * p_intf->p_mi->getIntfScaleFactor()); };
-            layout()->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
-            layout()->setSpacing(dp(12));
+            updateMetrics();
         });
 
     BUTTONACT( updateButton, &MessagesDialog::updateOrClear );
@@ -167,12 +165,12 @@ MessagesDialog::MessagesDialog( qt_intf_t *_p_intf)
             retranslatePLTree();
 #endif
             tabChanged(ui.mainTab->currentIndex());
+            updateMetrics();
         });
 
     /* General action */
     const auto dp = [this](int v) { return qRound(v * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
-    layout()->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
-    layout()->setSpacing(dp(12));
+    updateMetrics();
     restoreWidgetPosition("Messages", QSize(dp(760), dp(600)));
     if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
     setTabOrder(ui.verbosityBox, ui.filterEdit);
@@ -314,7 +312,29 @@ void MessagesDialog::updateHistoryInfo()
 void MessagesDialog::showEvent(QShowEvent* event)
 {
     QVLCFrame::showEvent(event);
+    updateMetrics();
+    layout()->activate();
+    if (screen()) resize(size().boundedTo(screen()->availableGeometry().size()));
     tabChanged(ui.mainTab->currentIndex());
+}
+
+void MessagesDialog::updateMetrics()
+{
+    if (!m_historyInfo) return;
+    const auto dp = [this](int v) { return qRound(v * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1.)); };
+    const bool compact = height() < dp(520);
+    const int margin = dp(compact ? 16 : 24);
+    layout()->setContentsMargins(margin, margin, margin, margin);
+    layout()->setSpacing(dp(compact ? 8 : 12));
+    ui.messagesHelp->setVisible(!compact);
+    ui.messagesHeading->setToolTip(ui.messagesHelp->text());
+    ui.messagesHeading->setAccessibleDescription(ui.messagesHelp->text());
+}
+
+void MessagesDialog::resizeEvent(QResizeEvent *event)
+{
+    QVLCFrame::resizeEvent(event);
+    updateMetrics();
 }
 
 void MessagesDialog::hideEvent(QHideEvent* event)

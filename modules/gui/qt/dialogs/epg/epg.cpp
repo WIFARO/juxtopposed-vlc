@@ -40,12 +40,14 @@
 #include <QDateTime>
 #include <QLocale>
 #include <QScreen>
+#include <QScrollArea>
 
 #include "qt.hpp"
 #include "player/player_controller.hpp"
 #include "maininterface/mainctx.hpp"
 #include "util/interface_translator.hpp"
 #include "util/redesign_widget_theme.hpp"
+#include "util/scroll_focus_tracker.hpp"
 
 EpgDialog::EpgDialog(qt_intf_t *intf) : QVLCFrame(intf)
 {
@@ -80,7 +82,12 @@ EpgDialog::EpgDialog(qt_intf_t *intf) : QVLCFrame(intf)
     splitter->setObjectName(QStringLiteral("guideSplitter"));
     splitter->setChildrenCollapsible(false);
     splitter->addWidget(epg);
-    auto *details = new QWidget(splitter);
+    detailsScroll = new QScrollArea(splitter);
+    detailsScroll->setObjectName(QStringLiteral("guideDetailsScroll"));
+    detailsScroll->setFrameShape(QFrame::NoFrame);
+    detailsScroll->setWidgetResizable(true);
+    detailsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    auto *details = new QWidget(detailsScroll);
     auto *detailLayout = new QVBoxLayout(details);
     detailLayout->setContentsMargins(0, 0, 0, 0);
     title = new QLabel(details);
@@ -99,7 +106,8 @@ EpgDialog::EpgDialog(qt_intf_t *intf) : QVLCFrame(intf)
     detailLayout->addWidget(title);
     detailLayout->addWidget(time);
     detailLayout->addWidget(description, 1);
-    splitter->addWidget(details);
+    detailsScroll->setWidget(details);
+    splitter->addWidget(detailsScroll);
     splitter->setStretchFactor(0, 3);
     splitter->setStretchFactor(1, 1);
     layout->addWidget(splitter, 1);
@@ -140,19 +148,16 @@ EpgDialog::EpgDialog(qt_intf_t *intf) : QVLCFrame(intf)
     if (auto *translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, &EpgDialog::retranslate);
     applyRedesignWidgetTheme(this, p_intf->p_mi);
-    const auto scaleLayout = [this, layout, tools, actions, detailLayout, splitter] {
+    const auto scaleLayout = [this, tools, actions, detailLayout, splitter] {
         const auto dp = [this](int value) { return qRound(value * p_intf->p_mi->getIntfScaleFactor()); };
-        layout->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
-        layout->setSpacing(dp(12));
         tools->setSpacing(dp(8));
         actions->setSpacing(dp(8));
-        detailLayout->setSpacing(dp(8));
         splitter->setHandleWidth(dp(12));
-        epg->setMinimumHeight(dp(120));
         description->setMinimumHeight(dp(72));
         for (auto *button : {nowButton, zoomOut, zoomIn, switchButton, closeButton}) button->setFixedHeight(dp(32));
         for (auto *button : {zoomOut, zoomIn}) button->setFixedWidth(dp(32));
         epg->setZoom(zoomLevel);
+        updateMetrics();
     };
     const auto accent = [this] { epg->setAccent(p_intf->p_mi->redesignAccent()); };
     accent();
@@ -161,6 +166,7 @@ EpgDialog::EpgDialog(qt_intf_t *intf) : QVLCFrame(intf)
     connect(p_intf->p_mi, &MainCtx::intfScaleFactorChanged, this, scaleLayout);
     retranslate();
     updateInfos();
+    trackScrollFocus(this, p_intf->p_mi);
     const double factor = p_intf->p_mi->getIntfScaleFactor();
     QSize initial(qRound(880 * factor), qRound(650 * factor));
     if (screen()) initial = initial.boundedTo(screen()->availableGeometry().size() - QSize(32, 32));
@@ -177,6 +183,8 @@ void EpgDialog::retranslate()
     setWindowTitle(qtr("Program Guide"));
     heading->setText(qtr("Program guide"));
     help->setText(qtr("Select a program to see its details. Double-click to switch channels."));
+    heading->setToolTip(help->text());
+    heading->setAccessibleDescription(help->text());
     nowButton->setText(qtr("Now"));
     nowButton->setToolTip(qtr("Show the current time"));
     zoomLabel->setText(qtr("Zoom"));
@@ -194,6 +202,27 @@ void EpgDialog::showEvent(QShowEvent *event)
 {
     QVLCFrame::showEvent(event);
     updateInfos();
+}
+
+void EpgDialog::updateMetrics()
+{
+    if (!detailsScroll) return;
+    const auto dp = [this](int n) { return qRound(n * p_intf->p_mi->getIntfScaleFactor()); };
+    const bool compact = height() < dp(650);
+    const int margin = dp(compact ? 14 : 24);
+    layout()->setContentsMargins(margin, margin, margin, margin);
+    layout()->setSpacing(dp(compact ? 6 : 12));
+    help->setVisible(!compact);
+    epg->setMinimumHeight(dp(compact ? 80 : 120));
+    epg->setCompact(compact);
+    detailsScroll->widget()->layout()->setSpacing(dp(compact ? 4 : 8));
+    detailsScroll->setMinimumHeight(dp(compact ? 72 : 128));
+}
+
+void EpgDialog::resizeEvent(QResizeEvent *event)
+{
+    QVLCFrame::resizeEvent(event);
+    updateMetrics();
 }
 
 void EpgDialog::hideEvent(QHideEvent *event)

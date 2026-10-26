@@ -25,6 +25,7 @@
 #include <QApplication>
 #include <QKeyEvent>
 #include <QStyle>
+#include <QLayout>
 
 #include "qvlcframe.hpp"
 #include "maininterface/compositor.hpp"
@@ -175,10 +176,15 @@ bool QVLCTools::restoreWidgetPosition(QSettings *settings, QWidget *widget,
     if (!widget->restoreGeometry(settings->value("geometry").toByteArray()))
     {
         widget->move(defPos);
-        widget->resize(defSize);
+        // Use the visible size when centering a new window. Shrinking an
+        // oversized default afterwards leaves its old position off-screen.
+        const auto available = widget->screen()->availableGeometry();
+        widget->resize(defSize.boundedTo(available.size()));
+        widget->ensurePolished();
+        if (auto *layout = widget->layout()) layout->activate();
 
         if (defPos.x() == 0 && defPos.y()==0)
-            widget->setGeometry(QStyle::alignedRect(Qt::LeftToRight, Qt::AlignCenter, widget->size(), qApp->primaryScreen()->availableGeometry()));
+            widget->setGeometry(QStyle::alignedRect(Qt::LeftToRight, Qt::AlignCenter, widget->size(), available));
         return true;
     }
     return false;

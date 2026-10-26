@@ -56,6 +56,7 @@ protected:
     void hideEvent( QHideEvent * ) override;
     void keyPressEvent( QKeyEvent * ) override;
     bool event( QEvent * ) override;
+    void resizeEvent(QResizeEvent *) override;
 
 private:
     void cancel() override { close(); }
@@ -63,6 +64,8 @@ private:
     SharedInputItem displayedInput;
     bool inputContextLocked = false;
     void refreshCurrentInput();
+    void updateMetrics();
+    bool layoutReady = false;
 
     QTabWidget *infoTabW;
 

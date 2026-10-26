@@ -51,7 +51,7 @@ private:
     QPushButton *delButton;
     QPushButton *addButton;
     QPushButton *goButton, *editButton, *closeButton, *confirmClear, *cancelClear;
-    QLabel *heading, *help, *source, *empty, *feedback, *clearQuestion;
+    QLabel *heading, *help = nullptr, *source, *empty, *feedback, *clearQuestion;
     QFrame *clearConfirmation;
     QUrl clearUri, pendingUri;
     QSet<qint64> pendingTimes;
@@ -59,12 +59,14 @@ private:
     bool pendingAdd = false;
     bool timeAvailable = false;
     void retranslate();
+    void updateMetrics();
     void selectAdded();
 
 protected:
     bool eventFilter(QObject *, QEvent *) override;
     void keyPressEvent(QKeyEvent *) override;
     void hideEvent(QHideEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
 
     MLBookmarkModel* m_model;
 
