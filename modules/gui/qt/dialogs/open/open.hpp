@@ -35,6 +35,7 @@
 
 /* Auto-generated from .ui files */
 #include "ui_open.h"
+#include <QHash>
 
 class QString;
 
@@ -83,6 +84,7 @@ public slots:
 private:
     QString optionsMRL;
     QString storedMethod;
+    QHash<QString, int> cachingDrafts;
     QStringList itemsMRL;
     const OpenTab source;
     const QString settingsGroup;

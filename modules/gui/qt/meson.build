@@ -509,6 +509,8 @@ qt_plugin_sources = files(
     'util/color_scheme_model.hpp',
     'util/redesign_widget_theme.cpp',
     'util/redesign_widget_theme.hpp',
+    'util/scroll_focus_tracker.cpp',
+    'util/scroll_focus_tracker.hpp',
     'util/playlist_cover_store.hpp',
     'util/track_matching.hpp',
     'util/media_identity.hpp',

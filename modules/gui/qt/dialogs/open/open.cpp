@@ -29,6 +29,7 @@
 #include "util/qt_dirs.hpp"
 #include "maininterface/mainctx.hpp"
 #include "util/redesign_widget_theme.hpp"
+#include "util/scroll_focus_tracker.hpp"
 #include "util/interface_translator.hpp"
 #include "playlist/playlist_controller.hpp"
 
@@ -187,6 +188,7 @@ OpenDialog::OpenDialog(qt_intf_t *_p_intf, QWindow* parent, OpenTab sourceKind)
     ui.stopTimeTimeEdit->setCurrentSection( QDateTimeEdit::SecondSection );
 
     applyRedesignWidgetTheme(this, p_intf->p_mi);
+    trackScrollFocus(this, p_intf->p_mi);
     updateEditorText();
     updateLayoutMetrics();
     const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
@@ -408,10 +410,10 @@ void OpenDialog::browseInputSlave()
 /* Function called on signal currentChanged triggered */
 void OpenDialog::signalCurrent( int )
 {
-    // Let the network form fit the viewport without inheriting the minimum
-    // width of hidden source pages. Other pages keep their scrollable minimum.
-    const auto horizontal = qobject_cast<NetOpenPanel*>(ui.Tab->currentWidget())
-        ? QSizePolicy::Ignored : QSizePolicy::Preferred;
+    // Responsive source forms must not inherit the hidden file picker's
+    // minimum width. The file picker keeps its own scrollable minimum.
+    const auto horizontal = qobject_cast<FileOpenPanel*>(ui.Tab->currentWidget())
+        ? QSizePolicy::Preferred : QSizePolicy::Ignored;
     ui.openSourceContent->setSizePolicy(horizontal, QSizePolicy::Preferred);
     ui.Tab->setSizePolicy(horizontal, QSizePolicy::Preferred);
     updateEditorText();
@@ -598,9 +600,12 @@ void OpenDialog::updateMRL() {
 void OpenDialog::newCachingMethod( const QString& method )
 {
     if( method != storedMethod ) {
+        if (!storedMethod.isEmpty()) cachingDrafts.insert(storedMethod, ui.cacheSpinBox->value());
         storedMethod = method;
-        int i_value = var_InheritInteger( p_intf, qtu( storedMethod ) );
-        ui.cacheSpinBox->setValue( i_value );
+        const auto draft = cachingDrafts.constFind(method);
+        const int value = draft == cachingDrafts.cend()
+            ? var_InheritInteger(p_intf, qtu(method)) : draft.value();
+        ui.cacheSpinBox->setValue(value);
     }
 }
 

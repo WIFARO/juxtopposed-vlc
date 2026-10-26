@@ -347,6 +347,7 @@ libqt_plugin_la_SOURCES = \
 	util/base_model.hpp util/base_model_p.hpp util/base_model.cpp \
 	util/color_scheme_model.cpp util/color_scheme_model.hpp \
 	util/redesign_widget_theme.cpp util/redesign_widget_theme.hpp \
+	util/scroll_focus_tracker.cpp util/scroll_focus_tracker.hpp \
 	util/playlist_cover_store.hpp \
 	util/filter_chain_edit.hpp util/track_matching.hpp util/media_identity.hpp util/media_fingerprint.hpp util/media_identity_vlc.hpp util/media_identity_ml.hpp util/artwork_discovery.hpp util/artwork_store.hpp util/subtitle_matching.hpp \
 	util/local_file_url.hpp \

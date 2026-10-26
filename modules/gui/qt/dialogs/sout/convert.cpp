@@ -29,6 +29,7 @@
 #include "maininterface/mainctx.hpp"
 #include "util/interface_translator.hpp"
 #include "util/redesign_widget_theme.hpp"
+#include "util/scroll_focus_tracker.hpp"
 #include "util/qt_dirs.hpp"
 
 #include <QLabel>
@@ -259,6 +260,7 @@ ConvertDialog::ConvertDialog(QWindow *parent, qt_intf_t *intf, const QStringList
     QSize initial(qRound(760 * factor), qRound(720 * factor));
     if (screen()) initial = initial.boundedTo(screen()->availableGeometry().size() - QSize(32, 32));
     resize(initial);
+    trackScrollFocus(this, p_intf->p_mi);
     fileLine->setFocus();
 }
 
