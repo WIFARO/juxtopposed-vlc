@@ -410,12 +410,10 @@ void OpenDialog::browseInputSlave()
 /* Function called on signal currentChanged triggered */
 void OpenDialog::signalCurrent( int )
 {
-    // Responsive source forms must not inherit the hidden file picker's
-    // minimum width. The file picker keeps its own scrollable minimum.
-    const auto horizontal = qobject_cast<FileOpenPanel*>(ui.Tab->currentWidget())
-        ? QSizePolicy::Preferred : QSizePolicy::Ignored;
-    ui.openSourceContent->setSizePolicy(horizontal, QSizePolicy::Preferred);
-    ui.Tab->setSizePolicy(horizontal, QSizePolicy::Preferred);
+    // Each source fits the viewport without inheriting hidden page widths.
+    // File lists keep their own internal scrollbars.
+    ui.openSourceContent->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    ui.Tab->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     updateEditorText();
     itemsMRL.clear();
     optionsMRL.clear();

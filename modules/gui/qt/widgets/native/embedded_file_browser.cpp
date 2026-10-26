@@ -87,7 +87,10 @@ void EmbeddedFileBrowser::selectUrls(const QList<QUrl>& urls)
 
 QList<QUrl> EmbeddedFileBrowser::selectedMediaUrls() const
 {
-    return m_explicitUrls.isEmpty() ? selectedUrls() : m_explicitUrls;
+    if (!m_explicitUrls.isEmpty()) return m_explicitUrls;
+    // A blank filename must not leave the host with a stale source selection.
+    if (m_nameEdit && m_nameEdit->text().trimmed().isEmpty()) return {};
+    return selectedUrls();
 }
 
 void EmbeddedFileBrowser::accept()

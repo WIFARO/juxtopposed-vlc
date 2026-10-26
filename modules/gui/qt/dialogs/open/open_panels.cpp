@@ -42,6 +42,7 @@
 #include "util/interface_translator.hpp"
 #include "util/colorizedsvgicon.hpp"
 #include "util/redesign_widget_theme.hpp"
+#include "util/scroll_focus_tracker.hpp"
 #include "util/color_scheme_model.hpp"
 #include "widgets/native/embedded_file_browser.hpp"
 #include <vlc_intf_strings.h>
@@ -67,6 +68,7 @@
 #include <QScreen>
 #include <QKeyEvent>
 #include <QApplication>
+#include <QPointer>
 #include <QResizeEvent>
 #include <QStyleHints>
 
@@ -95,6 +97,18 @@ class CaptureOptionsDialog final : public QDialog
 {
 public:
     using QDialog::QDialog;
+    void setContext(MainCtx *context)
+    {
+        ctx = context;
+        scroll = findChild<QScrollArea*>();
+        metrics.setSingleShot(true);
+        connect(&metrics, &QTimer::timeout, this, [this] { updateMetrics(); });
+        if (ctx) connect(ctx, &MainCtx::intfScaleFactorChanged, this, [this] { scheduleMetrics(); });
+        if (scroll) scroll->viewport()->installEventFilter(this);
+        if (scroll && scroll->widget())
+            for (auto *label : scroll->widget()->findChildren<QLabel*>()) label->setWordWrap(true);
+        updateMetrics();
+    }
     void setSearchField(QLineEdit *field)
     {
         search = field;
@@ -104,6 +118,7 @@ public:
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override
     {
+        if (event->type() == QEvent::Resize && scroll && watched == scroll->viewport()) scheduleMetrics();
         if (search && (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress))
         {
             auto *key = static_cast<QKeyEvent*>(event);
@@ -122,6 +137,11 @@ protected:
         }
         return QDialog::eventFilter(watched, event);
     }
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QDialog::resizeEvent(event);
+        scheduleMetrics();
+    }
     void keyPressEvent(QKeyEvent *event) override
     {
         if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
@@ -135,6 +155,37 @@ protected:
     }
 private:
     QLineEdit *search = nullptr;
+    QScrollArea *scroll = nullptr;
+    QPointer<MainCtx> ctx;
+    QTimer metrics;
+
+    void scheduleMetrics()
+    {
+        if (ctx && !metrics.isActive()) metrics.start(0);
+    }
+    void updateMetrics()
+    {
+        if (!ctx) return;
+        const auto dp = [this](int n) { return qRound(n * ctx->getIntfScaleFactor()); };
+        const bool compact = height() < dp(540);
+        const int margin = dp(compact ? 12 : 24);
+        layout()->setContentsMargins(margin, margin, margin, margin);
+        layout()->setSpacing(dp(compact ? 4 : 12));
+        if (!scroll || !scroll->widget()) return;
+        auto *form = scroll->widget();
+        form->layout()->setContentsMargins(dp(6), dp(6), dp(6), dp(6));
+        form->layout()->setSpacing(dp(8));
+        for (auto *spin : form->findChildren<QAbstractSpinBox*>()) {
+            spin->ensurePolished();
+            spin->setFixedWidth(qMax(dp(110), spin->sizeHint().width()));
+        }
+        for (auto *choice : form->findChildren<QComboBox*>()) {
+            choice->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+            choice->setMinimumContentsLength(8);
+            choice->setMinimumWidth(dp(120));
+            choice->setMaximumWidth(dp(260));
+        }
+    }
 };
 
 bool hasScreenCapture()
@@ -157,6 +208,15 @@ Widget* captureText(const char* source, QWidget* parent)
     return widget;
 }
 
+void appendFileItem(QListWidget *list, const QUrl &url)
+{
+    const auto text = toNativeSeparators(url.toDisplayString(
+        QUrl::RemovePassword | QUrl::PreferLocalFile | QUrl::NormalizePathSegments));
+    auto *item = new QListWidgetItem(text, list);
+    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    item->setToolTip(QStringLiteral("<qt>%1</qt>").arg(text.toHtmlEscaped()));
+}
+
 void watchCaptureMode(QComboBox* combo, int row, const char* source)
 {
     const QByteArray text(source);
@@ -176,6 +236,10 @@ FileOpenPanel::FileOpenPanel( QWidget *_parent, qt_intf_t *_p_intf ) :
 {
     /* Classic UI Setup */
     ui.setupUi( this );
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    ui.label->setWordWrap(true);
+    ui.fileListWidg->setTextElideMode(Qt::ElideMiddle);
+    connect(ui.fileListWidg, &QListWidget::itemSelectionChanged, this, &FileOpenPanel::updateButtons);
     if (auto* translator = InterfaceTranslator::instance())
         connect(translator, &InterfaceTranslator::languageChanged, this, [this] {
             ui.retranslateUi(this);
@@ -271,12 +335,8 @@ void FileOpenPanel::dropEvent( QDropEvent *event )
     {
         if( url.isValid() )
         {
-            QListWidgetItem *item = new QListWidgetItem(
-                                         toNativeSeparators( url.toLocalFile() ),
-                                         ui.fileListWidg );
-            item->setFlags( Qt::ItemIsEditable | Qt::ItemIsEnabled );
-            ui.fileListWidg->addItem( item );
             urlList << url;
+            appendFileItem(ui.fileListWidg, url);
         }
     }
     updateMRL();
@@ -291,13 +351,7 @@ void FileOpenPanel::browseFile()
     {
         QUrl url(file);
         urlList << url;
-        QListWidgetItem *item = nullptr;
-        item = new QListWidgetItem(
-            toNativeSeparators( url.toDisplayString(QUrl::RemovePassword | QUrl::PreferLocalFile | QUrl::NormalizePathSegments) ),
-            ui.fileListWidg
-            );
-        item->setFlags( Qt::ItemIsEnabled );
-        ui.fileListWidg->addItem( item );
+        appendFileItem(ui.fileListWidg, url);
         p_intf->p_mi->setDialogFilePath(url);
     }
     updateButtons();
@@ -306,7 +360,8 @@ void FileOpenPanel::browseFile()
 
 void FileOpenPanel::removeFile()
 {
-    int i = ui.fileListWidg->currentRow();
+    const auto selected = ui.fileListWidg->selectedItems();
+    const int i = selected.isEmpty() ? -1 : ui.fileListWidg->row(selected.first());
     if( i != -1 )
     {
         QListWidgetItem *temp = ui.fileListWidg->takeItem( i );
@@ -382,7 +437,7 @@ void FileOpenPanel::clear()
 void FileOpenPanel::updateButtons()
 {
     const bool b_has_files = embedded ? !dialogBox->selectedMediaUrls().isEmpty() : !urlList.empty();
-    ui.removeFileButton->setEnabled( b_has_files );
+    ui.removeFileButton->setEnabled(b_has_files && !ui.fileListWidg->selectedItems().isEmpty());
     ui.subGroupBox->setEnabled( b_has_files );
 }
 
@@ -1939,9 +1994,9 @@ void CaptureOpenPanel::advancedDialog()
             filter();
         });
     applyRedesignWidgetTheme(adv, p_intf->p_mi);
+    optionsDialog->setContext(p_intf->p_mi);
+    trackScrollFocus(adv, p_intf->p_mi);
     const auto dp = [this](int n) { return qRound(n * (p_intf->p_mi ? p_intf->p_mi->getIntfScaleFactor() : 1)); };
-    mainLayout->setContentsMargins(dp(24), dp(24), dp(24), dp(24));
-    mainLayout->setSpacing(dp(12));
     QSize preferred(dp(760), dp(600));
     if (adv->screen()) preferred = preferred.boundedTo(adv->screen()->availableGeometry().size());
     adv->resize(preferred);
