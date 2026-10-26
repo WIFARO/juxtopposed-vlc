@@ -1,16 +1,128 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "embedded_file_browser.hpp"
 
+#include <QAbstractButton>
 #include <QAbstractItemView>
+#include <QApplication>
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QFileSystemModel>
 #include <QItemSelectionModel>
+#include <QKeyEvent>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
+#include <QMessageBox>
+#include <QPointer>
+#include <QScreen>
 #include <QSet>
 #include <QScopedValueRollback>
 #include <QSignalBlocker>
+#include <QStyle>
+#include <QTextBrowser>
+#include <QTextDocument>
+#include <QtMath>
+
+namespace {
+class FileWarningReader final : public QTextBrowser
+{
+public:
+    using QTextBrowser::QTextBrowser;
+
+protected:
+    bool event(QEvent* event) override
+    {
+        if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress) {
+            auto* key = static_cast<QKeyEvent*>(event);
+            if (key->matches(QKeySequence::Copy) || key->matches(QKeySequence::SelectAll)) {
+                if (event->type() == QEvent::KeyPress) {
+                    if (key->matches(QKeySequence::Copy)) copy(); else selectAll();
+                }
+                key->accept();
+                return true;
+            }
+        }
+        return QTextBrowser::event(event);
+    }
+};
+
+class FileWarningTextFilter final : public QObject
+{
+public:
+    explicit FileWarningTextFilter(QWidget* owner) : m_owner(owner)
+    {
+        qApp->installEventFilter(this);
+    }
+
+    ~FileWarningTextFilter() override
+    {
+        if (qApp) qApp->removeEventFilter(this);
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        if (event->type() == QEvent::Polish || event->type() == QEvent::Show) {
+            auto* message = qobject_cast<QMessageBox*>(watched);
+            // These warnings are separate windows, directly parented to the
+            // chooser. QWidget::isAncestorOf stops at window boundaries.
+            if (message && m_owner && message->parentWidget() == m_owner) {
+                if (message->textFormat() != Qt::PlainText)
+                    message->setTextFormat(Qt::PlainText);
+                if (event->type() == QEvent::Show) addReadingArea(message);
+            }
+        }
+        return false;
+    }
+
+private:
+    static void addReadingArea(QMessageBox* message)
+    {
+        if (message->findChild<QTextBrowser*>(QStringLiteral("fileValidationMessage"))) return;
+        for (auto* button : message->buttons()) button->setIcon({});
+        QLabel* label = nullptr;
+        for (auto* candidate : message->findChildren<QLabel*>())
+            if (candidate->text() == message->text()) { label = candidate; break; }
+        if (!label || !message->layout()) return;
+
+        // Keep Qt's validation result and buttons, with the same bounded plain
+        // reading area used by other notices. Long filenames must not be cut.
+        auto* body = new FileWarningReader(message);
+        body->setObjectName(QStringLiteral("fileValidationMessage"));
+        body->setAccessibleName(message->windowTitle());
+        body->setPlainText(message->text());
+        body->setOpenLinks(false);
+        body->setUndoRedoEnabled(false);
+        body->setTabChangesFocus(true);
+        body->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+        body->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+        body->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        body->setStyleSheet(QStringLiteral("QTextBrowser { background: transparent; border: none; padding: 0; }"));
+        body->document()->setDocumentMargin(0);
+        body->ensurePolished();
+        const auto available = message->screen()->availableGeometry().size();
+        const int width = qMax(1, qMin(body->fontMetrics().averageCharWidth() * 36, available.width() * 2 / 3));
+        body->setMinimumWidth(width);
+        QTextDocument measured;
+        measured.setDefaultFont(body->font());
+        measured.setDefaultTextOption(body->document()->defaultTextOption());
+        measured.setDocumentMargin(0);
+        measured.setPlainText(message->text());
+        measured.setTextWidth(qMax(1, width - body->style()->pixelMetric(QStyle::PM_ScrollBarExtent)));
+        const int maximumHeight = qMax(1, available.height() / 2);
+        const int minimumHeight = qMin(maximumHeight, body->fontMetrics().lineSpacing() * 2);
+        body->setFixedHeight(qBound(minimumHeight, qCeil(measured.size().height()) + 2, maximumHeight));
+        auto* previous = message->layout()->replaceWidget(label, body);
+        if (!previous) { delete body; return; }
+        delete previous;
+        label->hide();
+        body->show();
+    }
+
+    QPointer<QWidget> m_owner;
+};
+}
 
 EmbeddedFileBrowser::EmbeddedFileBrowser(QWidget* parent)
     : QFileDialog(parent, Qt::Widget)
@@ -121,6 +233,8 @@ bool EmbeddedFileBrowser::validateSelection()
     }
     // Use the same filename parsing, existence checks and folder navigation for
     // the host buttons as for Return and activation in the file view.
+    // Qt's validation warnings include filenames, which must remain literal.
+    FileWarningTextFilter warningText(this);
     QFileDialog::accept();
     m_selectionError = !m_selectionAccepted && directoryUrl() == previousDirectory
         && m_nameEdit && !m_nameEdit->text().trimmed().isEmpty()
