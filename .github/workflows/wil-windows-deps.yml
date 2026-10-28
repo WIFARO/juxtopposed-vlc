@@ -1,0 +1,62 @@
+name: Wil Windows dependency SDK
+
+on:
+  push:
+    branches: [wil/player-customization]
+    paths: [.github/workflows/wil-windows-deps.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wil-win64-dependencies
+  cancel-in-progress: false
+
+env:
+  JOBS: '4'
+  WINDOWS_BUILD_IMAGE: registry.videolan.org/vlc-debian-win64-posix@sha256:8e83e800036f8f4a6da1031a6b80c2b5bad8337259c072ffa22398baaeaad880
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make room on the disposable runner
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h .
+      - name: Fingerprint dependency inputs
+        id: deps
+        run: python3 extras/package/release/dependency-cache.py key
+      - uses: actions/cache/restore@v4
+        id: restore
+        with:
+          path: ${{ steps.deps.outputs.paths }}
+          key: ${{ steps.deps.outputs.key }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: contrib/tarballs
+          key: ${{ steps.deps.outputs.download_key }}
+          restore-keys: release-win64-downloads-v1-
+      - name: Compile or validate the Windows dependency SDK
+        env:
+          RELEASE_DEPS_CACHE_KEY: ${{ steps.deps.outputs.key }}
+        run: >-
+          docker run --rm --user root -v "$PWD:/src" -w /src -e JOBS
+          -e RELEASE_DEPS_CACHE_KEY
+          -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
+          "$WINDOWS_BUILD_IMAGE"
+          bash extras/package/release/build-windows.sh --dependencies-only
+      - name: Save validated SDK
+        if: steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.deps.outputs.paths }}
+          key: ${{ steps.deps.outputs.key }}
+      - name: Save verified source archives
+        uses: actions/cache/save@v4
+        with:
+          path: contrib/tarballs
+          key: ${{ steps.deps.outputs.download_key }}
