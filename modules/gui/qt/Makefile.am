@@ -1357,6 +1357,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignMenu.qml \
 	player/qml/redesign/RedesignRecentMenuModel.qml \
 	player/qml/redesign/RedesignPlayerView.qml \
+	player/qml/redesign/RedesignPlayerModes.qml \
 	player/qml/redesign/RedesignQueue.qml \
 	player/qml/redesign/RedesignSeekBar.qml \
 	player/qml/redesign/RedesignSeekThumbnail.qml \
@@ -2597,6 +2598,8 @@ endif
 QML_LOG_COMPILER = $(builddir)/qml_test -input
 
 if HAVE_QT_QUICK_TEST
+EXTRA_DIST += tests/tst_WilMinimalView.qml
+TESTS += tests/tst_WilMinimalView.qml
 EXTRA_DIST += tests/tst_RedesignCapture.qml
 TESTS += tests/tst_RedesignCapture.qml
 EXTRA_DIST += tests/tst_RedesignGotoTime.qml

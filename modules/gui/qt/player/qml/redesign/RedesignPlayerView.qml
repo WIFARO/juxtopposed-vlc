@@ -56,13 +56,31 @@ FocusScope {
     readonly property bool autoHideActive: started && hasVideo && (autoHideMode === 2 || (fullscreen && autoHideMode === 1))
     property bool maximized: false
     property bool minimalView: false
+    property var _viewBeforeMinimal: null
     onMinimalViewChanged: {
         if (minimalView) {
+            // Closing panels has side effects (notably collapsing the library).
+            // Capture the whole presentation before changing any of it.
+            _viewBeforeMinimal = {
+                libraryOpen: libraryOpen, libraryExpanded: libraryExpanded,
+                miniPlayerVisible: miniPlayerVisible, queueOpen: queueOpen,
+                episodesOpen: episodesOpen, settingsPage: settingsPage
+            }
             libraryOpen = false
             queueOpen = false
             episodesOpen = false
             settingsPage = ""
             forceActiveFocus()
+        } else if (_viewBeforeMinimal) {
+            const saved = _viewBeforeMinimal
+            _viewBeforeMinimal = null
+            libraryOpen = saved.libraryOpen
+            libraryExpanded = saved.libraryExpanded
+            queueOpen = saved.queueOpen
+            settingsPage = saved.settingsPage
+            episodesOpen = saved.episodesOpen && episodesAvailable
+            // Expansion enables the mini player; restore its visibility last.
+            miniPlayerVisible = saved.miniPlayerVisible
         }
     }
     property bool showWindowButtons: true

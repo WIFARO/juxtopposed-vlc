@@ -727,12 +727,14 @@ FocusScope {
     }
     // VideoSurface continues to provide VLC's native context menu and hotkeys.
     QmlAudioContextMenu { id: audioContextMenu; ctx: MainCtx }
+    RedesignPlayerModes {
+        context: MainCtx
+        presentation: view
+        started: Player.isStarted
+    }
     Connections {
         target: MainCtx
         function onAskShow() { view.revealControls() }
-        function onMainInterfaceModesChanged() {
-            if (!MainCtx.minimalView && !MainCtx.playerView && Player.isStarted) { view.libraryOpen = true; view.libraryExpanded = true }
-        }
     }
     Dialogs {
         z: 10

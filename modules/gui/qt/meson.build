@@ -914,6 +914,7 @@ qml_modules += {
        'player/qml/redesign/RedesignMenu.qml',
        'player/qml/redesign/RedesignRecentMenuModel.qml',
        'player/qml/redesign/RedesignPlayerView.qml',
+       'player/qml/redesign/RedesignPlayerModes.qml',
        'player/qml/redesign/RedesignQueue.qml',
        'player/qml/redesign/RedesignSeekBar.qml',
        'player/qml/redesign/RedesignSeekThumbnail.qml',
@@ -1142,6 +1143,7 @@ qml_modules += {
 }
 
 qml_tests = {
+    'tst_WilMinimalView': files('tests/tst_WilMinimalView.qml'),
     'tst_FSM': files('tests/tst_FSM.qml'),
     'tst_Redesign': files('tests/tst_Redesign.qml'),
     'tst_RedesignMediaFavorite': files('tests/tst_RedesignMediaFavorite.qml'),
