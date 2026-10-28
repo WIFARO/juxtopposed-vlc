@@ -31,6 +31,8 @@ USER32.IsWindowVisible.argtypes = [wintypes.HWND]
 USER32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
 USER32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
 USER32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+USER32.ChildWindowFromPointEx.argtypes = [wintypes.HWND, wintypes.POINT, wintypes.UINT]
+USER32.ChildWindowFromPointEx.restype = wintypes.HWND
 
 
 def main_windows(pid):
@@ -106,21 +108,42 @@ class ContextMenuRegression(unittest.TestCase):
     def topmost(self):
         return bool(USER32.GetWindowLongPtrW(self.hwnd, -20) & 0x00000008)
 
+    def visible_popup_items(self):
+        items = []
+        for window in Desktop(backend='uia').windows(process=self.process.pid, visible_only=True):
+            items.extend(item for item in window.descendants(control_type='MenuItem') if item.is_visible())
+        names = [item.window_text().split('\t')[0].replace('&', '') for item in items]
+        if any(name in ('Play', 'Pause', 'Hide UI', 'Show UI') for name in names):
+            return items
+        return []
+
     def popup_items(self):
+        # Qt's accessibility Invoke activates the QAction without dismissing
+        # its QMenu. Posting another right-click would close that existing menu.
+        existing = self.visible_popup_items()
+        if existing:
+            return existing
         rect = wintypes.RECT()
         self.assertTrue(USER32.GetClientRect(self.hwnd, ctypes.byref(rect)))
         x, y = (rect.right - rect.left) // 2, (rect.bottom - rect.top) // 2
+        # The software compositor hosts QML in a child QQuickView. Its root
+        # forwards drag events, not mouse input. Keep self.hwnd as the root for
+        # actual WS_EX_TOPMOST assertions; route clicks to the visible child.
+        self.mouse_target = USER32.ChildWindowFromPointEx(
+            self.hwnd, wintypes.POINT(x, y), 3) or self.hwnd  # skip hidden/disabled
+        owner = wintypes.DWORD()
+        USER32.GetWindowThreadProcessId(self.mouse_target, ctypes.byref(owner))
+        self.assertEqual(owner.value, self.process.pid, 'Mouse target must belong to the isolated player')
+        self.assertTrue(USER32.GetClientRect(self.mouse_target, ctypes.byref(rect)))
+        x, y = (rect.right - rect.left) // 2, (rect.bottom - rect.top) // 2
         pos = (y << 16) | x
         # Background messages only: no cursor movement or foreground activation.
-        USER32.PostMessageW(self.hwnd, 0x0204, 2, pos)  # WM_RBUTTONDOWN
-        USER32.PostMessageW(self.hwnd, 0x0205, 0, pos)  # WM_RBUTTONUP
+        self.assertTrue(USER32.PostMessageW(self.mouse_target, 0x0204, 2, pos))  # WM_RBUTTONDOWN
+        self.assertTrue(USER32.PostMessageW(self.mouse_target, 0x0205, 0, pos))  # WM_RBUTTONUP
         deadline = time.monotonic() + 8
         while time.monotonic() < deadline:
-            items = []
-            for window in Desktop(backend='uia').windows(process=self.process.pid, visible_only=True):
-                items.extend(window.descendants(control_type='MenuItem'))
-            names = [item.window_text().split('\t')[0].replace('&', '') for item in items]
-            if any(name in ('Play', 'Pause', 'Playback', 'Hide UI', 'Show UI') for name in names):
+            items = self.visible_popup_items()
+            if items:
                 return items
             time.sleep(.1)
         self.fail('Right-click did not expose a menu in the isolated player')
@@ -129,7 +152,8 @@ class ContextMenuRegression(unittest.TestCase):
         self.assertFalse(self.topmost(), 'Isolated player should start non-topmost')
         items = self.popup_items()
         names = [item.window_text().split('\t')[0].replace('&', '') for item in items]
-        evidence = {'pid': self.process.pid, 'hwnd': self.hwnd, 'menu_items': names,
+        evidence = {'pid': self.process.pid, 'hwnd': self.hwnd,
+                    'input_hwnd': getattr(self, 'mouse_target', self.hwnd), 'menu_items': names,
                     'before_topmost': self.topmost()}
         self.output.parent.mkdir(parents=True, exist_ok=True)
         self.output.write_text(json.dumps(evidence, indent=2), encoding='utf-8')
