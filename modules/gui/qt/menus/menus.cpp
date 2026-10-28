@@ -896,6 +896,10 @@ QMenu* VLCMenuBar::RedesignPopupMenu(qt_intf_t* p_intf, bool show)
     updateHide();
     connect(ctx, &MainCtx::mainInterfaceModesChanged, hide, updateHide);
     hotkeys->add(hide, QStringLiteral("Ctrl+H\tCtrl+\\"));
+    auto* alwaysOnTop = new BooleanPropertyAction(qtr("Always on top"), ctx,
+                                                 "interfaceAlwaysOnTop", menu);
+    alwaysOnTop->setObjectName(QStringLiteral("vlcMenuAlwaysOnTop"));
+    menu->addAction(alwaysOnTop);
     menu->addSeparator();
     const auto submenu = [&](const QString& title, const char* icon) {
         auto* child = new QMenu(title, menu);
