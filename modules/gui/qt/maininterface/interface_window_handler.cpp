@@ -233,7 +233,7 @@ bool InterfaceWindowHandler::eventFilter(QObject*, QEvent* event)
 
             if( THEMIM->getPlayingState() == PlayerController::PLAYING_STATE_PLAYING &&
                 THEMIM->hasVideoOutput() && !THEMIM->hasAudioVisualization() &&
-                m_pauseOnMinimize )
+                m_pauseOnMinimize && !m_mainCtx->detachedPipActive() )
             {
                 m_hasPausedWhenMinimized = true;
                 THEMPL->pause();
@@ -401,6 +401,7 @@ void InterfaceWindowHandler::setInterfaceVisible(bool visible, bool _requestActi
 
 void InterfaceWindowHandler::setFullScreen( bool fs )
 {
+    if (fs && m_mainCtx->detachedPipActive() && !m_mainCtx->requestDetachedPip(false)) return;
     WindowStateHolder::holdFullscreen(m_window, WindowStateHolder::INTERFACE, fs);
 }
 

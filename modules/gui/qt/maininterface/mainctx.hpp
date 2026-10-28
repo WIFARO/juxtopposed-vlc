@@ -31,6 +31,7 @@
 #include <QApplication>
 #include <QQuickItem>
 #include <QTimer>
+#include <functional>
 
 Q_MOC_INCLUDE( "dialogs/toolbar/controlbar_profile_model.hpp" )
 Q_MOC_INCLUDE( "util/csdbuttonmodel.hpp" )
@@ -124,6 +125,10 @@ class MainCtx : public QObject
     Q_PROPERTY(int  csdBorderSize READ CSDBorderSize NOTIFY useClientSideDecorationChanged FINAL)
     Q_PROPERTY(bool hasToolbarMenu READ hasToolbarMenu WRITE setHasToolbarMenu NOTIFY hasToolbarMenuChanged FINAL)
     Q_PROPERTY(bool canShowVideoPIP READ canShowVideoPIP CONSTANT FINAL)
+    // Experimental desktop PiP is not the existing in-window card. Only the
+    // DComp backend with explicit --qt-detached-pip registers this capability.
+    Q_PROPERTY(bool detachedPipAvailable READ detachedPipAvailable NOTIFY detachedPipAvailableChanged FINAL)
+    Q_PROPERTY(bool detachedPipActive READ detachedPipActive NOTIFY detachedPipActiveChanged FINAL)
     Q_PROPERTY(bool pinVideoControls READ pinVideoControls WRITE setPinVideoControls NOTIFY pinVideoControlsChanged FINAL)
     Q_PROPERTY(float pinOpacity READ pinOpacity WRITE setPinOpacity NOTIFY pinOpacityChanged FINAL)
     Q_PROPERTY(ControlbarProfileModel* controlbarProfileModel READ controlbarProfileModel CONSTANT FINAL)
@@ -263,6 +268,13 @@ public:
     inline bool hasToolbarMenu() const { return m_hasToolbarMenu; }
     inline bool canShowVideoPIP() const { return m_canShowVideoPIP; }
     inline void setCanShowVideoPIP(bool canShowVideoPIP) { m_canShowVideoPIP = canShowVideoPIP; }
+
+    bool detachedPipAvailable() const { return bool(m_detachedPipHandler); }
+    bool detachedPipActive() const { return m_detachedPipActive; }
+    Q_INVOKABLE bool requestDetachedPip(bool enabled);
+    // GUI-thread compositor API; only an opted-in backend registers.
+    void setDetachedPipHandler(std::function<bool(bool)> handler);
+    void setDetachedPipActive(bool active);
 
     inline bool pinVideoControls() const { return m_pinVideoControls; }
     inline float pinOpacity() const { return m_pinOpacity; }
@@ -448,6 +460,8 @@ protected:
     qt_intf_t* p_intf = nullptr;
     vlc_preparser_t *m_network_preparser = nullptr;
 
+    std::function<bool(bool)> m_detachedPipHandler;
+    bool m_detachedPipActive = false;
     bool m_hasEmbededVideo = false;
     VideoSurfaceProvider* m_videoSurfaceProvider = nullptr;
     QMetaObject::Connection m_releaseVideoMouseConnection;
@@ -584,6 +598,8 @@ protected slots:
     void onVOutChanged( bool );
 
 signals:
+    void detachedPipAvailableChanged();
+    void detachedPipActiveChanged();
     void fullscreenInterfaceToggled( bool );
     void setInterfaceVisibible(bool, bool requestActivate = false);
     void setInterfaceFullScreen( bool );

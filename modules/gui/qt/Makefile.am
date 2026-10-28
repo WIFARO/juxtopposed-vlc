@@ -203,6 +203,7 @@ libqt_plugin_la_SOURCES = \
 	maininterface/videosurface.hpp \
 	maininterface/video_window_handler.cpp \
 	maininterface/video_window_handler.hpp \
+	maininterface/deferred_video_on_top.hpp \
 	maininterface/windoweffects_module.hpp \
 	medialibrary/medialib.cpp \
 	medialibrary/medialib.hpp \
@@ -652,6 +653,7 @@ libqt_plugin_la_SOURCES += \
 	maininterface/compositor_dcomp.cpp \
 	maininterface/compositor_dcomp.hpp \
 	maininterface/compositor_dcomp_background.hpp \
+	maininterface/dcomp_visual_transfer.hpp \
 	maininterface/compositor_dcomp_backdrop.cpp maininterface/compositor_dcomp_backdrop.hpp \
 	maininterface/compositor_dcomp_error.hpp \
 	maininterface/compositor_dcomp_acrylicsurface.hpp \
@@ -1358,6 +1360,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignRecentMenuModel.qml \
 	player/qml/redesign/RedesignPlayerView.qml \
 	player/qml/redesign/RedesignPlayerModes.qml \
+	player/qml/redesign/RedesignPipAction.qml \
 	player/qml/redesign/RedesignQueue.qml \
 	player/qml/redesign/RedesignSeekBar.qml \
 	player/qml/redesign/RedesignSeekThumbnail.qml \
@@ -2598,8 +2601,8 @@ endif
 QML_LOG_COMPILER = $(builddir)/qml_test -input
 
 if HAVE_QT_QUICK_TEST
-EXTRA_DIST += tests/tst_WilMinimalView.qml
-TESTS += tests/tst_WilMinimalView.qml
+EXTRA_DIST += tests/tst_WilMinimalView.qml tests/tst_WilPipAction.qml
+TESTS += tests/tst_WilMinimalView.qml tests/tst_WilPipAction.qml
 EXTRA_DIST += tests/tst_RedesignCapture.qml
 TESTS += tests/tst_RedesignCapture.qml
 EXTRA_DIST += tests/tst_RedesignGotoTime.qml

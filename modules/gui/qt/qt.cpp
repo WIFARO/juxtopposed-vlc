@@ -500,6 +500,8 @@ vlc_module_begin ()
               N_("Show menus without icons. Decrease the space around menu items.") )
 
     add_bool( "qt-pip-mode", true, PIP_MODE_TEXT, PIP_MODE_LONGTEXT )
+    add_bool( "qt-detached-pip", false, N_("Experimental desktop picture-in-picture"),
+              N_("Enable the experimental native Windows PiP window. Requires DirectComposition.") )
 
     add_float_with_range( "qt-safe-area", 0, 0, 100.0, SAFE_AREA_TEXT, SAFE_AREA_LONGTEXT )
 

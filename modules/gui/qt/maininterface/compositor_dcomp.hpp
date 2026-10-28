@@ -19,6 +19,7 @@
 #define VLC_COMPOSITOR_DIRECT_COMPOSITION
 
 #include "compositor.hpp"
+#include "dcomp_visual_transfer.hpp"
 
 #include "../maininterface/mainui.hpp"
 #include "interface_window_handler.hpp"
@@ -78,6 +79,8 @@ public:
 
     // See `IDCompositionVisual::SetOffset{X,Y}()`:
     bool supportsFractionalPositioning() const override { return true; }
+    void windowSetFullscreen(const char *id) override;
+    void windowResize(unsigned width, unsigned height) override;
 
 protected:
     bool canDoCombinedSurfaceUpdates() const override { return true; };
@@ -87,6 +90,9 @@ private:
     [[nodiscard]] bool setup();
     void cleanup();
     void updateOpaqueBackground();
+    bool requestDetachedPip(bool enabled);
+    void destroyDetachedPip();
+    void updateDetachedPipGeometry();
 
 private slots:
     void onSurfacePositionChanged(const QPointF& position) override;
@@ -117,6 +123,14 @@ private:
     std::shared_ptr<DCompVideoBackdrop> m_videoBackdrop;
     std::unique_ptr<DCompOpaqueBackground> m_opaqueBackground;
     QMetaObject::Connection m_backdropConnection;
+    std::unique_ptr<QWindow> m_pipWindow;
+    Microsoft::WRL::ComPtr<IDCompositionTarget> m_pipTarget;
+    Microsoft::WRL::ComPtr<IDCompositionVisual> m_pipRoot;
+    DCompVisualTransfer m_pipTransfer;
+    bool m_videoEnabled = false;
+    bool m_detachedPipOptIn = false;
+    bool m_pipClosing = false;
+    bool m_pipTransition = false;
 
     std::unique_ptr<CompositorDCompositionAcrylicSurface> m_acrylicSurface;
 };

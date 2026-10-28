@@ -71,6 +71,7 @@ bool VideoSurfaceProvider::hasVideoEmbed() const
 
 void VideoSurfaceProvider::enable(vlc_window_t* voutWindow)
 {
+    QMutexLocker surfaceLock(&m_surfaceLock);
     assert(voutWindow);
     m_voutWindow = voutWindow;
     {
@@ -95,6 +96,8 @@ void VideoSurfaceProvider::enable(vlc_window_t* voutWindow)
 
 void VideoSurfaceProvider::disable()
 {
+    QMutexLocker surfaceLock(&m_surfaceLock);
+    m_externalSurface = false;
     {
         QMutexLocker lock(&m_nativeBackdropLock);
         if (m_nativeBackdropWindow)
@@ -190,6 +193,11 @@ void VideoSurfaceProvider::onSurfacePropertiesChanged(const std::optional<QSizeF
                                                       const std::optional<QPointF>& position,
                                                       const std::optional<qreal>& scale)
 {
+    QMutexLocker surfaceLock(&m_surfaceLock);
+    if (size) m_embeddedSize = size;
+    if (position) m_embeddedPosition = position;
+    if (scale) m_embeddedScale = scale;
+    if (m_externalSurface) return;
     if (position)
     {
         QMutexLocker lock(&m_nativeBackdropLock);
@@ -201,6 +209,23 @@ void VideoSurfaceProvider::onSurfacePropertiesChanged(const std::optional<QSizeF
         vlc_window_ReportSize(m_voutWindow, std::ceil(size->width()), std::ceil(size->height()));
 }
 
+
+void VideoSurfaceProvider::setExternalSurface(bool external)
+{
+    QMutexLocker lock(&m_surfaceLock);
+    if (m_externalSurface == external) return;
+    m_externalSurface = external;
+    if (!external)
+        onSurfacePropertiesChanged(m_embeddedSize, m_embeddedPosition, m_embeddedScale);
+}
+
+void VideoSurfaceProvider::reportExternalSurface(const QSizeF& size, qreal scale)
+{
+    QMutexLocker lock(&m_surfaceLock);
+    if (!m_externalSurface || !m_voutWindow || size.isEmpty()) return;
+    emit surfacePropertiesChanged(size, QPointF(0, 0), scale);
+    vlc_window_ReportSize(m_voutWindow, std::ceil(size.width()), std::ceil(size.height()));
+}
 
 VideoSurface::VideoSurface(QQuickItem* parent)
     : ViewBlockingRectangle(parent)

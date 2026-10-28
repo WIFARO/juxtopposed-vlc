@@ -53,14 +53,156 @@
 #include "compositor_dcomp_background.hpp"
 #include "videosurface.hpp"
 #include "maininterface/interface_window_handler.hpp"
+#include "maininterface/video_window_handler.hpp"
 
 #include <memory>
 #include <type_traits>
+#include <QThread>
+#include <QScreen>
+#include <QKeyEvent>
+#include <QScopedValueRollback>
 
 namespace vlc {
 
+namespace {
+struct PipVisualOps {
+    IDCompositionDevice *device;
+    IDCompositionVisual *embedded, *detached, *video, *ui;
+    HRESULT remove(bool pip) { return (pip ? detached : embedded)->RemoveVisual(video); }
+    HRESULT add(bool pip) { return (pip ? detached : embedded)->AddVisual(video, FALSE, pip ? nullptr : ui); }
+    HRESULT commit() { return device->Commit(); }
+};
+}
+
+bool CompositorDirectComposition::requestDetachedPip(bool enabled)
+{
+    Q_ASSERT(QThread::currentThread() == thread());
+    if (m_pipClosing || m_pipTransition || !m_dcompDevice || !m_videoEnabled || !m_videoSurfaceProvider)
+        return false;
+    QScopedValueRollback<bool> transition(m_pipTransition, true);
+    if (enabled == m_pipTransfer.detached()) return m_pipTransfer.healthy();
+    if (!m_detachedPipOptIn || !m_pipTransfer.healthy()) return false;
+    if (enabled)
+    {
+        if (m_quickView->windowStates() & Qt::WindowFullScreen) return false;
+        m_pipWindow = std::make_unique<QWindow>();
+        // Independent top-level HWND; never parent/transient-parent it to main.
+        // In particular never change the main RHI window's native flags.
+        m_pipWindow->setFlags(Qt::Window | Qt::WindowStaysOnTopHint);
+        m_pipWindow->setTitle(qtr("VLC — Picture in Picture (Esc to return)"));
+        m_pipWindow->setMinimumSize(QSize(160, 90));
+        m_pipWindow->resize(480, 270);
+        m_pipWindow->create();
+        HRESULT hr = m_dcompDevice->CreateTargetForHwnd(
+            reinterpret_cast<HWND>(m_pipWindow->winId()), TRUE, &m_pipTarget);
+        if (SUCCEEDED(hr)) hr = m_dcompDevice->CreateVisual(&m_pipRoot);
+        if (SUCCEEDED(hr)) hr = m_pipTarget->SetRoot(m_pipRoot.Get());
+        if (FAILED(hr))
+        {
+            msg_Err(m_intf, "Cannot create detached PiP target: 0x%lX", hr);
+            destroyDetachedPip();
+            return false;
+        }
+        m_pipWindow->installEventFilter(this);
+        connect(m_pipWindow.get(), &QWindow::screenChanged, this,
+                [this]() { updateDetachedPipGeometry(); });
+        // This waits for any direct render-thread geometry callback to finish.
+        // Subsequent embedded updates are cached, never applied to detached video.
+        m_videoSurfaceProvider->setExternalSurface(true);
+        if (m_videoBackdrop) m_videoBackdrop->setSuspended(true);
+    }
+    PipVisualOps ops{m_dcompDevice, m_rootVisual.Get(), m_pipRoot.Get(),
+                     m_videoVisual.Get(), m_uiVisual};
+    if (!m_pipTransfer.move(ops, enabled))
+    {
+        msg_Err(m_intf, "Detached PiP transfer failed (rollback healthy: %d)", m_pipTransfer.healthy());
+        if (!m_pipTransfer.healthy())
+        {
+            // Ownership is no longer trustworthy. Keep the HWND/target alive
+            // until orderly vout disable; do not pretend an unsafe rollback won.
+            if (m_mainCtx) m_mainCtx->askToQuit();
+            return false;
+        }
+        if (enabled)
+        {
+            destroyDetachedPip();
+            if (m_videoBackdrop) m_videoBackdrop->setSuspended(false);
+            m_videoSurfaceProvider->setExternalSurface(false);
+        }
+        return false;
+    }
+    if (enabled)
+    {
+        m_quickView->setProperty("__vlc_detached_pip", true);
+        updateDetachedPipGeometry();
+        m_pipWindow->show();
+    }
+    else
+    {
+        m_quickView->setProperty("__vlc_detached_pip", false);
+        destroyDetachedPip();
+        if (m_videoBackdrop) m_videoBackdrop->setSuspended(false);
+        // Replay the latest embedded geometry, not the pre-detach snapshot.
+        m_videoSurfaceProvider->setExternalSurface(false);
+        // Only the successful return path may consume deferred VIDEO topmost.
+        if (m_videoWindowHandler) m_videoWindowHandler->restoreVideoOnTop();
+    }
+    if (m_mainCtx)
+    {
+        m_mainCtx->setDetachedPipActive(enabled);
+        if (!enabled) m_mainCtx->emitRaise();
+    }
+    return true;
+}
+
+void CompositorDirectComposition::updateDetachedPipGeometry()
+{
+    if (m_pipClosing || !m_pipWindow || !m_pipTransfer.detached() || !m_videoSurfaceProvider)
+        return;
+    RECT rect{};
+    if (GetClientRect(reinterpret_cast<HWND>(m_pipWindow->winId()), &rect))
+        m_videoSurfaceProvider->reportExternalSurface(
+            QSizeF(rect.right - rect.left, rect.bottom - rect.top), m_pipWindow->devicePixelRatio());
+}
+
+void CompositorDirectComposition::destroyDetachedPip()
+{
+    if (m_quickView) m_quickView->setProperty("__vlc_detached_pip", false);
+    // Release the target before its native HWND (and before Qt's device).
+    if (m_pipTarget) m_pipTarget->SetRoot(nullptr);
+    if (m_pipRoot && m_videoVisual) m_pipRoot->RemoveVisual(m_videoVisual.Get());
+    if (m_dcompDevice && m_pipTarget) m_dcompDevice->Commit();
+    m_pipTarget.Reset();
+    m_pipRoot.Reset();
+    if (m_pipWindow) m_pipWindow->removeEventFilter(this);
+    m_pipWindow.reset();
+    m_pipTransfer = {};
+    if (m_mainCtx) m_mainCtx->setDetachedPipActive(false);
+}
+
+void CompositorDirectComposition::windowSetFullscreen(const char *)
+{
+    QMetaObject::invokeMethod(this, [this]() {
+        if (m_pipClosing || !m_videoEnabled) return;
+        if (m_pipTransfer.detached() && !requestDetachedPip(false)) return;
+        CompositorVideo::windowSetFullscreen(nullptr);
+    }, Qt::QueuedConnection);
+}
+
+void CompositorDirectComposition::windowResize(unsigned width, unsigned height)
+{
+    QMetaObject::invokeMethod(this, [this, width, height]() {
+        // Decoder autoresize belongs to the embedded window only. The native
+        // PiP client rectangle is authoritative while video is detached.
+        if (!m_pipClosing && !m_pipTransfer.detached() && m_videoEnabled)
+            CompositorVideo::windowResize(width, height);
+    }, Qt::QueuedConnection);
+}
+
 int CompositorDirectComposition::windowEnable(const vlc_window_cfg_t *)
 {
+    if (m_pipClosing || !m_dcompDevice || !m_rootVisual || !m_videoVisual)
+        return VLC_EGENERIC;
     assert(m_dcompDevice);
     assert(m_rootVisual);
     assert(m_videoVisual);
@@ -70,9 +212,14 @@ int CompositorDirectComposition::windowEnable(const vlc_window_cfg_t *)
 
     const auto ret = m_rootVisual->AddVisual(m_videoVisual.Get(), FALSE, m_uiVisual);
     if (ret == S_OK && m_videoBackdrop)
+    {
+        m_videoBackdrop->setSuspended(false);
         m_videoBackdrop->setEnabled(true);
+    }
     m_dcompDevice->Commit();
 
+    m_videoEnabled = ret == S_OK;
+    if (m_videoEnabled) m_videoSurfaceProvider->setExternalSurface(false);
     if (ret == S_OK)
         return VLC_SUCCESS;
     else
@@ -81,21 +228,34 @@ int CompositorDirectComposition::windowEnable(const vlc_window_cfg_t *)
 
 void CompositorDirectComposition::windowDisable()
 {
-    assert(m_dcompDevice);
-    assert(m_rootVisual);
-    assert(m_videoVisual);
+    m_videoEnabled = false;
+    // Stop render-thread geometry before releasing a target or visual.
+    if (m_videoSurfaceProvider) m_videoSurfaceProvider->setExternalSurface(true);
+    destroyDetachedPip();
 
     if (m_videoBackdrop)
         m_videoBackdrop->setEnabled(false);
     commonWindowDisable();
 
+    if (!m_dcompDevice || !m_rootVisual || !m_videoVisual) return;
     const auto ret = m_rootVisual->RemoveVisual(m_videoVisual.Get());
-    assert(ret == S_OK);
+    // It may have been detached, or a failed rollback may have lost its parent.
+    (void)ret;
     m_dcompDevice->Commit();
 }
 
 void CompositorDirectComposition::windowDestroy()
 {
+    // windowDestroy is called on a vout thread; native HWNDs belong to GUI.
+    const auto releaseHost = [this]() {
+        if (m_videoSurfaceProvider) m_videoSurfaceProvider->setExternalSurface(true);
+        destroyDetachedPip();
+    };
+    if (m_detachedPipOptIn)
+    {
+        if (QThread::currentThread() == thread()) releaseHost();
+        else QMetaObject::invokeMethod(this, releaseHost, Qt::BlockingQueuedConnection);
+    }
     m_videoProxy.Reset();
     m_videoVisual.Reset();
     CompositorVideo::windowDestroy();
@@ -279,6 +439,9 @@ bool CompositorDirectComposition::setup()
         Qt::DirectConnection);
     m_videoBackdrop->setRegions(m_videoSurfaceProvider->backdropRegions());
 
+    m_detachedPipOptIn = var_InheritBool(m_intf, "qt-detached-pip");
+    if (m_detachedPipOptIn && m_mainCtx)
+        m_mainCtx->setDetachedPipHandler([this](bool enabled) { return requestDetachedPip(enabled); });
     m_setupState = SetupState::Success;
     m_setupStateCond.notify_all();
     lock.unlock();
@@ -311,6 +474,10 @@ bool CompositorDirectComposition::setup()
 
 void CompositorDirectComposition::cleanup()
 {
+    m_pipClosing = true;
+    if (m_mainCtx) m_mainCtx->setDetachedPipHandler({});
+    if (m_videoSurfaceProvider) m_videoSurfaceProvider->setExternalSurface(true);
+    destroyDetachedPip();
     disconnect(m_backdropConnection);
     if (m_videoBackdrop)
         m_videoBackdrop->close();
@@ -456,6 +623,16 @@ void CompositorDirectComposition::cancelVoutWindowSetup()
 
 void CompositorDirectComposition::unloadGUI()
 {
+    if (m_pipTransfer.detached()) requestDetachedPip(false);
+    // Even failed reattachment must not leave a host using Qt's device after
+    // GUI unload. The vout's subsequent disable performs ordinary cleanup.
+    if (m_pipWindow)
+    {
+        if (m_videoSurfaceProvider) m_videoSurfaceProvider->setExternalSurface(true);
+        destroyDetachedPip();
+    }
+    m_pipClosing = true;
+    if (m_mainCtx) m_mainCtx->setDetachedPipHandler({});
     cancelVoutWindowSetup();
     m_acrylicSurface.reset();
     m_interfaceWindowHandler.reset();
@@ -559,6 +736,29 @@ QQuickItem * CompositorDirectComposition::activeFocusItem() const /* override */
 
 bool CompositorDirectComposition::eventFilter(QObject *watched, QEvent *event)
 {
+    if (m_pipWindow && watched == m_pipWindow.get())
+    {
+        if (event->type() == QEvent::Close || event->type() == QEvent::MouseButtonDblClick ||
+            (event->type() == QEvent::KeyPress && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape))
+        {
+            event->ignore();
+            // Never delete a QWindow in the middle of dispatching its event.
+            const QPointer<QWindow> host = m_pipWindow.get();
+            QMetaObject::invokeMethod(this, [this, host]() {
+                if (host && host == m_pipWindow.get() && !m_pipClosing && m_pipTransfer.detached())
+                    requestDetachedPip(false);
+            }, Qt::QueuedConnection);
+            return true;
+        }
+        if (event->type() == QEvent::KeyPress && m_mainCtx)
+        {
+            auto key = static_cast<QKeyEvent*>(event);
+            m_mainCtx->sendHotkey(static_cast<Qt::Key>(key->key()), key->modifiers());
+            return true;
+        }
+        if (event->type() == QEvent::Resize || event->type() == QEvent::DevicePixelRatioChange)
+            updateDetachedPipGeometry();
+    }
     switch (event->type())
     {
     case QEvent::Resize:

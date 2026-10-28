@@ -348,6 +348,7 @@ qt_plugin_sources = files(
     'maininterface/videosurface.cpp',
     'maininterface/videosurface.hpp',
     'maininterface/video_window_handler.cpp',
+    'maininterface/deferred_video_on_top.hpp',
     'maininterface/video_window_handler.hpp',
     'maininterface/windoweffects_module.hpp',
     'medialibrary/medialib.cpp',
@@ -642,6 +643,7 @@ if host_system == 'windows'
         'util/win32_emutls.cpp',
         'maininterface/compositor_dcomp.cpp',
         'maininterface/compositor_dcomp_background.hpp',
+        'maininterface/dcomp_visual_transfer.hpp',
         'maininterface/compositor_dcomp_backdrop.cpp',
         'maininterface/compositor_dcomp_backdrop.hpp',
         'maininterface/compositor_dcomp_acrylicsurface.cpp',
@@ -915,6 +917,7 @@ qml_modules += {
        'player/qml/redesign/RedesignRecentMenuModel.qml',
        'player/qml/redesign/RedesignPlayerView.qml',
        'player/qml/redesign/RedesignPlayerModes.qml',
+       'player/qml/redesign/RedesignPipAction.qml',
        'player/qml/redesign/RedesignQueue.qml',
        'player/qml/redesign/RedesignSeekBar.qml',
        'player/qml/redesign/RedesignSeekThumbnail.qml',
@@ -1144,6 +1147,7 @@ qml_modules += {
 
 qml_tests = {
     'tst_WilMinimalView': files('tests/tst_WilMinimalView.qml'),
+    'tst_WilPipAction': files('tests/tst_WilPipAction.qml'),
     'tst_FSM': files('tests/tst_FSM.qml'),
     'tst_Redesign': files('tests/tst_Redesign.qml'),
     'tst_RedesignMediaFavorite': files('tests/tst_RedesignMediaFavorite.qml'),

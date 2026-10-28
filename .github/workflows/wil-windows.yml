@@ -11,7 +11,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: wil-win64-build
+  group: wil-win64-build-${{ github.sha }}
   cancel-in-progress: false
 
 env:

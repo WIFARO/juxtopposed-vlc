@@ -43,6 +43,7 @@ struct DCompVideoBackdrop::Private
     QPointF position;
     std::map<quintptr, Visual> visuals;
     bool enabled = false;
+    bool suspended = false;
     bool closed = false;
     bool failed = false;
 
@@ -142,7 +143,7 @@ struct DCompVideoBackdrop::Private
     {
         if (closed || failed)
             return S_FALSE;
-        if (!enabled || !content || state.regions.isEmpty())
+        if (!enabled || suspended || !content || state.regions.isEmpty())
         {
             if (visuals.empty())
                 return S_FALSE;
@@ -252,6 +253,13 @@ HRESULT DCompVideoBackdrop::setEnabled(bool enabled)
     qCDebug(lcVideoBackdrop) << "Backdrop enabled" << enabled;
     if (!enabled)
         d->content.Reset();
+    return d->apply();
+}
+
+HRESULT DCompVideoBackdrop::setSuspended(bool suspended)
+{
+    QMutexLocker lock(&d->lock);
+    d->suspended = suspended;
     return d->apply();
 }
 

@@ -29,6 +29,7 @@
 #include <QPointer>
 
 #include "qt.hpp"
+#include "deferred_video_on_top.hpp"
 
 class MainCtx;
 
@@ -42,6 +43,7 @@ public:
     void setWindow(QWindow* window);
 
     void disable();
+    void restoreVideoOnTop();
     void requestResizeVideo( unsigned, unsigned );
     void requestVideoState( unsigned );
     void requestVideoWindowed( );
@@ -63,6 +65,7 @@ private:
     QPointer<QWindow> m_window;
 
     bool m_videoFullScreen = false;
+    vlc::DeferredVideoOnTop m_deferredVideoOnTop;
 
     QScreen* m_lastWinScreen = nullptr;
 

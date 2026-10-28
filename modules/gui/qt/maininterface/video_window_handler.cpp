@@ -51,13 +51,18 @@ void VideoWindowHandler::setWindow(QWindow* window)
         WindowStateHolder::holdFullscreen(m_window, WindowStateHolder::VIDEO, false);
     }
 
+    m_deferredVideoOnTop.clear();
     m_window = window;
 }
 
 void VideoWindowHandler::disable()
 {
     emit askVideoSetFullScreen( false );
-    emit askVideoOnTop( false );
+    // Clear on the GUI thread, after the queued VIDEO hold release.
+    QMetaObject::invokeMethod(this, [this]() {
+        setVideoOnTop(false);
+        m_deferredVideoOnTop.clear();
+    }, Qt::QueuedConnection);
 }
 
 void VideoWindowHandler::requestResizeVideo( unsigned i_width, unsigned i_height )
@@ -95,6 +100,10 @@ void VideoWindowHandler::setVideoSize(unsigned int w, unsigned int h, Qt::Window
     if (!m_window)
         return;
     const Qt::WindowStates states = m_window->windowStates();
+    // A pre-detach queued autoresize must not resize the main RHI window while
+    // the independent desktop host owns the video geometry.
+    if (m_window->property("__vlc_detached_pip").toBool())
+        return;
 
     // A queued video resize must not change a fullscreen/maximized window or
     // replace geometry restored during a window-state transition.
@@ -146,6 +155,14 @@ void VideoWindowHandler::setVideoFullScreen( bool fs )
 {
     if (!m_window)
         return;
+    if (fs && m_window->property("__vlc_detached_pip").toBool())
+    {
+        // Also catch fullscreen requests queued before detachment. The DComp
+        // controller reattaches first, then re-enters the existing path.
+        if (auto compositor = dynamic_cast<vlc::CompositorVideo*>(m_intf->p_compositor.get()))
+            compositor->windowSetFullscreen(nullptr);
+        return;
+    }
     m_videoFullScreen = fs;
     if( fs )
     {
@@ -183,5 +200,18 @@ void VideoWindowHandler::setVideoOnTop( bool on_top )
 {
     if (!m_window)
         return;
+    if (m_window->property("__vlc_detached_pip").toBool())
+    {
+        m_deferredVideoOnTop.defer(on_top);
+        return;
+    }
     WindowStateHolder::holdOnTop(m_window, WindowStateHolder::VIDEO, on_top);
+}
+
+void VideoWindowHandler::restoreVideoOnTop()
+{
+    if (!m_window || m_window->property("__vlc_detached_pip").toBool())
+        return;
+    if (const auto on_top = m_deferredVideoOnTop.take())
+        WindowStateHolder::holdOnTop(m_window, WindowStateHolder::VIDEO, *on_top);
 }

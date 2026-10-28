@@ -19,6 +19,7 @@ public:
     HRESULT setContent(IUnknown *);
     HRESULT setPosition(const QPointF &);
     HRESULT setEnabled(bool);
+    HRESULT setSuspended(bool);
     void close();
 
 private:

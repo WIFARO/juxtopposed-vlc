@@ -7,6 +7,10 @@ on:
       - .github/workflows/wil-native.yml
       - extras/package/wil/native/**
       - modules/gui/qt/tests/test_dcomp_detached_pip.cpp
+      - modules/gui/qt/tests/test_dcomp_visual_transfer.cpp
+      - modules/gui/qt/maininterface/dcomp_visual_transfer.hpp
+      - modules/gui/qt/maininterface/deferred_video_on_top.hpp
+      - modules/gui/qt/tests/test_deferred_video_on_top.cpp
   workflow_dispatch:
 
 permissions:

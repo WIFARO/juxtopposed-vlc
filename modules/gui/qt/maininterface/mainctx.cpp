@@ -62,6 +62,7 @@
 #include "dialogs/help/help.hpp"
 
 #include <QKeyEvent>
+#include <utility>
 
 #include <QUrl>
 #include <QDate>
@@ -968,6 +969,27 @@ QJSValue MainCtx::urlListToMimeData(const QJSValue &array) {
     return ret;
 }
 
+bool MainCtx::requestDetachedPip(bool enabled)
+{
+    if (enabled == m_detachedPipActive) return true;
+    const auto handler = m_detachedPipHandler;
+    return handler && handler(enabled);
+}
+
+void MainCtx::setDetachedPipHandler(std::function<bool(bool)> handler)
+{
+    const bool available = detachedPipAvailable();
+    m_detachedPipHandler = std::move(handler);
+    if (available != detachedPipAvailable()) emit detachedPipAvailableChanged();
+}
+
+void MainCtx::setDetachedPipActive(bool active)
+{
+    if (m_detachedPipActive == active) return;
+    m_detachedPipActive = active;
+    emit detachedPipActiveChanged();
+}
+
 VideoSurfaceProvider* MainCtx::getVideoSurfaceProvider() const
 {
     return m_videoSurfaceProvider;
@@ -1009,6 +1031,7 @@ void MainCtx::toggleToolbarMenu()
 
 void MainCtx::toggleInterfaceFullScreen()
 {
+    if (detachedPipActive() && !requestDetachedPip(false)) return;
     const bool fs = m_windowVisibility != QWindow::FullScreen;
     emit setInterfaceFullScreen( fs );
     /* Keep the video's fullscreen state in step, so leaving from either side

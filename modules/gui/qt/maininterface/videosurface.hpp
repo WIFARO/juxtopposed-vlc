@@ -23,6 +23,7 @@
 #include <QRectF>
 #include <QRunnable>
 #include <QPointer>
+#include <optional>
 #include "qt.hpp"
 #include "util/vlchotkeyconverter.hpp"
 #include "videobackdrop.hpp"
@@ -62,6 +63,8 @@ public:
     void setVideoSurface(QPointer<VideoSurface> videoSurface) { m_videoSurface = videoSurface; }
 
     bool supportsThreadedSurfaceUpdates() const { return m_threadedSurfaceUpdates; };
+    void setExternalSurface(bool external);
+    void reportExternalSurface(const QSizeF& size, qreal scale);
 
 signals:
     void subtitleAreaChanged();
@@ -93,6 +96,11 @@ protected:
     bool m_threadedSurfaceUpdates = false;
 
 private:
+    QRecursiveMutex m_surfaceLock;
+    bool m_externalSurface = false;
+    std::optional<QSizeF> m_embeddedSize;
+    std::optional<QPointF> m_embeddedPosition;
+    std::optional<qreal> m_embeddedScale;
     void publishNativeBackdrops(); // m_nativeBackdropLock must be held
     QMutex m_nativeBackdropLock;
     vlc_window_t *m_nativeBackdropWindow = nullptr;

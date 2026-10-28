@@ -13,8 +13,18 @@
 #include <QGuiApplication>
 #include <QTest>
 #include <QWindow>
+#include "maininterface/dcomp_visual_transfer.hpp"
 
 using Microsoft::WRL::ComPtr;
+
+struct NativeTransferOps {
+    IDCompositionDevice *device;
+    IDCompositionVisual *mainRoot, *pipRoot, *video, *ui;
+    IDCompositionVisual *pipSibling = nullptr;
+    HRESULT remove(bool pip) { return (pip ? pipRoot : mainRoot)->RemoveVisual(video); }
+    HRESULT add(bool pip) { return (pip ? pipRoot : mainRoot)->AddVisual(video, FALSE, pip ? pipSibling : ui); }
+    HRESULT commit() { return device->Commit(); }
+};
 
 class TestDCompDetachedPip : public QObject
 {
@@ -105,15 +115,18 @@ private slots:
         QVERIFY(FAILED(pipRoot->AddVisual(video.Get(), FALSE, nullptr)));
         // Invalid sibling on the destination: attachment fails, so restore the
         // original parent before committing. Never leave video ownerless.
-        QCOMPARE(mainRoot->RemoveVisual(video.Get()), S_OK);
-        QVERIFY(FAILED(pipRoot->AddVisual(video.Get(), FALSE, ui.Get())));
-        QCOMPARE(mainRoot->AddVisual(video.Get(), FALSE, ui.Get()), S_OK);
-        QCOMPARE(device->Commit(), S_OK);
+        NativeTransferOps ops{device.Get(), mainRoot.Get(), pipRoot.Get(), video.Get(), ui.Get()};
+        vlc::DCompVisualTransfer transfer;
+        ops.pipSibling = ui.Get();
+        QVERIFY(!transfer.move(ops, true));
+        QVERIFY(transfer.healthy());
+        QVERIFY(!transfer.detached());
+        ops.pipSibling = nullptr;
         QCOMPARE(device->WaitForCommitCompletion(), S_OK);
         for (int i = 0; i < 32; ++i)
         {
-            QCOMPARE(mainRoot->RemoveVisual(video.Get()), S_OK);
-            QCOMPARE(pipRoot->AddVisual(video.Get(), FALSE, nullptr), S_OK);
+            QVERIFY(transfer.move(ops, true));
+            QVERIFY(transfer.detached());
             QCOMPARE(video->SetOffsetX(0.f), S_OK);
             QCOMPARE(video->SetOffsetY(0.f), S_OK);
             QCOMPARE(device->Commit(), S_OK);
@@ -125,9 +138,8 @@ private slots:
             QVERIFY(IsWindowVisible(pipHwnd));
             pip.resize(161 + i, 121 + i);
             QCoreApplication::processEvents();
-            QCOMPARE(pipRoot->RemoveVisual(video.Get()), S_OK);
-            QCOMPARE(mainRoot->AddVisual(video.Get(), FALSE, ui.Get()), S_OK);
-            QCOMPARE(device->Commit(), S_OK);
+            QVERIFY(transfer.move(ops, false));
+            QVERIFY(!transfer.detached());
             QCOMPARE(device->WaitForCommitCompletion(), S_OK);
             main.showNormal();
             QCoreApplication::processEvents();

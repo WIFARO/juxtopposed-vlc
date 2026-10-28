@@ -130,7 +130,7 @@ FocusScope {
         else if (action === "shuffle") MainPlaylistController.toggleRandom()
         else if (action === "record") Player.toggleRecord()
         else if (action === "snapshot") Player.snapshot()
-        else if (action === "pip") { view.libraryOpen = true; view.libraryExpanded = true; view.miniPlayerVisible = true }
+        else if (action === "pip") desktopPipAction.trigger()
         else if (action === "rightSidebar") { view.settingsPage = ""; view.queueOpen = !view.queueOpen }
         else if (action === "quit") DialogsProvider.quit()
         else if (action === "preferences") DialogsProvider.prefsDialog()
@@ -727,6 +727,11 @@ FocusScope {
     }
     // VideoSurface continues to provide VLC's native context menu and hotkeys.
     QmlAudioContextMenu { id: audioContextMenu; ctx: MainCtx }
+    RedesignPipAction {
+        id: desktopPipAction
+        context: MainCtx
+        presentation: view
+    }
     RedesignPlayerModes {
         context: MainCtx
         presentation: view
