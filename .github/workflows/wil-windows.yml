@@ -1,0 +1,117 @@
+name: Wil Windows portable
+
+on:
+  push:
+    branches: [wil/player-customization]
+    paths: [.github/workflows/wil-windows.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: wil-win64-build
+  cancel-in-progress: false
+
+env:
+  JOBS: '4'
+  WINDOWS_BUILD_IMAGE: registry.videolan.org/vlc-debian-win64-posix@sha256:8e83e800036f8f4a6da1031a6b80c2b5bad8337259c072ffa22398baaeaad880
+
+jobs:
+  windows:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate source version and packaging tests
+        run: |
+          python3 extras/package/release/version.py
+          python3 -m unittest discover -s extras/package/release/tests
+      - name: Wait for an active dependency warmup before restoring its SDK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sdk_run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow wil-windows-deps.yml --branch "$GITHUB_REF_NAME" --limit 1 --json databaseId,status --jq 'if length == 1 and .[0].status != "completed" then .[0].databaseId else empty end')
+          if [[ -n "$sdk_run" ]]; then
+            gh run watch "$sdk_run" --repo "$GITHUB_REPOSITORY" --exit-status --interval 60
+          fi
+      - name: Make room on the disposable runner
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h .
+      - name: Fingerprint dependency inputs
+        id: deps
+        run: python3 extras/package/release/dependency-cache.py key
+      - uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.deps.outputs.paths }}
+          key: ${{ steps.deps.outputs.key }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: contrib/tarballs
+          key: ${{ steps.deps.outputs.download_key }}
+          restore-keys: release-win64-downloads-v1-
+      - name: Build and package portable Windows player
+        env:
+          RELEASE_DEPS_CACHE_KEY: ${{ steps.deps.outputs.key }}
+        run: >-
+          docker run --rm --user root -v "$PWD:/src" -w /src -e JOBS
+          -e RELEASE_DEPS_CACHE_KEY
+          -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/src
+          "$WINDOWS_BUILD_IMAGE"
+          bash extras/package/release/build-windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vlc-wil-win64
+          path: |
+            build-release-output/*.zip
+            build-release-output/*.sha256
+            build-release-output/*-build.json
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-regression:
+    needs: windows
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: vlc-wil-win64
+          path: downloads
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify package hash and native modules
+        shell: pwsh
+        run: |
+          $zips = @(Get-ChildItem downloads/*.zip)
+          if ($zips.Count -ne 1) { throw 'Expected exactly one player ZIP' }
+          $zip = $zips[0]
+          $digest = (Get-Content "$($zip.FullName).sha256").Split()[0].ToLower()
+          $actual = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower()
+          if ($digest -ne $actual) { throw 'Archive checksum mismatch' }
+          Expand-Archive $zip.FullName "$env:RUNNER_TEMP/wil-player"
+          $vlc = "$env:RUNNER_TEMP/wil-player/vlc-win64/vlc.exe"
+          python extras/package/release/version.py --executable $vlc --require-module qt --require-module avcodec --require-module medialibrary
+          if ($LASTEXITCODE -ne 0) { throw 'Version/module verification failed' }
+      - name: Run native player context-menu regression
+        shell: pwsh
+        env:
+          TMPDIR: ${{ runner.temp }}
+          QT_QUICK_BACKEND: software
+        run: |
+          python -m pip install pywinauto==0.6.9
+          python extras/package/wil/test_player_context_menu.py --vlc "$env:RUNNER_TEMP/wil-player/vlc-win64/vlc.exe" --output "$env:RUNNER_TEMP/wil-evidence/context-menu.json"
+          if ($LASTEXITCODE -ne 0) { throw 'Native context-menu regression failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wil-windows-regression-evidence
+          path: ${{ runner.temp }}/wil-evidence/*
+          if-no-files-found: warn
+          retention-days: 14
