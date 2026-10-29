@@ -60,9 +60,6 @@ T.Control {
 
     property int textStyle: Text.Outline
 
-    // `hideControls` being `false` does not necessarily mean that the buttons are shown:
-    property bool hideControls: MainCtx.usingTouch // By default controls are hidden with touch
-
     Accessible.role: Accessible.Graphic
     Accessible.focusable: false
     Accessible.name: qsTr("video content")
@@ -78,7 +75,7 @@ T.Control {
         }
     }
 
-    Drag.active: dragHandler.active
+    Drag.active: controls.dragging
 
     Drag.onActiveChanged: {
         root.anchors.left = undefined
@@ -89,67 +86,10 @@ T.Control {
         root.anchors.horizontalCenter = undefined
     }
 
-    DoubleClickIgnoringItem {
-        anchors.fill: parent
-
-        TapHandler {
-            gesturePolicy: TapHandler.WithinBounds
-
-            onDoubleTapped: (eventPoint, button) => {
-                // Docs are lying, there is no `deviceType`: QTBUG-135104
-                if (eventPoint.device.type !== PointerDevice.TouchScreen)
-                    MainCtx.playerView = true
-            }
-
-            onTapped: (eventPoint, button) => {
-                // Docs are lying, there is no `deviceType`: QTBUG-135104
-                if (eventPoint.device.type === PointerDevice.TouchScreen) {
-                    // Breaking the initial binding is intentional here:
-                    root.hideControls = !root.hideControls
-                } else {
-                    MainPlaylistController.togglePlayPause()
-                }
-            }
-        }
-
-        DragHandler {
-            id: dragHandler
-
-            target: root
-
-            cursorShape: Qt.DragMoveCursor
-
-            dragThreshold: 0
-
-            grabPermissions: PointerHandler.CanTakeOverFromAnything
-
-            xAxis.minimum: root.dragXMin
-            xAxis.maximum: root.dragXMax
-            yAxis.minimum: root.dragYMin
-            yAxis.maximum: root.dragYMax
-        }
-
-        HoverHandler {
-            id: hoverHandler
-
-            grabPermissions: PointerHandler.CanTakeOverFromAnything
-            cursorShape: Qt.ArrowCursor
-
-            Component.onCompleted: {
-                if (typeof blocking === 'boolean')
-                    blocking = true // Qt 6.3 feature
-            }
-        }
-    }
-
     background: VideoSurface {
         id: videoSurface
         videoSurfaceProvider: MainCtx.videoSurfaceProvider
-
-        color: (hoverHandler.hovered ||
-                playButton?.hovered ||
-                closeButton?.hovered ||
-                fullscreenButton?.hovered) ? "#10000000" : "transparent"
+        color: controls.controlsVisible ? "#10000000" : "transparent"
 
         // It is acceptable for effects to exceed the boundaries of the
         // parent. They are an exception to the "hypothetical clip test".
@@ -158,83 +98,13 @@ T.Control {
         }
     }
 
-    contentItem: Item {
-        visible: !root.hideControls &&
-                 (hoverHandler.hovered ||
-                 playButton.hovered ||
-                 closeButton.hovered ||
-                 fullscreenButton.hovered)
-
-        // Raise the content item so that the handlers of the control do
-        // not handle events that are to be handled by the handlers/items
-        // of the content item. Raising the content item should be fine
-        // because content item is supposed to be the foreground item.
+    contentItem: PipPlayerControls {
+        id: controls
         z: 1
-
-        Widgets.IconButton {
-            id: playButton
-
-            anchors.centerIn: parent
-
-            font.pixelSize: VLCStyle.icon_large
-
-            description: qsTr("play/pause")
-
-            AccessibleCompat.id: "pipPlayButton"
-
-            text: (Player.playingState !== Player.PLAYING_STATE_PAUSED
-                   && Player.playingState !== Player.PLAYING_STATE_STOPPED)
-                  ? VLCIcons.pause_filled
-                  : VLCIcons.play_filled
-
-            textStyle: root.textStyle
-
-            onClicked: MainPlaylistController.togglePlayPause()
-        }
-
-        Widgets.IconButton {
-            id: closeButton
-
-            anchors {
-                top: parent.top
-                topMargin: VLCStyle.margin_small
-                right: parent.right
-                rightMargin: VLCStyle.margin_small
-            }
-
-            font.pixelSize: VLCStyle.icon_PIP
-            description: qsTr("close video")
-
-            AccessibleCompat.id: "pipCloseButton"
-
-            text: VLCIcons.close
-
-            textStyle: root.textStyle
-
-            onClicked: MainPlaylistController.stop()
-        }
-
-        Widgets.IconButton {
-            id: fullscreenButton
-
-            anchors {
-                top: parent.top
-                topMargin: VLCStyle.margin_small
-                left: parent.left
-                leftMargin: VLCStyle.margin_small
-            }
-
-            font.pixelSize: VLCStyle.icon_PIP
-
-            description: qsTr("maximize player")
-
-            AccessibleCompat.id: "pipFullscreenButton"
-
-            text: VLCIcons.fullscreen
-
-            textStyle: root.textStyle
-
-            onClicked: MainCtx.playerView = true
-        }
+        dragTarget: root
+        dragXMin: root.dragXMin; dragXMax: root.dragXMax
+        dragYMin: root.dragYMin; dragYMax: root.dragYMax
+        onReturnRequested: MainCtx.playerView = true
+        onCloseRequested: MainPlaylistController.stop()
     }
 }

@@ -532,6 +532,7 @@ FocusScope {
         playing: root.playing; started: root.started; seekable: root.seekable; pausable: root.pausable
         hasPrevious: root.hasPrevious; hasNext: root.hasNext; hasVideo: root.hasVideo
         position: root.position; mediaTitle: root.mediaTitle; folderTitle: root.mediaFolderTitle; artist: root.artist
+        volume: root.volume; maxVolume: root.maxVolume; muted: root.muted
         canBrowseMedia: root.canBrowseMedia
         minimumY: Math.min(root.height - height - theme.dp(6), theme.dp(46) + (root.floatingQueue ? theme.dp(356) : 0))
         previewEnabled: root.showSeekPreview && !root.presentationOnly
@@ -542,6 +543,11 @@ FocusScope {
         previewImage: root.seekPreviewImage; previewImagePosition: root.seekPreviewImagePosition
         timeForPosition: root.timeForPosition
         onTogglePlayback: root.togglePlayback()
+        onJumpRequested: seconds => root.customActionRequested(seconds < 0 ? "backward10" : "forward10", miniPlayer)
+        onVolumeRequested: volume => root.volumeRequested(volume)
+        onVolumeWheelRequested: event => root.volumeWheelRequested(event)
+        onMuteRequested: root.muteRequested()
+        onSubtitleTracksRequested: anchor => { root.toggleTracks(anchor, "subtitles"); root.subtitleTracksRequested(anchor) }
         onPrevious: root.previous()
         onNext: root.next()
         onSeekRequested: position => root.seekRequested(position)

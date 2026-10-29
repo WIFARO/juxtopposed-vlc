@@ -59,19 +59,38 @@
 #include <type_traits>
 #include <QThread>
 #include <QScreen>
-#include <QKeyEvent>
 #include <QScopedValueRollback>
+#include <QQmlError>
 
 namespace vlc {
 
 namespace {
 struct PipVisualOps {
     IDCompositionDevice *device;
-    IDCompositionVisual *embedded, *detached, *video, *ui;
+    IDCompositionVisual *embedded, *detached, *video, *ui, *detachedUi;
     HRESULT remove(bool pip) { return (pip ? detached : embedded)->RemoveVisual(video); }
-    HRESULT add(bool pip) { return (pip ? detached : embedded)->AddVisual(video, FALSE, pip ? nullptr : ui); }
+    HRESULT add(bool pip) { return (pip ? detached : embedded)->AddVisual(video, FALSE, pip ? detachedUi : ui); }
     HRESULT commit() { return device->Commit(); }
 };
+
+// Called only on this window's render thread, after presentation. A UI visual
+// from another QRhi/DComp device cannot be reparented into our video tree, but
+// its composition swapchain can be used as content by a visual on our device.
+Microsoft::WRL::ComPtr<IUnknown> pipUiSwapchain(QQuickWindow *window)
+{
+    const auto rhi = window->rhi();
+    const auto swapchain = window->swapChain();
+    if (!rhi || !swapchain) return {};
+#ifdef QRhiD3D11_ACTIVE
+    if (rhi->backend() == QRhi::D3D11)
+        return static_cast<QD3D11SwapChain*>(swapchain)->swapChain;
+#endif
+#ifdef QRhiD3D12_ACTIVE
+    if (rhi->backend() == QRhi::D3D12)
+        return static_cast<QD3D12SwapChain*>(swapchain)->swapChain;
+#endif
+    return {};
+}
 }
 
 bool CompositorDirectComposition::requestDetachedPip(bool enabled)
@@ -85,17 +104,41 @@ bool CompositorDirectComposition::requestDetachedPip(bool enabled)
     if (enabled)
     {
         if (m_quickView->windowStates() & Qt::WindowFullScreen) return false;
-        m_pipWindow = std::make_unique<QWindow>();
+        // Reuse the engine: VLC's singleton instances belong to the main QML
+        // engine. This independent view has its own RHI, not a second player.
+        m_pipWindow = std::make_unique<QQuickView>(m_quickView->engine(), nullptr);
         // Independent top-level HWND; never parent/transient-parent it to main.
         // In particular never change the main RHI window's native flags.
-        m_pipWindow->setFlags(Qt::Window | Qt::WindowStaysOnTopHint);
+        m_pipWindow->setFlags(Qt::Window | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
         m_pipWindow->setTitle(qtr("VLC — Picture in Picture (Esc to return)"));
-        m_pipWindow->setMinimumSize(QSize(160, 90));
+        m_pipWindow->setColor(Qt::transparent);
+        m_pipWindow->setResizeMode(QQuickView::SizeRootObjectToView);
+        m_pipWindow->setMinimumSize(QSize(320, 180));
         m_pipWindow->resize(480, 270);
-        m_pipWindow->create();
+        if (const auto screen = m_quickView->screen())
+        {
+            m_pipWindow->setScreen(screen);
+            const auto available = screen->availableGeometry();
+            m_pipWindow->setPosition(available.right() - m_pipWindow->width() - 16,
+                                     available.bottom() - m_pipWindow->height() - 16);
+        }
+        MainCtxWin32::createWindowWithoutRedirectionSurfaceImpl(m_pipWindow.get());
+        m_pipWindow->setInitialProperties({{QStringLiteral("hostWindow"), QVariant::fromValue(static_cast<QWindow*>(m_pipWindow.get()))}});
+        m_pipWindow->setSource(QUrl(QStringLiteral("qrc:/qt/qml/VLC/Player/DetachedPipWindow.qml")));
+        if (m_pipWindow->status() == QQuickView::Error)
+        {
+            for (const auto &error : m_pipWindow->errors())
+                msg_Err(m_intf, "Cannot load PiP controls: %s", qtu(error.toString()));
+            destroyDetachedPip();
+            return false;
+        }
         HRESULT hr = m_dcompDevice->CreateTargetForHwnd(
+            // Qt owns the FALSE target. Our TRUE target contains both video
+            // and a mirror of the transparent UI swapchain, in one visual tree.
             reinterpret_cast<HWND>(m_pipWindow->winId()), TRUE, &m_pipTarget);
         if (SUCCEEDED(hr)) hr = m_dcompDevice->CreateVisual(&m_pipRoot);
+        if (SUCCEEDED(hr)) hr = m_dcompDevice->CreateVisual(&m_pipUiVisual);
+        if (SUCCEEDED(hr)) hr = m_pipRoot->AddVisual(m_pipUiVisual.Get(), FALSE, nullptr);
         if (SUCCEEDED(hr)) hr = m_pipTarget->SetRoot(m_pipRoot.Get());
         if (FAILED(hr))
         {
@@ -103,6 +146,32 @@ bool CompositorDirectComposition::requestDetachedPip(bool enabled)
             destroyDetachedPip();
             return false;
         }
+        const QPointer<QWindow> host = m_pipWindow.get();
+        connect(m_pipWindow.get(), &QQuickWindow::sceneGraphError, this,
+                [this, host]() {
+                    if (host && host == m_pipWindow.get() && !m_pipClosing)
+                        requestDetachedPip(false);
+                }, Qt::QueuedConnection);
+        // Capture a strong COM reference on the render thread, where QRhi is
+        // valid. Only GUI-thread code changes the video composition tree. Also
+        // rebind if Qt replaces its swapchain after a resize/device transition.
+        auto lastContent = std::make_shared<Microsoft::WRL::ComPtr<IUnknown>>();
+        connect(m_pipWindow.get(), &QQuickWindow::frameSwapped, this,
+                [this, host, view = m_pipWindow.get(), lastContent]() {
+                    auto content = pipUiSwapchain(view);
+                    if (content && content.Get() == lastContent->Get()) return;
+                    *lastContent = content;
+                    QMetaObject::invokeMethod(this, [this, host, content]() {
+                        if (!host || host != m_pipWindow.get() || m_pipClosing || !m_pipUiVisual) return;
+                        HRESULT result = content ? m_pipUiVisual->SetContent(content.Get()) : E_NOINTERFACE;
+                        if (SUCCEEDED(result)) result = m_dcompDevice->Commit();
+                        if (FAILED(result))
+                        {
+                            msg_Err(m_intf, "Cannot compose PiP controls: 0x%lX", result);
+                            requestDetachedPip(false);
+                        }
+                    }, Qt::QueuedConnection);
+                }, Qt::DirectConnection);
         m_pipWindow->installEventFilter(this);
         connect(m_pipWindow.get(), &QWindow::screenChanged, this,
                 [this]() { updateDetachedPipGeometry(); });
@@ -112,7 +181,7 @@ bool CompositorDirectComposition::requestDetachedPip(bool enabled)
         if (m_videoBackdrop) m_videoBackdrop->setSuspended(true);
     }
     PipVisualOps ops{m_dcompDevice, m_rootVisual.Get(), m_pipRoot.Get(),
-                     m_videoVisual.Get(), m_uiVisual};
+                     m_videoVisual.Get(), m_uiVisual, m_pipUiVisual.Get()};
     if (!m_pipTransfer.move(ops, enabled))
     {
         msg_Err(m_intf, "Detached PiP transfer failed (rollback healthy: %d)", m_pipTransfer.healthy());
@@ -136,6 +205,7 @@ bool CompositorDirectComposition::requestDetachedPip(bool enabled)
         m_quickView->setProperty("__vlc_detached_pip", true);
         updateDetachedPipGeometry();
         m_pipWindow->show();
+        m_pipWindow->requestActivate();
     }
     else
     {
@@ -171,9 +241,12 @@ void CompositorDirectComposition::destroyDetachedPip()
     // Release the target before its native HWND (and before Qt's device).
     if (m_pipTarget) m_pipTarget->SetRoot(nullptr);
     if (m_pipRoot && m_videoVisual) m_pipRoot->RemoveVisual(m_videoVisual.Get());
+    if (m_pipUiVisual) m_pipUiVisual->SetContent(nullptr);
+    if (m_pipRoot && m_pipUiVisual) m_pipRoot->RemoveVisual(m_pipUiVisual.Get());
     if (m_dcompDevice && m_pipTarget) m_dcompDevice->Commit();
     m_pipTarget.Reset();
     m_pipRoot.Reset();
+    m_pipUiVisual.Reset();
     if (m_pipWindow) m_pipWindow->removeEventFilter(this);
     m_pipWindow.reset();
     m_pipTransfer = {};
@@ -738,8 +811,7 @@ bool CompositorDirectComposition::eventFilter(QObject *watched, QEvent *event)
 {
     if (m_pipWindow && watched == m_pipWindow.get())
     {
-        if (event->type() == QEvent::Close || event->type() == QEvent::MouseButtonDblClick ||
-            (event->type() == QEvent::KeyPress && static_cast<QKeyEvent*>(event)->key() == Qt::Key_Escape))
+        if (event->type() == QEvent::Close)
         {
             event->ignore();
             // Never delete a QWindow in the middle of dispatching its event.
@@ -750,12 +822,8 @@ bool CompositorDirectComposition::eventFilter(QObject *watched, QEvent *event)
             }, Qt::QueuedConnection);
             return true;
         }
-        if (event->type() == QEvent::KeyPress && m_mainCtx)
-        {
-            auto key = static_cast<QKeyEvent*>(event);
-            m_mainCtx->sendHotkey(static_cast<Qt::Key>(key->key()), key->modifiers());
-            return true;
-        }
+        // QML consumes button/slider keys before forwarding unhandled hotkeys;
+        // Escape first dismisses its subtitle popup, then returns to the player.
         if (event->type() == QEvent::Resize || event->type() == QEvent::DevicePixelRatioChange)
             updateDetachedPipGeometry();
     }

@@ -1361,6 +1361,7 @@ libqml_module_player_a_QML = \
 	player/qml/redesign/RedesignPlayerView.qml \
 	player/qml/redesign/RedesignPlayerModes.qml \
 	player/qml/redesign/RedesignPipAction.qml \
+	player/qml/redesign/RedesignPipControls.qml \
 	player/qml/redesign/RedesignQueue.qml \
 	player/qml/redesign/RedesignSeekBar.qml \
 	player/qml/redesign/RedesignSeekThumbnail.qml \
@@ -1372,6 +1373,8 @@ libqml_module_player_a_QML = \
 	player/qml/LyricsFlickable.qml \
 	player/qml/MiniPlayer.qml \
 	player/qml/PIPPlayer.qml \
+	player/qml/PipPlayerControls.qml \
+	player/qml/DetachedPipWindow.qml \
 	player/qml/Player.qml \
 	player/qml/PlayerControlLayout.qml \
 	player/qml/PlayerPlaylistVisibilityFSM.qml \

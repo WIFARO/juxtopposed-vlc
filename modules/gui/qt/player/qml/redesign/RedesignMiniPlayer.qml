@@ -18,6 +18,9 @@ Rectangle {
     property var audioWaveformPeaks: []
     property bool previewEnabled: false
     property real position: 0
+    property real volume: 1
+    property real maxVolume: 1.25
+    property bool muted: false
     property string mediaTitle: ""
     property string folderTitle: ""
     property string artist: ""
@@ -36,6 +39,11 @@ Rectangle {
     readonly property real seekY: seek.y
     readonly property RedesignTheme theme: RedesignTheme { scaleFactor: root.scaleFactor; lightTheme: root.lightTheme; accentColor: root.accentColor }
     signal togglePlayback()
+    signal jumpRequested(int seconds)
+    signal volumeRequested(real volume)
+    signal volumeWheelRequested(var event)
+    signal muteRequested()
+    signal subtitleTracksRequested(Item anchor)
     signal previous()
     signal next()
     signal seekRequested(real position)
@@ -110,7 +118,16 @@ Rectangle {
         objectName: "miniPlayerVideoHost"
         x: theme.dp(10); y: theme.dp(10)
         width: parent.width - theme.dp(20); height: width * 9 / 16
-        MoveHandler {}
+        // Consume clicks before VideoSurface can forward them as pause hotkeys.
+        // Only this picture area (not the controls above it) starts a drag.
+        MouseArea {
+            anchors.fill: parent
+            z: 2
+            acceptedButtons: Qt.LeftButton
+            cursorShape: Qt.OpenHandCursor
+            onDoubleClicked: root.openPlayerRequested()
+            MoveHandler {}
+        }
         Rectangle {
             objectName: "miniPlayerVideoBorder"
             // Paint the reference border outside the top and sides of the video.
@@ -141,9 +158,29 @@ Rectangle {
                 RowLayout {
                     id: controls
                     anchors.centerIn: parent; spacing: root.theme.dp(4)
-                    MiniButton { objectName: "miniPlayerPreviousButton"; iconName: "previous"; text: qsTr("Previous"); enabled: root.hasPrevious; onClicked: root.previous() }
+                    MiniButton { objectName: "miniPlayerBackwardButton"; iconName: "backward-10-sec"; text: qsTr("Back 10 seconds"); enabled: root.started && root.seekable; onClicked: root.jumpRequested(-10) }
                     MiniButton { objectName: "miniPlayerPlayButton"; iconName: root.playing ? "pause" : "play"; text: root.playing ? qsTr("Pause") : qsTr("Play"); enabled: !root.started || root.pausable; onClicked: root.togglePlayback() }
-                    MiniButton { objectName: "miniPlayerNextButton"; iconName: "next"; text: qsTr("Next"); enabled: root.hasNext; onClicked: root.next() }
+                    MiniButton { objectName: "miniPlayerForwardButton"; iconName: "forward-10-sec"; text: qsTr("Forward 10 seconds"); enabled: root.started && root.seekable; onClicked: root.jumpRequested(10) }
+                }
+                RowLayout {
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                    anchors.margins: root.theme.dp(4); spacing: root.theme.dp(4)
+                    MiniButton {
+                        objectName: "miniPlayerMuteButton"; iconName: root.muted || root.volume === 0 ? "muted" : "volume"
+                        text: root.muted ? qsTr("Unmute") : qsTr("Mute")
+                        enabled: root.volume >= 0
+                        onClicked: root.muteRequested()
+                    }
+                    RedesignVolume {
+                        objectName: "miniPlayerVolumeSlider"
+                        Layout.fillWidth: true; Layout.maximumWidth: root.theme.dp(80); Layout.minimumWidth: root.theme.dp(24)
+                        scaleFactor: root.scaleFactor; accentColor: root.accentColor; lightTheme: root.lightTheme
+                        currentVolume: root.volume; value: root.volume; to: root.maxVolume; muted: root.muted
+                        onMoved: root.volumeRequested(value)
+                        onWheelRequested: event => root.volumeWheelRequested(event)
+                    }
+                    Item { Layout.fillWidth: true }
+                    MiniButton { objectName: "miniPlayerSubtitleButton"; iconName: "subtitles"; text: qsTr("Subtitles"); enabled: root.started; onClicked: root.subtitleTracksRequested(this) }
                 }
             }
         }

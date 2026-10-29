@@ -123,9 +123,10 @@ private:
     std::shared_ptr<DCompVideoBackdrop> m_videoBackdrop;
     std::unique_ptr<DCompOpaqueBackground> m_opaqueBackground;
     QMetaObject::Connection m_backdropConnection;
-    std::unique_ptr<QWindow> m_pipWindow;
+    std::unique_ptr<QQuickView> m_pipWindow;
     Microsoft::WRL::ComPtr<IDCompositionTarget> m_pipTarget;
     Microsoft::WRL::ComPtr<IDCompositionVisual> m_pipRoot;
+    Microsoft::WRL::ComPtr<IDCompositionVisual> m_pipUiVisual;
     DCompVisualTransfer m_pipTransfer;
     bool m_videoEnabled = false;
     bool m_detachedPipOptIn = false;

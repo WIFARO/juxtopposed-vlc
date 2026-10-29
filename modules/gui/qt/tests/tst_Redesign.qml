@@ -162,6 +162,7 @@ TestCase {
     SignalSpy { id: audioSpy; target: player; signalName: "audioTracksRequested" }
     SignalSpy { id: contextMenuSpy; target: player; signalName: "contextMenuRequested" }
     SignalSpy { id: subtitleSpy; target: player; signalName: "subtitleTracksRequested" }
+    SignalSpy { id: customActionSpy; target: player; signalName: "customActionRequested" }
     SignalSpy { id: toolbarVisibilitySpy; target: player; signalName: "bottomVisibleChanged" }
     SignalSpy { id: folderSpy; target: player; signalName: "mediaFolderRequested" }
     SignalSpy { id: artistSpy; target: player; signalName: "artistRequested" }
@@ -188,6 +189,7 @@ TestCase {
 
     function init() {
         contextMenuSpy.clear()
+        customActionSpy.clear()
         tracks.refreshCount = 0
         consumeVideoHover = false
         settingControl.visible = false
@@ -1171,6 +1173,48 @@ TestCase {
         wait(20)
         verify(mini.x + mini.width <= player.width - 6)
         verify(mini.y + mini.height <= player.height - 6)
+    }
+    function test_miniPictureClickAndDragNeverReachVideoSurface() {
+        consumeVideoHover = true
+        player.playing = true
+        const mini = openMiniPlayer()
+        const videoClicks = createTemporaryObject(videoClickProbe, testCase, {target: player.videoItem})
+        verify(videoClicks.valid)
+        const beforeX = mini.x
+        const position = player.position
+        mouseClick(mini.videoArea, 40, 70)
+        compare(videoClicks.count, 0)
+        compare(player.playing, true)
+        mouseDrag(mini.videoArea, 40, 70, -150, -60)
+        verify(mini.userMoved)
+        verify(mini.x < beforeX)
+        compare(videoClicks.count, 0)
+        compare(player.playing, true)
+        compare(player.position, position)
+        compare(seekSpy.count, 0)
+    }
+    function test_miniControlsSkipAdjustVolumeAndOpenSubtitlesWithoutMoving() {
+        consumeVideoHover = true
+        const mini = openMiniPlayer()
+        mouseMove(mini.videoArea, 40, 70)
+        const before = Qt.point(mini.x, mini.y)
+        mouseClick(findChild(mini, "miniPlayerBackwardButton"))
+        mouseClick(findChild(mini, "miniPlayerForwardButton"))
+        compare(customActionSpy.count, 2)
+        compare(customActionSpy.signalArguments[0][0], "backward10")
+        compare(customActionSpy.signalArguments[1][0], "forward10")
+        player.volume = 0.3
+        const volume = findChild(mini, "miniPlayerVolumeSlider")
+        mouseDrag(volume, volume.width * 0.3, volume.height / 2, volume.width * 0.5, 0)
+        verify(player.volume > 0.6)
+        mouseClick(findChild(mini, "miniPlayerMuteButton"))
+        compare(player.muted, true)
+        mouseClick(findChild(mini, "miniPlayerSubtitleButton"))
+        tryCompare(trackPicker, "visible", true)
+        compare(trackPicker.page, "subtitles")
+        compare(subtitleSpy.count, 1)
+        compare(Qt.point(mini.x, mini.y), before)
+        compare(mini.userMoved, false)
     }
     function test_miniQueueFollowsCardAndKeepsVideoBounds() {
         testCase.width = 1920; testCase.height = 1080

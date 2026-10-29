@@ -24,6 +24,23 @@ class IntegrationContract(unittest.TestCase):
         self.assertIn('CompositorDirectComposition::windowSetFullscreen', source)
         interface = (ROOT / 'interface_window_handler.cpp').read_text()
         self.assertIn('!m_mainCtx->detachedPipActive()', interface)
+    def test_controls_share_engine_but_not_cross_device_visuals(self):
+        source = (ROOT / 'compositor_dcomp.cpp').read_text()
+        self.assertIn('std::make_unique<QQuickView>(m_quickView->engine(), nullptr)', source)
+        self.assertIn('pipUiSwapchain(view)', source)
+        self.assertIn('m_pipUiVisual->SetContent(content.Get())', source)
+        self.assertIn('m_pipUiVisual->SetContent(nullptr)', source)
+        self.assertIn('pip ? detachedUi : ui', source)
+    def test_controls_handle_keys_before_hotkeys(self):
+        source = (ROOT / 'compositor_dcomp.cpp').read_text()
+        event_filter = source.split('bool CompositorDirectComposition::eventFilter', 1)[1]
+        self.assertNotIn('QEvent::KeyPress', event_filter)
+        self.assertNotIn('QEvent::MouseButtonDblClick', event_filter)
+    def test_pip_qml_is_in_both_build_manifests(self):
+        for manifest in ('Makefile.am', 'meson.build'):
+            source = (ROOT.parent / manifest).read_text()
+            for name in ('redesign/RedesignPipControls.qml', 'PipPlayerControls.qml', 'DetachedPipWindow.qml'):
+                self.assertIn('player/qml/' + name, source)
 
 if __name__ == '__main__':
     unittest.main()
